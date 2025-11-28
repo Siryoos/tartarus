@@ -17,6 +17,7 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/vishvananda/netlink v1.3.1
 	golang.org/x/sync v0.18.0
+	golang.org/x/time v0.0.0-20200630173020-3af7569d3a1e
 )
 
 require (
