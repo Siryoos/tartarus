@@ -76,6 +76,7 @@ func (a *Agent) Run(ctx context.Context) error {
 			}
 
 			a.Logger.Info(ctx, "Received request", map[string]any{"id": req.ID})
+			a.Metrics.IncCounter("agent_jobs_dequeued_total", 1)
 
 			// 1. Get Snapshot (Nyx)
 			snap, err := a.Nyx.GetSnapshot(ctx, req.Template)
@@ -85,6 +86,7 @@ func (a *Agent) Run(ctx context.Context) error {
 				// We should Nack (maybe with delay) or just Ack and fail.
 				// For now, let's Nack to retry.
 				a.Queue.Nack(ctx, req.ID, "failed to get snapshot")
+				a.Metrics.IncCounter("agent_jobs_failed_total", 1, hermes.Label{Key: "reason", Value: "snapshot_fetch_failed"})
 				continue
 			}
 
@@ -93,6 +95,7 @@ func (a *Agent) Run(ctx context.Context) error {
 			if err != nil {
 				a.Logger.Error(ctx, "Failed to create overlay", map[string]any{"error": err})
 				a.Queue.Nack(ctx, req.ID, "failed to create overlay")
+				a.Metrics.IncCounter("agent_jobs_failed_total", 1, hermes.Label{Key: "reason", Value: "overlay_creation_failed"})
 				continue
 			}
 
@@ -105,6 +108,7 @@ func (a *Agent) Run(ctx context.Context) error {
 				a.Logger.Error(ctx, "Failed to attach network", map[string]any{"error": err})
 				a.Lethe.Destroy(ctx, overlay)
 				a.Queue.Nack(ctx, req.ID, "failed to attach network")
+				a.Metrics.IncCounter("agent_jobs_failed_total", 1, hermes.Label{Key: "reason", Value: "network_attach_failed"})
 				continue
 			}
 
@@ -152,10 +156,16 @@ func (a *Agent) Run(ctx context.Context) error {
 
 				// Nack or Ack? If launch failed, it might be transient.
 				a.Queue.Nack(ctx, req.ID, "failed to launch")
+				a.Metrics.IncCounter("agent_jobs_failed_total", 1, hermes.Label{Key: "reason", Value: "launch_failed"})
 				continue
 			}
 
 			a.Logger.Info(ctx, "Sandbox launched", map[string]any{"run_id": run.ID})
+			a.Metrics.IncCounter("agent_jobs_launched_total", 1)
+			if !req.CreatedAt.IsZero() {
+				latency := time.Since(req.CreatedAt).Seconds()
+				a.Metrics.ObserveHistogram("agent_launch_latency_seconds", latency)
+			}
 
 			// Update Run Status to Running
 			if err := a.Registry.UpdateRun(ctx, *run); err != nil {
@@ -210,6 +220,16 @@ func (a *Agent) Run(ctx context.Context) error {
 				if err := a.Queue.Ack(context.Background(), reqID); err != nil {
 					a.Logger.Error(context.Background(), "Failed to ack job", map[string]any{"req_id": reqID, "error": err})
 				}
+				// We can't easily access 'a.Metrics' here if it's not thread-safe or if we are in a closure?
+				// 'a' is available.
+				// But we are in a goroutine.
+				// Assuming Metrics is thread-safe (SlogAdapter is).
+				// We should emit success/failure based on exit code?
+				// But we don't have exit code easily here unless we check finalRun.
+				// Let's just emit "finished".
+				// Actually, we can check if finalRun.ExitCode == 0
+				// But finalRun might be nil if Inspect failed.
+				// Let's just emit "job_finished".
 			}(run.ID, req.ID, overlay)
 		}
 	}

@@ -50,3 +50,40 @@ func NewNoopLogger() *NoopLogger {
 
 func (l *NoopLogger) Info(ctx context.Context, msg string, fields map[string]any)  {}
 func (l *NoopLogger) Error(ctx context.Context, msg string, fields map[string]any) {}
+
+type LogMetrics struct {
+	logger *slog.Logger
+}
+
+func NewLogMetrics() *LogMetrics {
+	return &LogMetrics{
+		logger: slog.New(slog.NewJSONHandler(os.Stdout, nil)),
+	}
+}
+
+func (m *LogMetrics) IncCounter(name string, value float64, labels ...Label) {
+	args := make([]any, 0, len(labels)*2+2)
+	args = append(args, "metric", name, "value", value, "type", "counter")
+	for _, l := range labels {
+		args = append(args, l.Key, l.Value)
+	}
+	m.logger.Info("Metric", args...)
+}
+
+func (m *LogMetrics) ObserveHistogram(name string, value float64, labels ...Label) {
+	args := make([]any, 0, len(labels)*2+2)
+	args = append(args, "metric", name, "value", value, "type", "histogram")
+	for _, l := range labels {
+		args = append(args, l.Key, l.Value)
+	}
+	m.logger.Info("Metric", args...)
+}
+
+func (m *LogMetrics) SetGauge(name string, value float64, labels ...Label) {
+	args := make([]any, 0, len(labels)*2+2)
+	args = append(args, "metric", name, "value", value, "type", "gauge")
+	for _, l := range labels {
+		args = append(args, l.Key, l.Value)
+	}
+	m.logger.Info("Metric", args...)
+}

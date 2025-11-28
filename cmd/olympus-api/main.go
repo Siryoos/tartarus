@@ -32,6 +32,7 @@ func main() {
 	logger.Info("Starting Olympus API", "port", cfg.Port)
 
 	// Adapters
+	metrics := hermes.NewLogMetrics()
 	var queue acheron.Queue
 	redisAddr := os.Getenv("REDIS_ADDR")
 	if redisAddr != "" {
@@ -46,7 +47,7 @@ func main() {
 			redisKey = "tartarus:queue"
 		}
 
-		rq, err := acheron.NewRedisQueue(redisAddr, redisDB, redisKey, true)
+		rq, err := acheron.NewRedisQueue(redisAddr, redisDB, redisKey, true, metrics)
 		if err != nil {
 			logger.Error("Failed to initialize Redis queue", "error", err)
 			os.Exit(1)
@@ -111,7 +112,7 @@ func main() {
 	}
 	_ = store // Silence unused variable error
 	_ = store // Silence unused variable error
-	metrics := hermes.NewNoopMetrics()
+	_ = store // Silence unused variable error
 	hermesLogger := hermes.NewSlogAdapter()
 	scheduler := moirai.NewLeastLoadedScheduler(hermesLogger)
 

@@ -8,15 +8,17 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
+	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
 )
 
 type RedisQueue struct {
 	client  *redis.Client
 	key     string
 	routing bool
+	metrics hermes.Metrics
 }
 
-func NewRedisQueue(addr string, db int, key string, routing bool) (*RedisQueue, error) {
+func NewRedisQueue(addr string, db int, key string, routing bool, metrics hermes.Metrics) (*RedisQueue, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr: addr,
 		DB:   db,
@@ -33,6 +35,7 @@ func NewRedisQueue(addr string, db int, key string, routing bool) (*RedisQueue, 
 		client:  client,
 		key:     key,
 		routing: routing,
+		metrics: metrics,
 	}, nil
 }
 
@@ -48,7 +51,15 @@ func (q *RedisQueue) Enqueue(ctx context.Context, req *domain.SandboxRequest) er
 	}
 
 	if err := q.client.RPush(ctx, targetKey, data).Err(); err != nil {
+		q.metrics.IncCounter("queue_enqueue_errors_total", 1, hermes.Label{Key: "queue", Value: q.key})
 		return fmt.Errorf("failed to enqueue request: %w", err)
+	}
+
+	q.metrics.IncCounter("queue_enqueue_total", 1, hermes.Label{Key: "queue", Value: q.key})
+
+	// Emit queue depth
+	if depth, err := q.client.LLen(ctx, targetKey).Result(); err == nil {
+		q.metrics.SetGauge("queue_depth", float64(depth), hermes.Label{Key: "queue", Value: targetKey})
 	}
 
 	return nil
@@ -90,7 +101,15 @@ func (q *RedisQueue) Dequeue(ctx context.Context) (*domain.SandboxRequest, error
 			return nil, fmt.Errorf("failed to unmarshal dequeued request: %w", err)
 		}
 
+		q.metrics.IncCounter("queue_dequeue_total", 1, hermes.Label{Key: "queue", Value: q.key})
+		q.updateDepth(ctx)
 		return &req, nil
+	}
+}
+
+func (q *RedisQueue) updateDepth(ctx context.Context) {
+	if depth, err := q.client.LLen(ctx, q.key).Result(); err == nil {
+		q.metrics.SetGauge("queue_depth", float64(depth), hermes.Label{Key: "queue", Value: q.key})
 	}
 }
 

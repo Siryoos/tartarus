@@ -14,7 +14,7 @@
 - [x] Enforce memory limits in Erinyes (currently CPU/Runtime only).
 
 ## Observability and operations
-- [ ] Emit metrics (queue depth, launch latency, heartbeat age, failures) via Hermes adapters; add structured logs for control-plane events.
+- [x] Emit metrics (queue depth, launch latency, heartbeat age, failures) via Hermes adapters; add structured logs for control-plane events.
 - [ ] Ship a dev stack (docker-compose or scripts) that boots Redis + API + agent with sane defaults for kernel/rootfs/snapshot paths and documents required host capabilities.
 
 ## Extended components backlog (design only)

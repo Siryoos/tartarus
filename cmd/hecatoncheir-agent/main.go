@@ -45,6 +45,7 @@ func main() {
 	nodeID := domain.NodeID("node-" + cfg.Region + "-1")
 
 	// Adapters
+	metrics := hermes.NewLogMetrics()
 	var queue acheron.Queue
 	redisAddr := os.Getenv("REDIS_ADDR")
 	if redisAddr != "" {
@@ -61,7 +62,7 @@ func main() {
 		// Append NodeID to key for per-node queue
 		redisKey = fmt.Sprintf("%s:%s", redisKey, nodeID)
 
-		rq, err := acheron.NewRedisQueue(redisAddr, redisDB, redisKey, false)
+		rq, err := acheron.NewRedisQueue(redisAddr, redisDB, redisKey, false, metrics)
 		if err != nil {
 			logger.Error("Failed to initialize Redis queue", "error", err)
 			os.Exit(1)
@@ -132,7 +133,6 @@ func main() {
 		logger.Info("Initializing Mock Runtime (Firecracker config missing)")
 		runtime = tartarus.NewMockRuntime(logger)
 	}
-	metrics := hermes.NewNoopMetrics()
 
 	// Styx Host Gateway
 	bridgeName := "tartarus0"

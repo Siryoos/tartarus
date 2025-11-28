@@ -40,6 +40,16 @@ func (m *Manager) Submit(ctx context.Context, req *domain.SandboxRequest) error 
 	if req.ID == "" {
 		req.ID = domain.SandboxID(uuid.New().String())
 	}
+	if req.CreatedAt.IsZero() {
+		req.CreatedAt = time.Now()
+	}
+
+	start := time.Now()
+	defer func() {
+		m.Metrics.ObserveHistogram("sandbox_submission_duration_seconds", time.Since(start).Seconds())
+	}()
+
+	m.Metrics.IncCounter("sandbox_submissions_total", 1)
 
 	// 2) Validate Template
 	_, err := m.Templates.GetTemplate(ctx, req.Template)
@@ -48,6 +58,7 @@ func (m *Manager) Submit(ctx context.Context, req *domain.SandboxRequest) error 
 			"template": req.Template,
 			"error":    err,
 		})
+		m.Metrics.IncCounter("sandbox_submission_failures_total", 1, hermes.Label{Key: "reason", Value: "invalid_template"})
 		return fmt.Errorf("invalid template: %w", err)
 	}
 
@@ -58,6 +69,7 @@ func (m *Manager) Submit(ctx context.Context, req *domain.SandboxRequest) error 
 			"template": req.Template,
 			"error":    err,
 		})
+		m.Metrics.IncCounter("sandbox_submission_failures_total", 1, hermes.Label{Key: "reason", Value: "policy_load_failed"})
 		return err
 	}
 
@@ -74,6 +86,7 @@ func (m *Manager) Submit(ctx context.Context, req *domain.SandboxRequest) error 
 			"sandbox_id": req.ID,
 			"error":      err,
 		})
+		m.Metrics.IncCounter("sandbox_submission_failures_total", 1, hermes.Label{Key: "reason", Value: "judge_error"})
 		return err
 	}
 
@@ -84,6 +97,7 @@ func (m *Manager) Submit(ctx context.Context, req *domain.SandboxRequest) error 
 			"sandbox_id": req.ID,
 			"verdict":    verdict,
 		})
+		m.Metrics.IncCounter("sandbox_submission_failures_total", 1, hermes.Label{Key: "reason", Value: "rejected"})
 		return ErrPolicyRejected
 	case judges.VerdictQuarantine:
 		m.Logger.Info(ctx, "Request quarantined by policy enforcement", map[string]any{
@@ -116,6 +130,7 @@ func (m *Manager) Submit(ctx context.Context, req *domain.SandboxRequest) error 
 			"sandbox_id": req.ID,
 			"error":      err,
 		})
+		m.Metrics.IncCounter("sandbox_submission_failures_total", 1, hermes.Label{Key: "reason", Value: "persistence_failed"})
 		return fmt.Errorf("failed to persist run state: %w", err)
 	}
 
@@ -131,6 +146,7 @@ func (m *Manager) Submit(ctx context.Context, req *domain.SandboxRequest) error 
 		initialRun.Error = fmt.Sprintf("failed to list nodes: %v", err)
 		initialRun.UpdatedAt = time.Now()
 		_ = m.Hades.UpdateRun(ctx, initialRun)
+		m.Metrics.IncCounter("sandbox_submission_failures_total", 1, hermes.Label{Key: "reason", Value: "node_listing_failed"})
 		return fmt.Errorf("failed to list nodes: %w", err)
 	}
 
@@ -145,6 +161,7 @@ func (m *Manager) Submit(ctx context.Context, req *domain.SandboxRequest) error 
 		initialRun.Error = fmt.Sprintf("failed to schedule: %v", err)
 		initialRun.UpdatedAt = time.Now()
 		_ = m.Hades.UpdateRun(ctx, initialRun)
+		m.Metrics.IncCounter("sandbox_submission_failures_total", 1, hermes.Label{Key: "reason", Value: "scheduling_failed"})
 		return fmt.Errorf("failed to schedule sandbox: %w", err)
 	}
 	req.NodeID = nodeID
@@ -179,6 +196,7 @@ func (m *Manager) Submit(ctx context.Context, req *domain.SandboxRequest) error 
 		initialRun.Error = fmt.Sprintf("failed to enqueue: %v", err)
 		initialRun.UpdatedAt = time.Now()
 		_ = m.Hades.UpdateRun(ctx, initialRun)
+		m.Metrics.IncCounter("sandbox_submission_failures_total", 1, hermes.Label{Key: "reason", Value: "enqueue_failed"})
 		return err
 	}
 
