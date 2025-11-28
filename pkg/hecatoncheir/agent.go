@@ -2,6 +2,7 @@ package hecatoncheir
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"strings"
@@ -103,6 +104,25 @@ func (a *Agent) Run(ctx context.Context) error {
 			run, err := a.Runtime.Launch(ctx, req, vmCfg)
 			if err != nil {
 				a.Logger.Error(ctx, "Failed to launch", map[string]any{"error": err})
+
+				// Report to Cocytus
+				go func() {
+					payload, _ := json.Marshal(req)
+					rec := &cocytus.Record{
+						RequestID: req.ID,
+						Reason:    err.Error(),
+						Payload:   payload,
+						CreatedAt: time.Now(),
+					}
+					// Use a detached context with timeout to avoid blocking
+					rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer cancel()
+
+					if wErr := a.DeadLetter.Write(rctx, rec); wErr != nil {
+						a.Logger.Error(context.Background(), "Failed to write to dead letter sink", map[string]any{"error": wErr})
+					}
+				}()
+
 				// Cleanup
 				a.Styx.Detach(ctx, req.ID)
 				a.Lethe.Destroy(ctx, overlay)
