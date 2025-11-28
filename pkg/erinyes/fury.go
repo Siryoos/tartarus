@@ -10,10 +10,13 @@ import (
 // PolicySnapshot is a runtime view of enforcement parameters.
 
 type PolicySnapshot struct {
-	MaxRuntime   time.Duration
-	MaxCPU       domain.MilliCPU
-	MaxMemory    domain.Megabytes
-	KillOnBreach bool
+	MaxRuntime             time.Duration
+	MaxCPU                 domain.MilliCPU
+	MaxMemory              domain.Megabytes
+	MaxNetworkEgressBytes  int64
+	MaxNetworkIngressBytes int64
+	MaxBannedIPAttempts    int
+	KillOnBreach           bool
 }
 
 // Fury watches a running sandbox and enforces runtime policy.

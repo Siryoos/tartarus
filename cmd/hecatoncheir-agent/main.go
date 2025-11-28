@@ -173,7 +173,8 @@ func main() {
 	cocytusSink := cocytus.NewLogSink(logger)
 
 	// Fury Watchdog
-	fury := erinyes.NewPollFury(runtime, hermesLogger, metrics, 1*time.Second)
+	networkStats := erinyes.NewLinuxNetworkStatsProvider()
+	fury := erinyes.NewPollFury(runtime, hermesLogger, metrics, networkStats, 1*time.Second)
 
 	// Judges
 	judgeChain := &judges.Chain{}

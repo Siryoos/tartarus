@@ -13,23 +13,25 @@ import (
 // PollFury is a poll-based implementation of the Fury interface.
 // It periodically checks running sandboxes and enforces runtime and memory limits.
 type PollFury struct {
-	Runtime  tartarus.SandboxRuntime
-	Logger   hermes.Logger
-	Metrics  hermes.Metrics
-	Interval time.Duration
+	Runtime      tartarus.SandboxRuntime
+	Logger       hermes.Logger
+	Metrics      hermes.Metrics
+	NetworkStats NetworkStatsProvider
+	Interval     time.Duration
 
 	mu     sync.Mutex
 	active map[domain.SandboxID]context.CancelFunc
 }
 
 // NewPollFury creates a new PollFury instance.
-func NewPollFury(runtime tartarus.SandboxRuntime, logger hermes.Logger, metrics hermes.Metrics, interval time.Duration) *PollFury {
+func NewPollFury(runtime tartarus.SandboxRuntime, logger hermes.Logger, metrics hermes.Metrics, networkStats NetworkStatsProvider, interval time.Duration) *PollFury {
 	return &PollFury{
-		Runtime:  runtime,
-		Logger:   logger,
-		Metrics:  metrics,
-		Interval: interval,
-		active:   make(map[domain.SandboxID]context.CancelFunc),
+		Runtime:      runtime,
+		Logger:       logger,
+		Metrics:      metrics,
+		NetworkStats: networkStats,
+		Interval:     interval,
+		active:       make(map[domain.SandboxID]context.CancelFunc),
 	}
 }
 
@@ -124,6 +126,68 @@ func (p *PollFury) checkAndEnforce(ctx context.Context, run *domain.SandboxRun, 
 			"memory_usage": currentRun.MemoryUsage,
 			"max_memory":   policy.MaxMemory,
 		})
+		return
+	}
+
+	// Check network limits
+	// We need the TAP device name from the runtime config
+	cfg, _, err := p.Runtime.GetConfig(ctx, run.ID)
+	if err != nil {
+		p.Logger.Error(ctx, "Failed to get config for network enforcement", map[string]any{
+			"sandbox_id": run.ID,
+			"error":      err.Error(),
+		})
+		return
+	}
+
+	if cfg.TapDevice != "" {
+		// Get interface stats
+		rx, tx, err := p.NetworkStats.GetInterfaceStats(ctx, cfg.TapDevice)
+		if err != nil {
+			p.Logger.Error(ctx, "Failed to get network stats", map[string]any{
+				"sandbox_id": run.ID,
+				"tap_device": cfg.TapDevice,
+				"error":      err.Error(),
+			})
+		} else {
+			// Host RX = VM Egress
+			if policy.MaxNetworkEgressBytes > 0 && rx > policy.MaxNetworkEgressBytes {
+				p.killForViolation(ctx, run.ID, "network_egress_exceeded", map[string]any{
+					"sandbox_id": run.ID,
+					"egress":     rx,
+					"max_egress": policy.MaxNetworkEgressBytes,
+				})
+				return
+			}
+			// Host TX = VM Ingress
+			if policy.MaxNetworkIngressBytes > 0 && tx > policy.MaxNetworkIngressBytes {
+				p.killForViolation(ctx, run.ID, "network_ingress_exceeded", map[string]any{
+					"sandbox_id":  run.ID,
+					"ingress":     tx,
+					"max_ingress": policy.MaxNetworkIngressBytes,
+				})
+				return
+			}
+		}
+
+		// Check banned IP attempts
+		if policy.MaxBannedIPAttempts > 0 {
+			drops, err := p.NetworkStats.GetDropCount(ctx, cfg.TapDevice)
+			if err != nil {
+				p.Logger.Error(ctx, "Failed to get drop count", map[string]any{
+					"sandbox_id": run.ID,
+					"tap_device": cfg.TapDevice,
+					"error":      err.Error(),
+				})
+			} else if drops > policy.MaxBannedIPAttempts {
+				p.killForViolation(ctx, run.ID, "banned_ip_attempts_exceeded", map[string]any{
+					"sandbox_id":   run.ID,
+					"drops":        drops,
+					"max_attempts": policy.MaxBannedIPAttempts,
+				})
+				return
+			}
+		}
 	}
 }
 

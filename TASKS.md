@@ -15,7 +15,7 @@ Context: ROADMAP.md marks Phase 3 as in progress and the prior task board shows 
   - DoD: Add AeacusJudge to tag compliance/retention metadata and emit audit records; wire into `judges.Chain` in `cmd/olympus-api/main.go`; include unit tests and sample audit output.
 - [x] Advanced scheduling (affinity/anti-affinity and bin-packing) (`pkg/moirai`)
   - DoD: Extend scheduler to honor placement hints/labels and provide a bin-packing strategy in addition to least-loaded; expose config toggle; add tests covering anti-affinity and tight packing scenarios.
-- [ ] Megaera runtime network watchdog (`pkg/erinyes`)
+- [x] Megaera runtime network watchdog (`pkg/erinyes`)
   - DoD: Monitor live network usage/egress against policy (bandwidth caps, banned IP attempts) during execution, not just Styx setup-time rules; enforce via Erinyes kill path with metrics and logs.
 
 ## Persistence and Durability Gaps
