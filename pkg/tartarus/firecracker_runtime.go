@@ -285,3 +285,21 @@ func (r *FirecrackerRuntime) StreamLogs(ctx context.Context, id domain.SandboxID
 		}
 	}
 }
+
+func (r *FirecrackerRuntime) Allocation(ctx context.Context) (domain.ResourceCapacity, error) {
+	var cpu domain.MilliCPU
+	var mem domain.Megabytes
+
+	r.vms.Range(func(key, value any) bool {
+		state := value.(*vmState)
+		cpu += domain.MilliCPU(state.Config.CPUs * 1000)
+		mem += domain.Megabytes(state.Config.MemoryMB)
+		return true
+	})
+
+	return domain.ResourceCapacity{
+		CPU: cpu,
+		Mem: mem,
+		GPU: 0,
+	}, nil
+}

@@ -76,7 +76,20 @@ func main() {
 			// DB: redisDB, // Use same DB
 		})
 	}
-	registry := hades.NewMemoryRegistry()
+
+	var registry hades.Registry
+	if cfg.RedisAddress != "" {
+		r, err := hades.NewRedisRegistry(cfg.RedisAddress, cfg.RedisDB, cfg.RedisPass)
+		if err != nil {
+			logger.Error("Failed to initialize Redis registry", "error", err)
+			os.Exit(1)
+		}
+		registry = r
+		logger.Info("Using Redis registry", "addr", cfg.RedisAddress)
+	} else {
+		registry = hades.NewMemoryRegistry()
+		logger.Info("Using in-memory registry")
+	}
 
 	// Erebus Store
 	var store erebus.Store
@@ -220,9 +233,15 @@ func main() {
 				activeSandboxes, err := runtime.List(ctx)
 				if err != nil {
 					logger.Error("Failed to list active sandboxes", "error", err)
-					// Continue with empty list or previous state?
-					// For now, just log and send empty list to avoid blocking heartbeat
 					activeSandboxes = []domain.SandboxRun{}
+				}
+
+				// Get actual allocation from Runtime
+				allocated, err := runtime.Allocation(ctx)
+				if err != nil {
+					logger.Error("Failed to get allocation stats", "error", err)
+					// Fallback to zero if failed, or continue?
+					// Just log and keep allocated at 0 default
 				}
 
 				// Build heartbeat payload
@@ -237,13 +256,7 @@ func main() {
 							GPU: 0,
 						},
 					},
-					Load: domain.ResourceCapacity{
-						// For now, report zero allocation
-						// In a real system, the agent would track actual allocations
-						CPU: 0,
-						Mem: 0,
-						GPU: 0,
-					},
+					Load:            allocated,
 					ActiveSandboxes: activeSandboxes,
 					Time:            time.Now(),
 				}
@@ -254,8 +267,8 @@ func main() {
 				} else {
 					logger.Info("Heartbeat sent",
 						"node_id", agent.NodeID,
-						"total_mem_mb", totalMemMB,
-						"total_cpu_milli", totalCPU)
+						"allocated_cpu", allocated.CPU,
+						"allocated_mem", allocated.Mem)
 				}
 			}
 		}
