@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/netip"
@@ -145,8 +146,13 @@ func main() {
 		}
 
 		if err := manager.Submit(r.Context(), &req); err != nil {
+			if errors.Is(err, olympus.ErrPolicyRejected) {
+				logger.Warn("Request rejected by policy", "error", err)
+				http.Error(w, err.Error(), http.StatusForbidden)
+				return
+			}
 			logger.Error("Failed to submit request", "error", err)
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
 
@@ -221,7 +227,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
-		Handler: mux,
+		Handler: olympus.AuthMiddleware(logger, mux),
 	}
 
 	go func() {

@@ -120,6 +120,19 @@ func (r *FirecrackerRuntime) Launch(ctx context.Context, req *domain.SandboxRequ
 		WithSocketPath(socketPath).
 		Build(ctx) // Assumes 'firecracker' is in PATH
 
+	// Check if we are restoring from a snapshot
+	if cfg.Snapshot.Path != "" {
+		r.Logger.Info("Restoring from snapshot", "id", req.ID, "snapshot", cfg.Snapshot.Path)
+		fcCfg.Snapshot = firecracker.SnapshotConfig{
+			MemFilePath:         cfg.Snapshot.Path + ".mem",
+			SnapshotPath:        cfg.Snapshot.Path + ".disk",
+			EnableDiffSnapshots: false,
+			ResumeVM:            true,
+		}
+		// Clear KernelImagePath as we are restoring
+		fcCfg.KernelImagePath = ""
+	}
+
 	machine, err := firecracker.NewMachine(ctx, fcCfg, firecracker.WithProcessRunner(cmd))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create machine: %w", err)

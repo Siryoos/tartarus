@@ -2,8 +2,10 @@ package olympus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/tartarus-sandbox/tartarus/pkg/acheron"
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
 	"github.com/tartarus-sandbox/tartarus/pkg/hades"
@@ -12,6 +14,8 @@ import (
 	"github.com/tartarus-sandbox/tartarus/pkg/moirai"
 	"github.com/tartarus-sandbox/tartarus/pkg/themis"
 )
+
+var ErrPolicyRejected = errors.New("request rejected by policy enforcement")
 
 // Manager is Olympus: front-door for users, back-door to Hades and Acheron.
 
@@ -29,7 +33,12 @@ type Manager struct {
 // Submit enqueues a new sandbox request after validation and policy checks.
 
 func (m *Manager) Submit(ctx context.Context, req *domain.SandboxRequest) error {
-	// 1) Load policy from Themis
+	// 1) Assign ID if missing
+	if req.ID == "" {
+		req.ID = domain.SandboxID(uuid.New().String())
+	}
+
+	// 2) Load policy from Themis
 	policy, err := m.Policies.GetPolicy(ctx, req.Template)
 	if err != nil {
 		m.Logger.Error(ctx, "Failed to load policy", map[string]any{
@@ -45,7 +54,7 @@ func (m *Manager) Submit(ctx context.Context, req *domain.SandboxRequest) error 
 		"policy_id":  policy.ID,
 	})
 
-	// 2) Run PreJudges
+	// 3) Run PreJudges
 	verdict, err := m.Judges.RunPre(ctx, req)
 	if err != nil {
 		m.Logger.Error(ctx, "Judge evaluation failed", map[string]any{
@@ -55,19 +64,35 @@ func (m *Manager) Submit(ctx context.Context, req *domain.SandboxRequest) error 
 		return err
 	}
 
-	if verdict != judges.VerdictAccept {
+	// 4) Verdict Handling
+	switch verdict {
+	case judges.VerdictReject:
 		m.Logger.Info(ctx, "Request rejected by policy enforcement", map[string]any{
 			"sandbox_id": req.ID,
 			"verdict":    verdict,
 		})
-		return fmt.Errorf("request rejected by policy enforcement")
+		return ErrPolicyRejected
+	case judges.VerdictQuarantine:
+		m.Logger.Info(ctx, "Request quarantined by policy enforcement", map[string]any{
+			"sandbox_id": req.ID,
+			"verdict":    verdict,
+		})
+		if req.Metadata == nil {
+			req.Metadata = make(map[string]string)
+		}
+		req.Metadata["quarantine"] = "true"
+	case judges.VerdictAccept:
+		m.Logger.Info(ctx, "Request passed all judges", map[string]any{
+			"sandbox_id": req.ID,
+		})
+	default:
+		return fmt.Errorf("unknown verdict: %v", verdict)
 	}
 
-	m.Logger.Info(ctx, "Request passed all judges", map[string]any{
-		"sandbox_id": req.ID,
-	})
+	// 5) Persistence (Optional/Future)
+	// TODO: Persist request state to Hades/Redis
 
-	// 3) Enqueue into Acheron
+	// 6) Enqueue into Acheron
 	if err := m.Queue.Enqueue(ctx, req); err != nil {
 		m.Logger.Error(ctx, "Failed to enqueue request", map[string]any{
 			"sandbox_id": req.ID,
