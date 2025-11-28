@@ -30,7 +30,7 @@ Context: ROADMAP.md marks Phase 3 as in progress and the prior task board shows 
   - DoD: On decode failure, emit to Cocytus with payload snapshot, ack/drop from queue to prevent loops, and record metrics; add test covering corrupt message flow.
 
 ## Release Validation
-- [ ] Regression suite for Phase 3 paths
+- [x] Regression suite for Phase 3 paths
   - Cover queue ack/nack behavior, Aeacus audit tagging, scheduler affinity/bin-pack decisions, Megaera network kills, and persistence across restarts.
 - [ ] Documentation refresh
   - Update ROADMAP.md and user guides to mark Phase 3 completion, config defaults (Redis/Hades/Themis), and note Phase 4+ items (Typhon, Charon, Hypnos) as future work.
