@@ -2,6 +2,7 @@ package hecatoncheir
 
 import (
 	"context"
+	"time"
 
 	"github.com/tartarus-sandbox/tartarus/pkg/acheron"
 	"github.com/tartarus-sandbox/tartarus/pkg/cocytus"
@@ -34,14 +35,30 @@ type Agent struct {
 // Run starts the main loop: consume from Acheron, execute, enforce, report.
 
 func (a *Agent) Run(ctx context.Context) error {
-	// Implementation will:
-	// - Dequeue requests
-	// - Run pre-judges
-	// - Prepare snapshot (Nyx), overlay (Lethe), network (Styx)
-	// - Launch via Runtime
-	// - Arm Furies
-	// - Monitor completion, run post-judges
-	// - Send to Cocytus on failure
-	// - Update metrics
-	return nil
+	a.Logger.Info(ctx, "Agent starting", nil)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			// Dequeue
+			req, err := a.Queue.Dequeue(ctx)
+			if err != nil {
+				a.Logger.Error(ctx, "Failed to dequeue", map[string]any{"error": err})
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			a.Logger.Info(ctx, "Received request", map[string]any{"id": req.ID})
+
+			// Launch
+			run, err := a.Runtime.Launch(ctx, req)
+			if err != nil {
+				a.Logger.Error(ctx, "Failed to launch", map[string]any{"error": err})
+				continue
+			}
+
+			a.Logger.Info(ctx, "Sandbox launched", map[string]any{"run_id": run.ID})
+		}
+	}
 }
