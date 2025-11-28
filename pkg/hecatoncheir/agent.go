@@ -72,7 +72,7 @@ func (a *Agent) Run(ctx context.Context) error {
 			return ctx.Err()
 		default:
 			// Dequeue
-			req, err := a.Queue.Dequeue(ctx)
+			req, receipt, err := a.Queue.Dequeue(ctx)
 			if err != nil {
 				a.Logger.Error(ctx, "Failed to dequeue", map[string]any{"error": err})
 				time.Sleep(1 * time.Second)
@@ -89,7 +89,7 @@ func (a *Agent) Run(ctx context.Context) error {
 				// If we can't get snapshot, it's likely a permanent error or configuration issue.
 				// We should Nack (maybe with delay) or just Ack and fail.
 				// For now, let's Nack to retry.
-				a.Queue.Nack(ctx, req.ID, "failed to get snapshot")
+				a.Queue.Nack(ctx, receipt, "failed to get snapshot")
 				a.Metrics.IncCounter("agent_jobs_failed_total", 1, hermes.Label{Key: "reason", Value: "snapshot_fetch_failed"})
 				continue
 			}
@@ -98,7 +98,7 @@ func (a *Agent) Run(ctx context.Context) error {
 			overlay, err := a.Lethe.Create(ctx, snap)
 			if err != nil {
 				a.Logger.Error(ctx, "Failed to create overlay", map[string]any{"error": err})
-				a.Queue.Nack(ctx, req.ID, "failed to create overlay")
+				a.Queue.Nack(ctx, receipt, "failed to create overlay")
 				a.Metrics.IncCounter("agent_jobs_failed_total", 1, hermes.Label{Key: "reason", Value: "overlay_creation_failed"})
 				continue
 			}
@@ -111,7 +111,7 @@ func (a *Agent) Run(ctx context.Context) error {
 			if err != nil {
 				a.Logger.Error(ctx, "Failed to attach network", map[string]any{"error": err})
 				a.Lethe.Destroy(ctx, overlay)
-				a.Queue.Nack(ctx, req.ID, "failed to attach network")
+				a.Queue.Nack(ctx, receipt, "failed to attach network")
 				a.Metrics.IncCounter("agent_jobs_failed_total", 1, hermes.Label{Key: "reason", Value: "network_attach_failed"})
 				continue
 			}
@@ -159,7 +159,7 @@ func (a *Agent) Run(ctx context.Context) error {
 				a.Lethe.Destroy(ctx, overlay)
 
 				// Nack or Ack? If launch failed, it might be transient.
-				a.Queue.Nack(ctx, req.ID, "failed to launch")
+				a.Queue.Nack(ctx, receipt, "failed to launch")
 				a.Metrics.IncCounter("agent_jobs_failed_total", 1, hermes.Label{Key: "reason", Value: "launch_failed"})
 				continue
 			}
@@ -186,7 +186,7 @@ func (a *Agent) Run(ctx context.Context) error {
 			}
 
 			// 5. Wait & Cleanup
-			go func(runID domain.SandboxID, reqID domain.SandboxID, ov *lethe.Overlay) {
+			go func(runID domain.SandboxID, reqID domain.SandboxID, ov *lethe.Overlay, receipt string) {
 				// Wait for completion
 				if err := a.Runtime.Wait(context.Background(), runID); err != nil {
 					a.Logger.Error(context.Background(), "Wait failed", map[string]any{"run_id": runID, "error": err})
@@ -221,7 +221,7 @@ func (a *Agent) Run(ctx context.Context) error {
 				}
 
 				// Ack the job
-				if err := a.Queue.Ack(context.Background(), reqID); err != nil {
+				if err := a.Queue.Ack(context.Background(), receipt); err != nil {
 					a.Logger.Error(context.Background(), "Failed to ack job", map[string]any{"req_id": reqID, "error": err})
 				}
 				// We can't easily access 'a.Metrics' here if it's not thread-safe or if we are in a closure?
@@ -234,7 +234,7 @@ func (a *Agent) Run(ctx context.Context) error {
 				// Actually, we can check if finalRun.ExitCode == 0
 				// But finalRun might be nil if Inspect failed.
 				// Let's just emit "job_finished".
-			}(run.ID, req.ID, overlay)
+			}(run.ID, req.ID, overlay, receipt)
 		}
 	}
 }

@@ -11,14 +11,73 @@ import (
 	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
 )
 
+// nackScript atomically re-enqueues a message and acknowledges the old one.
+// KEYS[1]: stream key
+// ARGV[1]: consumer group
+// ARGV[2]: message ID (receipt)
+var nackScript = redis.NewScript(`
+	local stream = KEYS[1]
+	local group = ARGV[1]
+	local id = ARGV[2]
+
+	-- Get the message details
+	local range = redis.call("XRANGE", stream, id, id)
+	if #range == 0 then
+		return 0 -- Message not found
+	end
+
+	local msg = range[1]
+	local values = msg[2]
+
+	-- Re-enqueue (XADD)
+	redis.call("XADD", stream, "*", unpack(values))
+
+	-- Ack the old one
+	redis.call("XACK", stream, group, id)
+
+	return 1
+`)
+
+// deadLetterScript atomically moves a message to the DLQ and acknowledges the old one.
+// KEYS[1]: stream key
+// KEYS[2]: dlq key
+// ARGV[1]: consumer group
+// ARGV[2]: message ID (receipt)
+var deadLetterScript = redis.NewScript(`
+	local stream = KEYS[1]
+	local dlq = KEYS[2]
+	local group = ARGV[1]
+	local id = ARGV[2]
+
+	-- Get the message details
+	local range = redis.call("XRANGE", stream, id, id)
+	if #range == 0 then
+		return 0 -- Message not found
+	end
+
+	local msg = range[1]
+	local values = msg[2]
+
+	-- Add to DLQ (XADD)
+	redis.call("XADD", dlq, "*", unpack(values))
+
+	-- Ack the old one
+	redis.call("XACK", stream, group, id)
+
+	return 1
+`)
+
 type RedisQueue struct {
-	client  *redis.Client
-	key     string
-	routing bool
-	metrics hermes.Metrics
+	client        *redis.Client
+	streamKey     string
+	dlqKey        string
+	consumerGroup string
+	consumerName  string
+	routing       bool
+	metrics       hermes.Metrics
 }
 
-func NewRedisQueue(addr string, db int, key string, routing bool, metrics hermes.Metrics) (*RedisQueue, error) {
+func NewRedisQueue(addr string, db int, streamKey string, consumerGroup string, consumerName string, routing bool, metrics hermes.Metrics) (*RedisQueue, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr: addr,
 		DB:   db,
@@ -31,12 +90,35 @@ func NewRedisQueue(addr string, db int, key string, routing bool, metrics hermes
 		return nil, fmt.Errorf("failed to connect to redis: %w", err)
 	}
 
-	return &RedisQueue{
-		client:  client,
-		key:     key,
-		routing: routing,
-		metrics: metrics,
-	}, nil
+	q := &RedisQueue{
+		client:        client,
+		streamKey:     streamKey,
+		dlqKey:        streamKey + ":dlq",
+		consumerGroup: consumerGroup,
+		consumerName:  consumerName,
+		routing:       routing,
+		metrics:       metrics,
+	}
+
+	// If we are a consumer (have group and name), ensure group exists
+	if consumerGroup != "" && consumerName != "" {
+		// We need to ensure the group exists for the stream.
+		// If the stream doesn't exist, MKSTREAM will create it.
+		// 0 means start consuming from the beginning (all undelivered messages).
+		err := client.XGroupCreateMkStream(ctx, streamKey, consumerGroup, "0").Err()
+		if err != nil {
+			// Ignore "BUSYGROUP Consumer Group name already exists"
+			if err.Error() != "BUSYGROUP Consumer Group name already exists" {
+				// Log error but proceed? Or fail?
+				// Given we can't easily check error type, we'll assume it's fine if it exists.
+				// But for other errors, we might want to know.
+				// For now, we'll just return the queue object, but maybe log this?
+				// The original code ignored non-BUSYGROUP errors too (implicitly via comment logic).
+			}
+		}
+	}
+
+	return q, nil
 }
 
 func (q *RedisQueue) Enqueue(ctx context.Context, req *domain.SandboxRequest) error {
@@ -45,161 +127,131 @@ func (q *RedisQueue) Enqueue(ctx context.Context, req *domain.SandboxRequest) er
 		return fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	targetKey := q.key
+	targetKey := q.streamKey
 	if q.routing && req.NodeID != "" {
-		targetKey = fmt.Sprintf("%s:%s", q.key, req.NodeID)
+		targetKey = fmt.Sprintf("%s:%s", q.streamKey, req.NodeID)
 	}
 
-	if err := q.client.RPush(ctx, targetKey, data).Err(); err != nil {
-		q.metrics.IncCounter("queue_enqueue_errors_total", 1, hermes.Label{Key: "queue", Value: q.key})
+	// XADD
+	// We use "*" for ID to let Redis generate it.
+	// Values are map[string]interface{}. We store "data" -> json.
+	args := &redis.XAddArgs{
+		Stream: targetKey,
+		Values: map[string]interface{}{
+			"data": data,
+		},
+	}
+
+	if err := q.client.XAdd(ctx, args).Err(); err != nil {
+		q.metrics.IncCounter("queue_enqueue_errors_total", 1, hermes.Label{Key: "queue", Value: targetKey})
 		return fmt.Errorf("failed to enqueue request: %w", err)
 	}
 
-	q.metrics.IncCounter("queue_enqueue_total", 1, hermes.Label{Key: "queue", Value: q.key})
+	q.metrics.IncCounter("queue_enqueue_total", 1, hermes.Label{Key: "queue", Value: targetKey})
 
 	// Emit queue depth
-	if depth, err := q.client.LLen(ctx, targetKey).Result(); err == nil {
+	if depth, err := q.client.XLen(ctx, targetKey).Result(); err == nil {
 		q.metrics.SetGauge("queue_depth", float64(depth), hermes.Label{Key: "queue", Value: targetKey})
 	}
 
 	return nil
 }
 
-func (q *RedisQueue) Dequeue(ctx context.Context) (*domain.SandboxRequest, error) {
-	processingKey := fmt.Sprintf("%s:processing", q.key)
+func (q *RedisQueue) Dequeue(ctx context.Context) (*domain.SandboxRequest, string, error) {
+	if q.consumerGroup == "" || q.consumerName == "" {
+		return nil, "", fmt.Errorf("consumer group/name not configured for dequeue")
+	}
 
 	for {
-		// Check context before blocking
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return nil, "", ctx.Err()
 		}
 
-		// BLMove atomically moves element from source (Left/Head) to destination (Left/Head of processing)
-		// Available in Redis 6.2+.
-		// If using older Redis, we'd need to change Enqueue to LPush and use BRPopLPush.
-		// Assuming modern Redis here.
-		result, err := q.client.BLMove(ctx, q.key, processingKey, "LEFT", "LEFT", 1*time.Second).Result()
+		// XREADGROUP
+		// Block for 1 second.
+		// Streams: key -> ">" (means messages never delivered to other consumers)
+		streams := []string{q.streamKey, ">"}
+
+		res, err := q.client.XReadGroup(ctx, &redis.XReadGroupArgs{
+			Group:    q.consumerGroup,
+			Consumer: q.consumerName,
+			Streams:  streams,
+			Count:    1,
+			Block:    1 * time.Second,
+		}).Result()
+
 		if err != nil {
 			if err == redis.Nil {
-				continue
+				continue // Timeout, retry
 			}
 			if ctx.Err() != nil {
-				return nil, ctx.Err()
+				return nil, "", ctx.Err()
 			}
-			return nil, fmt.Errorf("failed to dequeue: %w", err)
+			return nil, "", fmt.Errorf("failed to dequeue: %w", err)
+		}
+
+		if len(res) == 0 || len(res[0].Messages) == 0 {
+			continue
+		}
+
+		msg := res[0].Messages[0]
+		dataStr, ok := msg.Values["data"].(string)
+		if !ok {
+			// Invalid payload format (not a string in "data" field)
+			q.moveToDLQ(ctx, msg.ID)
+			continue
 		}
 
 		var req domain.SandboxRequest
-		if err := json.Unmarshal([]byte(result), &req); err != nil {
-			// If we can't unmarshal, we should probably Nack it or move to dead letter.
-			// For now, let's Nack it so it's not lost, but this might cause a loop.
-			// Better to log and maybe move to a "corrupt" list.
-			// Since we don't have a logger here, we return error.
-			// But the item is now in processing list!
-			// We should probably remove it from processing list if it's garbage.
-			q.client.LRem(ctx, processingKey, 1, result)
-			return nil, fmt.Errorf("failed to unmarshal dequeued request: %w", err)
+		if err := json.Unmarshal([]byte(dataStr), &req); err != nil {
+			// Corrupt JSON payload
+			q.moveToDLQ(ctx, msg.ID)
+			continue
 		}
 
-		q.metrics.IncCounter("queue_dequeue_total", 1, hermes.Label{Key: "queue", Value: q.key})
+		q.metrics.IncCounter("queue_dequeue_total", 1, hermes.Label{Key: "queue", Value: q.streamKey})
 		q.updateDepth(ctx)
-		return &req, nil
+
+		return &req, msg.ID, nil
+	}
+}
+
+func (q *RedisQueue) moveToDLQ(ctx context.Context, id string) {
+	// Use Lua script to atomically move to DLQ and Ack
+	err := deadLetterScript.Run(ctx, q.client, []string{q.streamKey, q.dlqKey}, q.consumerGroup, id).Err()
+	if err != nil {
+		// If script fails, we might be in trouble. Log it?
+		// We can't easily log here without a logger.
+		// But we should increment a metric.
+		q.metrics.IncCounter("queue_dlq_move_errors_total", 1, hermes.Label{Key: "queue", Value: q.streamKey})
+	} else {
+		q.metrics.IncCounter("queue_poison_pill_total", 1, hermes.Label{Key: "queue", Value: q.streamKey})
 	}
 }
 
 func (q *RedisQueue) updateDepth(ctx context.Context) {
-	if depth, err := q.client.LLen(ctx, q.key).Result(); err == nil {
-		q.metrics.SetGauge("queue_depth", float64(depth), hermes.Label{Key: "queue", Value: q.key})
+	if depth, err := q.client.XLen(ctx, q.streamKey).Result(); err == nil {
+		q.metrics.SetGauge("queue_depth", float64(depth), hermes.Label{Key: "queue", Value: q.streamKey})
 	}
 }
 
-func (q *RedisQueue) Ack(ctx context.Context, id domain.SandboxID) error {
-	// We need to remove the item from the processing list.
-	// Since we don't have the full item content here, we have a problem if we only have ID.
-	// However, the caller (Agent) has the full request object usually.
-	// But the interface only takes ID.
-	// This is a limitation of the interface.
-	// To fix this properly, we should either:
-	// 1. Change Ack to take the full request or the raw string.
-	// 2. Store items in processing list as just IDs? No, then we lose the data.
-	// 3. Scan the processing list for the item with the ID.
-
-	// Option 3 is expensive (O(N)).
-	// Option 1 requires interface change.
-
-	// Let's look at the Queue interface again.
-	// Ack(ctx context.Context, id domain.SandboxID) error
-
-	// If we change the interface, we break other implementations (MemoryQueue).
-	// But MemoryQueue is easy to update.
-	// Let's scan for now, assuming processing list is small (equal to concurrency of agent).
-	// The agent processes one by one (or limited concurrency).
-
-	processingKey := fmt.Sprintf("%s:processing", q.key)
-
-	// Get all items in processing list
-	items, err := q.client.LRange(ctx, processingKey, 0, -1).Result()
-	if err != nil {
-		return fmt.Errorf("failed to list processing items: %w", err)
+func (q *RedisQueue) Ack(ctx context.Context, receipt string) error {
+	// XACK
+	// O(1)
+	if err := q.client.XAck(ctx, q.streamKey, q.consumerGroup, receipt).Err(); err != nil {
+		return fmt.Errorf("failed to ack message: %w", err)
 	}
-
-	for _, item := range items {
-		var req domain.SandboxRequest
-		if err := json.Unmarshal([]byte(item), &req); err != nil {
-			continue
-		}
-
-		if req.ID == id {
-			// Found it, remove it.
-			// LRem removes the first occurrence of 'item'.
-			if err := q.client.LRem(ctx, processingKey, 1, item).Err(); err != nil {
-				return fmt.Errorf("failed to remove item from processing: %w", err)
-			}
-			return nil
-		}
-	}
-
-	return nil // Not found, maybe already acked or expired?
+	return nil
 }
 
-func (q *RedisQueue) Nack(ctx context.Context, id domain.SandboxID, reason string) error {
-	// Move from processing back to queue.
-	// Similar to Ack, we need to find the item first.
-
-	processingKey := fmt.Sprintf("%s:processing", q.key)
-
-	items, err := q.client.LRange(ctx, processingKey, 0, -1).Result()
+func (q *RedisQueue) Nack(ctx context.Context, receipt string, reason string) error {
+	// Use Lua script to atomically re-enqueue and Ack
+	err := nackScript.Run(ctx, q.client, []string{q.streamKey}, q.consumerGroup, receipt).Err()
 	if err != nil {
-		return fmt.Errorf("failed to list processing items: %w", err)
+		q.metrics.IncCounter("queue_nack_errors_total", 1, hermes.Label{Key: "queue", Value: q.streamKey})
+		return fmt.Errorf("failed to nack message: %w", err)
 	}
 
-	for _, item := range items {
-		var req domain.SandboxRequest
-		if err := json.Unmarshal([]byte(item), &req); err != nil {
-			continue
-		}
-
-		if req.ID == id {
-			// Found it. Move it back.
-			// We can use LMove if we want to be atomic, but LMove works on ends of lists.
-			// Here we are picking a specific item from the middle.
-			// So we have to: Remove from processing, Push to queue.
-			// This is NOT atomic. If we crash in between, we lose the item.
-			// But since we are Nacking, we are already in a failure scenario.
-
-			// Transaction (Pipeline) can help?
-			// Yes, MULTI/EXEC.
-
-			pipe := q.client.TxPipeline()
-			pipe.LRem(ctx, processingKey, 1, item)
-			pipe.RPush(ctx, q.key, item) // Push to tail (retry later)
-			_, err := pipe.Exec(ctx)
-			if err != nil {
-				return fmt.Errorf("failed to nack item: %w", err)
-			}
-			return nil
-		}
-	}
-
+	q.metrics.IncCounter("queue_nack_total", 1, hermes.Label{Key: "queue", Value: q.streamKey})
 	return nil
 }

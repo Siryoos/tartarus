@@ -27,7 +27,7 @@ func (q *MemoryQueue) Enqueue(ctx context.Context, req *domain.SandboxRequest) e
 	return nil
 }
 
-func (q *MemoryQueue) Dequeue(ctx context.Context) (*domain.SandboxRequest, error) {
+func (q *MemoryQueue) Dequeue(ctx context.Context) (*domain.SandboxRequest, string, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
@@ -37,26 +37,28 @@ func (q *MemoryQueue) Dequeue(ctx context.Context) (*domain.SandboxRequest, erro
 		// To properly handle context, we'd need a channel-based approach or polling.
 		// For this prototype, checking context before waiting is a partial fix.
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return nil, "", ctx.Err()
 		}
 		q.cond.Wait()
 	}
 
 	if ctx.Err() != nil {
-		return nil, ctx.Err()
+		return nil, "", ctx.Err()
 	}
 
 	item := q.items[0]
 	q.items = q.items[1:]
-	return item, nil
+	// For MemoryQueue, the receipt is just the ID, or anything really.
+	// We don't strictly need it for Ack in MemoryQueue since it's just in-memory.
+	return item, string(item.ID), nil
 }
 
-func (q *MemoryQueue) Ack(ctx context.Context, id domain.SandboxID) error {
+func (q *MemoryQueue) Ack(ctx context.Context, receipt string) error {
 	// No-op for memory queue
 	return nil
 }
 
-func (q *MemoryQueue) Nack(ctx context.Context, id domain.SandboxID, reason string) error {
+func (q *MemoryQueue) Nack(ctx context.Context, receipt string, reason string) error {
 	// Simple Nack: just log it (or in a real system, maybe re-queue)
 	return nil
 }

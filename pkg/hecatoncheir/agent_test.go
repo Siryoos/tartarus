@@ -27,21 +27,21 @@ type mockQueue struct {
 	req *domain.SandboxRequest
 }
 
-func (m *mockQueue) Dequeue(ctx context.Context) (*domain.SandboxRequest, error) {
+func (m *mockQueue) Dequeue(ctx context.Context) (*domain.SandboxRequest, string, error) {
 	if m.req != nil {
 		r := m.req
 		m.req = nil
-		return r, nil
+		return r, "receipt-1", nil
 	}
 	<-ctx.Done()
-	return nil, ctx.Err()
+	return nil, "", ctx.Err()
 }
 
-func (m *mockQueue) Ack(ctx context.Context, id domain.SandboxID) error {
+func (m *mockQueue) Ack(ctx context.Context, receipt string) error {
 	return nil
 }
 
-func (m *mockQueue) Nack(ctx context.Context, id domain.SandboxID, reason string) error {
+func (m *mockQueue) Nack(ctx context.Context, receipt string, reason string) error {
 	return nil
 }
 

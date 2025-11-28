@@ -64,7 +64,7 @@ func main() {
 		// Append NodeID to key for per-node queue
 		redisKey = fmt.Sprintf("%s:%s", redisKey, nodeID)
 
-		rq, err := acheron.NewRedisQueue(redisAddr, redisDB, redisKey, false, metrics)
+		rq, err := acheron.NewRedisQueue(redisAddr, redisDB, redisKey, "acheron-workers", string(nodeID), false, metrics)
 		if err != nil {
 			logger.Error("Failed to initialize Redis queue", "error", err)
 			os.Exit(1)

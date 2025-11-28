@@ -1,24 +1,36 @@
-# Task List (Architecture + First Release)
+# Tartarus Phase 3 Closeout (v1.0) Tasks
 
-## Core platform gaps (target: first release)
-- [x] Use Redis-backed Hades registry in the Hecatoncheir agent and send real heartbeats with allocations so Olympus can see nodes across processes.
-- [x] Drive scheduling from Olympus: list nodes, pick via `pkg/moirai`, persist placement/run IDs, and route enqueue/control messages to the chosen agent (per-node queues or routing metadata).
-- [x] Provide template + policy management so Nyx can prepare snapshots (kernel/rootfs paths) and Themis stores policies; expose basic APIs/fixtures for default templates.
-- [x] Repair snapshot/overlay pipeline: align Nyx snapshot paths with on-disk `.mem`/`.disk`, make Lethe create usable writable layers, and clean up overlays when runs end.
-- [x] Make the Firecracker runtime boot user workloads: wire command/env into VM boot, ensure rootfs uses overlay, capture guest stdout/stderr for log streaming, and return exit codes; keep Mock runtime only for tests.
-- [x] Complete networking: assign IP/gateway to TAPs, plumb networking into microVMs (DHCP or static), enforce Styx contract rules, and tear down cleanly.
-- [x] Add lifecycle + queue reliability: ack/nack or visibility timeout in Acheron, record run status/exit codes in Hades or a run store, and integrate Erinyes to enforce max runtime/kill on breach.
-- [x] Solidify log streaming and kill: ensure agent publishes logs to Redis topics per sandbox, API streaming endpoint handles errors/timeouts, and kill commands reach the correct node.
-- [x] Policy/auth baseline: relax NetworkJudge defaults or make policy configurable, require API key auth by default, and propagate tenant/user metadata for future Cerberus work.
-- [x] Persist request state to Hades/Redis in Olympus (currently in-memory only).
-- [x] Enforce memory limits in Erinyes (currently CPU/Runtime only).
+Context: ROADMAP.md marks Phase 3 as in progress and the prior task board shows completed items, but code review surfaces several gaps. This file tracks what must land before the first stable release.
 
-## Observability and operations
-- [x] Emit metrics (queue depth, launch latency, heartbeat age, failures) via Hermes adapters; add structured logs for control-plane events.
-- [x] Ship a dev stack (docker-compose or scripts) that boots Redis + API + agent with sane defaults for kernel/rootfs/snapshot paths and documents required host capabilities.
+## Critical Technical Debt (Must Fix)
+- [x] Acheron RedisQueue Ack scaling (`pkg/acheron/redis_queue.go`)
+  - Current: `Ack` scans the entire processing list (O(N)) because the interface only passes an ID.
+  - DoD: Refactor queue interface to return a receipt/handle or store processing items by ID so `Ack` is O(1); update `MemoryQueue` and `Agent` call sites; add tests proving bounded-time ack for large processing lists.
+- [x] Acheron Nack crash-safety and corrupt payload handling (`pkg/acheron/redis_queue.go`)
+  - Current: Nack depends on unmarshaling before MULTI/EXEC; corrupt JSON can loop or be dropped without audit.
+  - DoD: Introduce dead-letter path for invalid payloads (Cocytus), ensure atomic move back to queue or DLQ, surface metrics for poison pills and nack failures, and add regression tests.
 
-## Extended components backlog (design only)
-- [x] Implement Cerberus authn/authz/audit gateway and replace ad-hoc bearer middleware.
-- [x] Build Charon front-door (rate limiting, circuit breaking, load-balancing) in front of Olympus.
-- [x] Add Hypnos/Thanatos lifecycle management (sleep/hibernation and graceful termination) on top of Nyx/Firecracker.
-- [x] Deliver Phlegethon/Typhon/Persephone/Kampe once core is stable: heat-based routing, quarantine pipeline, seasonal scaling, and legacy container migration adapters.
+## Missing Phase 3 Features (per ROADMAP)
+- [ ] Aeacus (Audit Judge) implementation (`pkg/judges`)
+  - DoD: Add AeacusJudge to tag compliance/retention metadata and emit audit records; wire into `judges.Chain` in `cmd/olympus-api/main.go`; include unit tests and sample audit output.
+- [ ] Advanced scheduling (affinity/anti-affinity and bin-packing) (`pkg/moirai`)
+  - DoD: Extend scheduler to honor placement hints/labels and provide a bin-packing strategy in addition to least-loaded; expose config toggle; add tests covering anti-affinity and tight packing scenarios.
+- [ ] Megaera runtime network watchdog (`pkg/erinyes`)
+  - DoD: Monitor live network usage/egress against policy (bandwidth caps, banned IP attempts) during execution, not just Styx setup-time rules; enforce via Erinyes kill path with metrics and logs.
+
+## Persistence and Durability Gaps
+- [ ] Olympus control-plane persistence verification (`pkg/olympus`, `pkg/hades`)
+  - Current: defaults to in-memory registry when Redis is unset; TASKS claimed persistence was done.
+  - DoD: Ensure production config uses Redis-backed registry/queue by default, add restart recovery test (state survives manager restart), and document required settings.
+- [ ] Themis policy durability and versioning (`pkg/themis`)
+  - Current: `MemoryRepo` is volatile and has no versioning.
+  - DoD: Provide Redis/SQL/file-backed repo with version stamps and optimistic updates; load policies on startup; add API/tests for list/get/upsert that survive restart.
+- [x] Agent poison-pill handling (`pkg/hecatoncheir/agent.go`, `pkg/acheron/redis_queue.go`)
+  - Current: Dequeue or JSON decode failures are logged but not sent to Cocytus; risk of retry loops or silent drops.
+  - DoD: On decode failure, emit to Cocytus with payload snapshot, ack/drop from queue to prevent loops, and record metrics; add test covering corrupt message flow.
+
+## Release Validation
+- [ ] Regression suite for Phase 3 paths
+  - Cover queue ack/nack behavior, Aeacus audit tagging, scheduler affinity/bin-pack decisions, Megaera network kills, and persistence across restarts.
+- [ ] Documentation refresh
+  - Update ROADMAP.md and user guides to mark Phase 3 completion, config defaults (Redis/Hades/Themis), and note Phase 4+ items (Typhon, Charon, Hypnos) as future work.

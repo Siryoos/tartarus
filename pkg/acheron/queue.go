@@ -10,7 +10,7 @@ import (
 
 type Queue interface {
 	Enqueue(ctx context.Context, req *domain.SandboxRequest) error
-	Dequeue(ctx context.Context) (*domain.SandboxRequest, error)
-	Ack(ctx context.Context, id domain.SandboxID) error
-	Nack(ctx context.Context, id domain.SandboxID, reason string) error
+	Dequeue(ctx context.Context) (*domain.SandboxRequest, string, error)
+	Ack(ctx context.Context, receipt string) error
+	Nack(ctx context.Context, receipt string, reason string) error
 }

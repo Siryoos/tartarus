@@ -48,7 +48,7 @@ func main() {
 			redisKey = "tartarus:queue"
 		}
 
-		rq, err := acheron.NewRedisQueue(redisAddr, redisDB, redisKey, true, metrics)
+		rq, err := acheron.NewRedisQueue(redisAddr, redisDB, redisKey, "", "", true, metrics)
 		if err != nil {
 			logger.Error("Failed to initialize Redis queue", "error", err)
 			os.Exit(1)
