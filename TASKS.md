@@ -15,7 +15,7 @@
 
 ## Observability and operations
 - [x] Emit metrics (queue depth, launch latency, heartbeat age, failures) via Hermes adapters; add structured logs for control-plane events.
-- [ ] Ship a dev stack (docker-compose or scripts) that boots Redis + API + agent with sane defaults for kernel/rootfs/snapshot paths and documents required host capabilities.
+- [x] Ship a dev stack (docker-compose or scripts) that boots Redis + API + agent with sane defaults for kernel/rootfs/snapshot paths and documents required host capabilities.
 
 ## Extended components backlog (design only)
 - [x] Implement Cerberus authn/authz/audit gateway and replace ad-hoc bearer middleware.

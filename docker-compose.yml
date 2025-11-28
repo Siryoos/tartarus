@@ -49,8 +49,8 @@ services:
       S3_BUCKET: "tartarus-snapshots"
       S3_ACCESS_KEY: "minioadmin"
       S3_SECRET_KEY: "minioadmin"
-      FC_KERNEL_IMAGE: "/var/lib/firecracker/vmlinux" # Needs to be present or mounted
-      FC_ROOTFS_BASE: "/var/lib/firecracker/rootfs.img" # Needs to be present or mounted
+      FC_KERNEL_IMAGE: "/var/lib/firecracker/vmlinux" # Downloaded by dev-setup.sh
+      FC_ROOTFS_BASE: "/var/lib/firecracker/rootfs.img" # Downloaded by dev-setup.sh
     volumes:
       - ./data/firecracker:/var/lib/firecracker # Mount local data for kernel/rootfs
     depends_on:
