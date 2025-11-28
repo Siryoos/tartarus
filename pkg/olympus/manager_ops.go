@@ -2,7 +2,6 @@ package olympus
 
 import (
 	"context"
-	"fmt"
 	"io"
 
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
@@ -46,7 +45,7 @@ func (m *Manager) KillSandbox(ctx context.Context, id domain.SandboxID) error {
 	}
 
 	if !found {
-		return fmt.Errorf("sandbox not found")
+		return ErrSandboxNotFound
 	}
 
 	return m.Control.Kill(ctx, targetNode, id)
@@ -76,7 +75,7 @@ func (m *Manager) StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writ
 	}
 
 	if !found {
-		return fmt.Errorf("sandbox not found")
+		return ErrSandboxNotFound
 	}
 
 	return m.Control.StreamLogs(ctx, targetNode, id, w)

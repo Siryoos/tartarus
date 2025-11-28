@@ -169,7 +169,7 @@ func main() {
 
 	// Judges
 	resourceJudge := judges.NewResourceJudge(policyRepo, hermesLogger)
-	networkJudge := judges.NewNetworkJudge([]netip.Prefix{}, hermesLogger)
+	networkJudge := judges.NewNetworkJudge(cfg.AllowedNetworks, []netip.Prefix{}, hermesLogger)
 	judgeChain := &judges.Chain{
 		Pre: []judges.PreJudge{resourceJudge, networkJudge},
 	}
@@ -239,11 +239,17 @@ func main() {
 
 		if r.Method == http.MethodDelete {
 			if err := manager.KillSandbox(r.Context(), id); err != nil {
+				if errors.Is(err, olympus.ErrSandboxNotFound) {
+					logger.Warn("Sandbox not found for kill", "id", id)
+					http.Error(w, "Sandbox not found", http.StatusNotFound)
+					return
+				}
 				logger.Error("Failed to kill sandbox", "id", id, "error", err)
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 				return
 			}
 			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]string{"status": "killed", "id": string(id)})
 			return
 		} else if r.Method == http.MethodGet && r.URL.Query().Get("action") == "logs" {
 			// Stream logs
@@ -273,9 +279,17 @@ func main() {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 
 		if err := manager.StreamLogs(r.Context(), id, w); err != nil {
+			// Check if error is sandbox not found
+			if errors.Is(err, olympus.ErrSandboxNotFound) {
+				logger.Warn("Sandbox not found for log streaming", "id", id)
+				// Can only send error if we haven't started writing
+				// Since we set headers above, this will be logged but status may not change
+				http.Error(w, "Sandbox not found", http.StatusNotFound)
+				return
+			}
 			logger.Error("Log streaming failed", "id", id, "error", err)
-			// Cannot write error status if we already started writing?
-			// But StreamLogs writes to w.
+			// If streaming was already started, can't change status code
+			// Error will be logged and connection closed
 		}
 	})
 

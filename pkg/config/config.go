@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -20,6 +21,8 @@ type Config struct {
 	S3Bucket    string
 	S3AccessKey string
 	S3SecretKey string
+
+	AllowedNetworks []string
 }
 
 func Load() *Config {
@@ -38,6 +41,8 @@ func Load() *Config {
 		S3Bucket:    getEnv("S3_BUCKET", "tartarus-snapshots"),
 		S3AccessKey: getEnv("AWS_ACCESS_KEY_ID", ""),
 		S3SecretKey: getEnv("AWS_SECRET_ACCESS_KEY", ""),
+
+		AllowedNetworks: strings.Split(getEnv("ALLOWED_NETWORKS", "no-net,lockdown"), ","),
 	}
 }
 

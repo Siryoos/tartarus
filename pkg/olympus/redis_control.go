@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
@@ -30,7 +31,7 @@ func (r *RedisControlPlane) StreamLogs(ctx context.Context, nodeID domain.NodeID
 	// Verify subscription
 	if _, err := pubsub.Receive(ctx); err != nil {
 		pubsub.Close()
-		return err
+		return fmt.Errorf("failed to subscribe to logs: %w", err)
 	}
 	defer pubsub.Close()
 
@@ -38,20 +39,36 @@ func (r *RedisControlPlane) StreamLogs(ctx context.Context, nodeID domain.NodeID
 	controlTopic := fmt.Sprintf("tartarus:control:%s", nodeID)
 	msg := fmt.Sprintf("LOGS %s", sandboxID)
 	if err := r.client.Publish(ctx, controlTopic, msg).Err(); err != nil {
-		return err
+		return fmt.Errorf("failed to trigger log streaming: %w", err)
 	}
 
-	// 3. Stream logs to writer
+	// 3. Stream logs to writer with timeout
+	// Create a timeout context (5 minutes max for log streaming)
+	streamCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
 
 	ch := pubsub.Channel()
 
 	for {
 		select {
-		case <-ctx.Done():
+		case <-streamCtx.Done():
+			// Differentiate between timeout and user cancellation
+			if ctx.Err() == nil {
+				// Parent context is still valid, so this was a timeout
+				return fmt.Errorf("log streaming timeout after 5 minutes")
+			}
 			return ctx.Err()
-		case msg := <-ch:
+		case msg, ok := <-ch:
+			if !ok {
+				// Channel closed, streaming ended
+				return nil
+			}
+			if msg == nil {
+				// Nil message, skip
+				continue
+			}
 			if _, err := w.Write([]byte(msg.Payload)); err != nil {
-				return err
+				return fmt.Errorf("failed to write logs: %w", err)
 			}
 		}
 	}

@@ -69,17 +69,19 @@ func (j *ResourceJudge) PreAdmit(ctx context.Context, req *domain.SandboxRequest
 	return VerdictAccept, nil
 }
 
-// NetworkJudge validates network policies against deny-list.
+// NetworkJudge validates network policies against allowed list.
 type NetworkJudge struct {
-	denyList []netip.Prefix
-	logger   hermes.Logger
+	allowedNetworks []string
+	denyList        []netip.Prefix
+	logger          hermes.Logger
 }
 
 // NewNetworkJudge creates a new network judge.
-func NewNetworkJudge(denyList []netip.Prefix, logger hermes.Logger) *NetworkJudge {
+func NewNetworkJudge(allowedNetworks []string, denyList []netip.Prefix, logger hermes.Logger) *NetworkJudge {
 	return &NetworkJudge{
-		denyList: denyList,
-		logger:   logger,
+		allowedNetworks: allowedNetworks,
+		denyList:        denyList,
+		logger:          logger,
 	}
 }
 
@@ -88,7 +90,18 @@ func (j *NetworkJudge) PreAdmit(ctx context.Context, req *domain.SandboxRequest)
 	networkID := req.NetworkRef.ID
 	networkName := req.NetworkRef.Name
 
-	// Accept secure defaults (lockdown policies)
+	// Check if network ID is in allowed list
+	for _, allowed := range j.allowedNetworks {
+		if strings.EqualFold(networkID, allowed) || strings.EqualFold(networkName, allowed) {
+			j.logger.Info(ctx, "Request passed network validation: allowed policy", map[string]any{
+				"sandbox_id": req.ID,
+				"network_id": networkID,
+			})
+			return VerdictAccept, nil
+		}
+	}
+
+	// Also check for standard secure defaults if not explicitly allowed
 	if strings.Contains(strings.ToLower(networkID), "no-net") ||
 		strings.Contains(strings.ToLower(networkID), "lockdown") ||
 		strings.Contains(strings.ToLower(networkName), "no internet") {
@@ -99,12 +112,10 @@ func (j *NetworkJudge) PreAdmit(ctx context.Context, req *domain.SandboxRequest)
 		return VerdictAccept, nil
 	}
 
-	// For now, reject all other network policies (conservative approach)
-	// Future enhancement: implement full CIDR-based validation
 	j.logger.Info(ctx, "Request rejected: network policy not in allowed list", map[string]any{
-		"sandbox_id":   req.ID,
-		"network_id":   networkID,
-		"network_name": networkName,
+		"sandbox_id":       req.ID,
+		"network_id":       networkID,
+		"allowed_networks": j.allowedNetworks,
 	})
 	return VerdictReject, nil
 }

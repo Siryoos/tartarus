@@ -16,6 +16,7 @@ import (
 )
 
 var ErrPolicyRejected = errors.New("request rejected by policy enforcement")
+var ErrSandboxNotFound = errors.New("sandbox not found")
 
 // Manager is Olympus: front-door for users, back-door to Hades and Acheron.
 
