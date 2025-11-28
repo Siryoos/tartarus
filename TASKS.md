@@ -7,7 +7,7 @@
 - [x] Repair snapshot/overlay pipeline: align Nyx snapshot paths with on-disk `.mem`/`.disk`, make Lethe create usable writable layers, and clean up overlays when runs end.
 - [x] Make the Firecracker runtime boot user workloads: wire command/env into VM boot, ensure rootfs uses overlay, capture guest stdout/stderr for log streaming, and return exit codes; keep Mock runtime only for tests.
 - [x] Complete networking: assign IP/gateway to TAPs, plumb networking into microVMs (DHCP or static), enforce Styx contract rules, and tear down cleanly.
-- [ ] Add lifecycle + queue reliability: ack/nack or visibility timeout in Acheron, record run status/exit codes in Hades or a run store, and integrate Erinyes to enforce max runtime/kill on breach.
+- [x] Add lifecycle + queue reliability: ack/nack or visibility timeout in Acheron, record run status/exit codes in Hades or a run store, and integrate Erinyes to enforce max runtime/kill on breach.
 - [ ] Solidify log streaming and kill: ensure agent publishes logs to Redis topics per sandbox, API streaming endpoint handles errors/timeouts, and kill commands reach the correct node.
 - [ ] Policy/auth baseline: relax NetworkJudge defaults or make policy configurable, require API key auth by default, and propagate tenant/user metadata for future Cerberus work.
 

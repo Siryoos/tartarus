@@ -16,6 +16,7 @@ const (
 
 type MemoryRegistry struct {
 	nodes sync.Map // map[domain.NodeID]domain.NodeStatus
+	runs  sync.Map // map[domain.SandboxID]domain.SandboxRun
 }
 
 func NewMemoryRegistry() *MemoryRegistry {
@@ -87,4 +88,18 @@ func (r *MemoryRegistry) MarkDraining(ctx context.Context, id domain.NodeID) err
 	status.Labels["status"] = "draining"
 	r.nodes.Store(id, status)
 	return nil
+}
+
+func (r *MemoryRegistry) UpdateRun(ctx context.Context, run domain.SandboxRun) error {
+	r.runs.Store(run.ID, run)
+	return nil
+}
+
+func (r *MemoryRegistry) GetRun(ctx context.Context, id domain.SandboxID) (*domain.SandboxRun, error) {
+	val, ok := r.runs.Load(id)
+	if !ok {
+		return nil, errors.New("run not found")
+	}
+	run := val.(domain.SandboxRun)
+	return &run, nil
 }

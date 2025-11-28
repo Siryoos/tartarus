@@ -14,6 +14,10 @@ type Registry interface {
 	GetNode(ctx context.Context, id domain.NodeID) (*domain.NodeStatus, error)
 	UpdateHeartbeat(ctx context.Context, payload HeartbeatPayload) error
 	MarkDraining(ctx context.Context, id domain.NodeID) error
+
+	// Run persistence
+	UpdateRun(ctx context.Context, run domain.SandboxRun) error
+	GetRun(ctx context.Context, id domain.SandboxID) (*domain.SandboxRun, error)
 }
 
 // HeartbeatPayload is what Hecatoncheir agents send periodically.

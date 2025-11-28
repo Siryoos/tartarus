@@ -11,6 +11,8 @@ import (
 	"github.com/tartarus-sandbox/tartarus/pkg/acheron"
 	"github.com/tartarus-sandbox/tartarus/pkg/cocytus"
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
+	"github.com/tartarus-sandbox/tartarus/pkg/erinyes"
+	"github.com/tartarus-sandbox/tartarus/pkg/hades"
 	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
 	"github.com/tartarus-sandbox/tartarus/pkg/lethe"
 	"github.com/tartarus-sandbox/tartarus/pkg/nyx"
@@ -33,6 +35,14 @@ func (m *mockQueue) Dequeue(ctx context.Context) (*domain.SandboxRequest, error)
 	}
 	<-ctx.Done()
 	return nil, ctx.Err()
+}
+
+func (m *mockQueue) Ack(ctx context.Context, id domain.SandboxID) error {
+	return nil
+}
+
+func (m *mockQueue) Nack(ctx context.Context, id domain.SandboxID, reason string) error {
+	return nil
 }
 
 type mockNyx struct {
@@ -59,8 +69,8 @@ type mockStyx struct {
 	styx.Gateway
 }
 
-func (m *mockStyx) Attach(ctx context.Context, sandboxID domain.SandboxID, contract *styx.Contract) (string, netip.Addr, error) {
-	return "tap0", netip.Addr{}, nil
+func (m *mockStyx) Attach(ctx context.Context, sandboxID domain.SandboxID, contract *styx.Contract) (string, netip.Addr, netip.Addr, netip.Prefix, error) {
+	return "tap0", netip.Addr{}, netip.Addr{}, netip.Prefix{}, nil
 }
 
 func (m *mockStyx) Detach(ctx context.Context, sandboxID domain.SandboxID) error {
@@ -83,7 +93,7 @@ func (m *mockRuntime) Wait(ctx context.Context, id domain.SandboxID) error {
 }
 
 func (m *mockRuntime) Inspect(ctx context.Context, id domain.SandboxID) (*domain.SandboxRun, error) {
-	return nil, nil
+	return &domain.SandboxRun{ID: id, Status: domain.RunStatusSucceeded}, nil
 }
 func (m *mockRuntime) List(ctx context.Context) ([]domain.SandboxRun, error) { return nil, nil }
 func (m *mockRuntime) Kill(ctx context.Context, id domain.SandboxID) error   { return nil }
@@ -103,6 +113,26 @@ type mockSink struct {
 func (m *mockSink) Write(ctx context.Context, rec *cocytus.Record) error {
 	m.written = rec
 	return m.err
+}
+
+type mockRegistry struct {
+	hades.Registry
+}
+
+func (m *mockRegistry) UpdateRun(ctx context.Context, run domain.SandboxRun) error {
+	return nil
+}
+
+type mockFury struct {
+	erinyes.Fury
+}
+
+func (m *mockFury) Arm(ctx context.Context, run *domain.SandboxRun, policy *erinyes.PolicySnapshot) error {
+	return nil
+}
+
+func (m *mockFury) Disarm(ctx context.Context, runID domain.SandboxID) error {
+	return nil
 }
 
 type mockLogger struct {
@@ -130,6 +160,8 @@ func TestAgent_Run_ReportFailure(t *testing.T) {
 		Lethe:      &mockLethe{},
 		Styx:       &mockStyx{},
 		Runtime:    &mockRuntime{},
+		Registry:   &mockRegistry{},
+		Furies:     &mockFury{},
 		DeadLetter: sink,
 		Logger:     &mockLogger{},
 	}
@@ -180,6 +212,8 @@ func TestAgent_Run_Success_Cleanup(t *testing.T) {
 		Lethe:      letheMock,
 		Styx:       styxMock,
 		Runtime:    &mockRuntime{},
+		Registry:   &mockRegistry{},
+		Furies:     &mockFury{},
 		DeadLetter: &mockSink{},
 		Logger:     &mockLogger{},
 	}

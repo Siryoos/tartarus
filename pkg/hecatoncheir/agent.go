@@ -14,6 +14,7 @@ import (
 	"github.com/tartarus-sandbox/tartarus/pkg/cocytus"
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
 	"github.com/tartarus-sandbox/tartarus/pkg/erinyes"
+	"github.com/tartarus-sandbox/tartarus/pkg/hades"
 	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
 	"github.com/tartarus-sandbox/tartarus/pkg/judges"
 	"github.com/tartarus-sandbox/tartarus/pkg/lethe"
@@ -33,6 +34,7 @@ type Agent struct {
 	Judges     *judges.Chain
 	Furies     erinyes.Fury
 	Queue      acheron.Queue
+	Registry   hades.Registry
 	DeadLetter cocytus.Sink
 	Metrics    hermes.Metrics
 	Logger     hermes.Logger
@@ -67,6 +69,10 @@ func (a *Agent) Run(ctx context.Context) error {
 			snap, err := a.Nyx.GetSnapshot(ctx, req.Template)
 			if err != nil {
 				a.Logger.Error(ctx, "Failed to get snapshot", map[string]any{"error": err})
+				// If we can't get snapshot, it's likely a permanent error or configuration issue.
+				// We should Nack (maybe with delay) or just Ack and fail.
+				// For now, let's Nack to retry.
+				a.Queue.Nack(ctx, req.ID, "failed to get snapshot")
 				continue
 			}
 
@@ -74,6 +80,7 @@ func (a *Agent) Run(ctx context.Context) error {
 			overlay, err := a.Lethe.Create(ctx, snap)
 			if err != nil {
 				a.Logger.Error(ctx, "Failed to create overlay", map[string]any{"error": err})
+				a.Queue.Nack(ctx, req.ID, "failed to create overlay")
 				continue
 			}
 
@@ -85,6 +92,7 @@ func (a *Agent) Run(ctx context.Context) error {
 			if err != nil {
 				a.Logger.Error(ctx, "Failed to attach network", map[string]any{"error": err})
 				a.Lethe.Destroy(ctx, overlay)
+				a.Queue.Nack(ctx, req.ID, "failed to attach network")
 				continue
 			}
 
@@ -129,10 +137,27 @@ func (a *Agent) Run(ctx context.Context) error {
 				// Cleanup
 				a.Styx.Detach(ctx, req.ID)
 				a.Lethe.Destroy(ctx, overlay)
+
+				// Nack or Ack? If launch failed, it might be transient.
+				a.Queue.Nack(ctx, req.ID, "failed to launch")
 				continue
 			}
 
 			a.Logger.Info(ctx, "Sandbox launched", map[string]any{"run_id": run.ID})
+
+			// Update Run Status to Running
+			if err := a.Registry.UpdateRun(ctx, *run); err != nil {
+				a.Logger.Error(ctx, "Failed to update run status", map[string]any{"run_id": run.ID, "error": err})
+			}
+
+			// Arm Watchdog (Erinyes)
+			policy := &erinyes.PolicySnapshot{
+				MaxRuntime:   req.Resources.TTL,
+				KillOnBreach: true,
+			}
+			if err := a.Furies.Arm(ctx, run, policy); err != nil {
+				a.Logger.Error(ctx, "Failed to arm watchdog", map[string]any{"run_id": run.ID, "error": err})
+			}
 
 			// 5. Wait & Cleanup
 			go func(runID domain.SandboxID, reqID domain.SandboxID, ov *lethe.Overlay) {
@@ -143,6 +168,22 @@ func (a *Agent) Run(ctx context.Context) error {
 
 				a.Logger.Info(context.Background(), "Sandbox exited", map[string]any{"run_id": runID})
 
+				// Disarm Watchdog
+				if err := a.Furies.Disarm(context.Background(), runID); err != nil {
+					a.Logger.Error(context.Background(), "Failed to disarm watchdog", map[string]any{"run_id": runID, "error": err})
+				}
+
+				// Inspect to get final status and exit code
+				finalRun, err := a.Runtime.Inspect(context.Background(), runID)
+				if err == nil {
+					// Update Run Status to Succeeded/Failed
+					if err := a.Registry.UpdateRun(context.Background(), *finalRun); err != nil {
+						a.Logger.Error(context.Background(), "Failed to update final run status", map[string]any{"run_id": runID, "error": err})
+					}
+				} else {
+					a.Logger.Error(context.Background(), "Failed to inspect final run", map[string]any{"run_id": runID, "error": err})
+				}
+
 				// Cleanup Network
 				if err := a.Styx.Detach(context.Background(), reqID); err != nil {
 					a.Logger.Error(context.Background(), "Failed to detach network", map[string]any{"req_id": reqID, "error": err})
@@ -151,6 +192,11 @@ func (a *Agent) Run(ctx context.Context) error {
 				// Cleanup Overlay
 				if err := a.Lethe.Destroy(context.Background(), ov); err != nil {
 					a.Logger.Error(context.Background(), "Failed to destroy overlay", map[string]any{"overlay_id": ov.ID, "error": err})
+				}
+
+				// Ack the job
+				if err := a.Queue.Ack(context.Background(), reqID); err != nil {
+					a.Logger.Error(context.Background(), "Failed to ack job", map[string]any{"req_id": reqID, "error": err})
 				}
 			}(run.ID, req.ID, overlay)
 		}

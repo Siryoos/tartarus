@@ -44,3 +44,7 @@ func (r *FirecrackerRuntime) StreamLogs(ctx context.Context, id domain.SandboxID
 func (r *FirecrackerRuntime) Allocation(ctx context.Context) (domain.ResourceCapacity, error) {
 	return domain.ResourceCapacity{}, fmt.Errorf("Firecracker runtime not supported on non-Linux platforms")
 }
+
+func (r *FirecrackerRuntime) Wait(ctx context.Context, id domain.SandboxID) error {
+	return fmt.Errorf("Firecracker runtime not supported on non-Linux platforms")
+}

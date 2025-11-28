@@ -149,3 +149,36 @@ func (r *RedisRegistry) MarkDraining(ctx context.Context, id domain.NodeID) erro
 
 	return nil
 }
+
+func (r *RedisRegistry) UpdateRun(ctx context.Context, run domain.SandboxRun) error {
+	data, err := json.Marshal(run)
+	if err != nil {
+		return fmt.Errorf("failed to marshal run: %w", err)
+	}
+
+	key := fmt.Sprintf("tartarus:run:%s", run.ID)
+	// Store run indefinitely (or with long TTL)
+	if err := r.client.Set(ctx, key, data, 24*time.Hour).Err(); err != nil {
+		return fmt.Errorf("failed to update run: %w", err)
+	}
+
+	return nil
+}
+
+func (r *RedisRegistry) GetRun(ctx context.Context, id domain.SandboxID) (*domain.SandboxRun, error) {
+	key := fmt.Sprintf("tartarus:run:%s", id)
+	val, err := r.client.Get(ctx, key).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return nil, errors.New("run not found")
+		}
+		return nil, fmt.Errorf("failed to get run: %w", err)
+	}
+
+	var run domain.SandboxRun
+	if err := json.Unmarshal([]byte(val), &run); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal run: %w", err)
+	}
+
+	return &run, nil
+}

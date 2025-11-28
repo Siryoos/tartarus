@@ -186,6 +186,7 @@ func main() {
 		Judges:     judgeChain,
 		Furies:     fury,
 		Queue:      queue,
+		Registry:   registry,
 		DeadLetter: cocytusSink,
 		Metrics:    metrics,
 		Logger:     hermesLogger,

@@ -55,37 +55,38 @@ func (q *RedisQueue) Enqueue(ctx context.Context, req *domain.SandboxRequest) er
 }
 
 func (q *RedisQueue) Dequeue(ctx context.Context) (*domain.SandboxRequest, error) {
+	processingKey := fmt.Sprintf("%s:processing", q.key)
+
 	for {
 		// Check context before blocking
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
 
-		// BLPOP with a short timeout to allow checking context cancellation
-		// We use 1 second timeout.
-		result, err := q.client.BLPop(ctx, 1*time.Second, q.key).Result()
+		// BLMove atomically moves element from source (Left/Head) to destination (Left/Head of processing)
+		// Available in Redis 6.2+.
+		// If using older Redis, we'd need to change Enqueue to LPush and use BRPopLPush.
+		// Assuming modern Redis here.
+		result, err := q.client.BLMove(ctx, q.key, processingKey, "LEFT", "LEFT", 1*time.Second).Result()
 		if err != nil {
 			if err == redis.Nil {
-				// Timeout, loop again to check context
 				continue
 			}
-			// If context was canceled during BLPop, redis client might return an error related to that
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
 			return nil, fmt.Errorf("failed to dequeue: %w", err)
 		}
 
-		// result[0] is the key, result[1] is the value
-		if len(result) < 2 {
-			continue
-		}
-
 		var req domain.SandboxRequest
-		if err := json.Unmarshal([]byte(result[1]), &req); err != nil {
-			// If we can't unmarshal, we probably shouldn't crash, but we also can't process it.
-			// For now, let's return an error so the caller knows something went wrong.
-			// In a robust system, we might move this to a dead-letter queue.
+		if err := json.Unmarshal([]byte(result), &req); err != nil {
+			// If we can't unmarshal, we should probably Nack it or move to dead letter.
+			// For now, let's Nack it so it's not lost, but this might cause a loop.
+			// Better to log and maybe move to a "corrupt" list.
+			// Since we don't have a logger here, we return error.
+			// But the item is now in processing list!
+			// We should probably remove it from processing list if it's garbage.
+			q.client.LRem(ctx, processingKey, 1, result)
 			return nil, fmt.Errorf("failed to unmarshal dequeued request: %w", err)
 		}
 
@@ -94,13 +95,92 @@ func (q *RedisQueue) Dequeue(ctx context.Context) (*domain.SandboxRequest, error
 }
 
 func (q *RedisQueue) Ack(ctx context.Context, id domain.SandboxID) error {
-	// No-op for simple list-based queue as the item is already popped.
-	return nil
+	// We need to remove the item from the processing list.
+	// Since we don't have the full item content here, we have a problem if we only have ID.
+	// However, the caller (Agent) has the full request object usually.
+	// But the interface only takes ID.
+	// This is a limitation of the interface.
+	// To fix this properly, we should either:
+	// 1. Change Ack to take the full request or the raw string.
+	// 2. Store items in processing list as just IDs? No, then we lose the data.
+	// 3. Scan the processing list for the item with the ID.
+
+	// Option 3 is expensive (O(N)).
+	// Option 1 requires interface change.
+
+	// Let's look at the Queue interface again.
+	// Ack(ctx context.Context, id domain.SandboxID) error
+
+	// If we change the interface, we break other implementations (MemoryQueue).
+	// But MemoryQueue is easy to update.
+	// Let's scan for now, assuming processing list is small (equal to concurrency of agent).
+	// The agent processes one by one (or limited concurrency).
+
+	processingKey := fmt.Sprintf("%s:processing", q.key)
+
+	// Get all items in processing list
+	items, err := q.client.LRange(ctx, processingKey, 0, -1).Result()
+	if err != nil {
+		return fmt.Errorf("failed to list processing items: %w", err)
+	}
+
+	for _, item := range items {
+		var req domain.SandboxRequest
+		if err := json.Unmarshal([]byte(item), &req); err != nil {
+			continue
+		}
+
+		if req.ID == id {
+			// Found it, remove it.
+			// LRem removes the first occurrence of 'item'.
+			if err := q.client.LRem(ctx, processingKey, 1, item).Err(); err != nil {
+				return fmt.Errorf("failed to remove item from processing: %w", err)
+			}
+			return nil
+		}
+	}
+
+	return nil // Not found, maybe already acked or expired?
 }
 
 func (q *RedisQueue) Nack(ctx context.Context, id domain.SandboxID, reason string) error {
-	// For now, we just log that we are Nacking.
-	// In the future, we could push to a dead-letter list.
-	// Since we don't have a logger here, we'll just return nil.
+	// Move from processing back to queue.
+	// Similar to Ack, we need to find the item first.
+
+	processingKey := fmt.Sprintf("%s:processing", q.key)
+
+	items, err := q.client.LRange(ctx, processingKey, 0, -1).Result()
+	if err != nil {
+		return fmt.Errorf("failed to list processing items: %w", err)
+	}
+
+	for _, item := range items {
+		var req domain.SandboxRequest
+		if err := json.Unmarshal([]byte(item), &req); err != nil {
+			continue
+		}
+
+		if req.ID == id {
+			// Found it. Move it back.
+			// We can use LMove if we want to be atomic, but LMove works on ends of lists.
+			// Here we are picking a specific item from the middle.
+			// So we have to: Remove from processing, Push to queue.
+			// This is NOT atomic. If we crash in between, we lose the item.
+			// But since we are Nacking, we are already in a failure scenario.
+
+			// Transaction (Pipeline) can help?
+			// Yes, MULTI/EXEC.
+
+			pipe := q.client.TxPipeline()
+			pipe.LRem(ctx, processingKey, 1, item)
+			pipe.RPush(ctx, q.key, item) // Push to tail (retry later)
+			_, err := pipe.Exec(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to nack item: %w", err)
+			}
+			return nil
+		}
+	}
+
 	return nil
 }
