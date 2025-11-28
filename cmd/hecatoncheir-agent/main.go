@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -33,7 +34,31 @@ func main() {
 	logger.Info("Starting Hecatoncheir Agent", "region", cfg.Region)
 
 	// Adapters
-	queue := acheron.NewMemoryQueue()
+	var queue acheron.Queue
+	redisAddr := os.Getenv("REDIS_ADDR")
+	if redisAddr != "" {
+		redisDB := 0
+		if dbStr := os.Getenv("REDIS_DB"); dbStr != "" {
+			if db, err := strconv.Atoi(dbStr); err == nil {
+				redisDB = db
+			}
+		}
+		redisKey := os.Getenv("REDIS_QUEUE_KEY")
+		if redisKey == "" {
+			redisKey = "tartarus:queue"
+		}
+
+		rq, err := acheron.NewRedisQueue(redisAddr, redisDB, redisKey)
+		if err != nil {
+			logger.Error("Failed to initialize Redis queue", "error", err)
+			os.Exit(1)
+		}
+		queue = rq
+		logger.Info("Using Redis queue", "addr", redisAddr, "db", redisDB, "key", redisKey)
+	} else {
+		queue = acheron.NewMemoryQueue()
+		logger.Info("Using in-memory queue")
+	}
 	registry := hades.NewMemoryRegistry()
 	store, err := erebus.NewLocalStore(cfg.SnapshotPath)
 	if err != nil {
