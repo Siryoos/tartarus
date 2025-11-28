@@ -103,3 +103,13 @@ func (r *MemoryRegistry) GetRun(ctx context.Context, id domain.SandboxID) (*doma
 	run := val.(domain.SandboxRun)
 	return &run, nil
 }
+
+func (r *MemoryRegistry) ListRuns(ctx context.Context) ([]domain.SandboxRun, error) {
+	var list []domain.SandboxRun
+	r.runs.Range(func(key, value any) bool {
+		run := value.(domain.SandboxRun)
+		list = append(list, run)
+		return true
+	})
+	return list, nil
+}

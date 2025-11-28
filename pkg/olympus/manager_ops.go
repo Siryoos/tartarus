@@ -9,16 +9,7 @@ import (
 
 // ListSandboxes aggregates active sandboxes from all nodes.
 func (m *Manager) ListSandboxes(ctx context.Context) ([]domain.SandboxRun, error) {
-	nodes, err := m.Hades.ListNodes(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	var allRuns []domain.SandboxRun
-	for _, node := range nodes {
-		allRuns = append(allRuns, node.ActiveSandboxes...)
-	}
-	return allRuns, nil
+	return m.Hades.ListRuns(ctx)
 }
 
 // KillSandbox terminates a sandbox.

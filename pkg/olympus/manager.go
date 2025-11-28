@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/tartarus-sandbox/tartarus/pkg/acheron"
@@ -101,8 +102,22 @@ func (m *Manager) Submit(ctx context.Context, req *domain.SandboxRequest) error 
 		return fmt.Errorf("unknown verdict: %v", verdict)
 	}
 
-	// 6) Persistence (Optional/Future)
-	// TODO: Persist request state to Hades/Redis
+	// 6) Persistence
+	initialRun := domain.SandboxRun{
+		ID:        req.ID,
+		RequestID: req.ID,
+		Template:  req.Template,
+		Status:    domain.RunStatusPending,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	if err := m.Hades.UpdateRun(ctx, initialRun); err != nil {
+		m.Logger.Error(ctx, "Failed to persist initial run state", map[string]any{
+			"sandbox_id": req.ID,
+			"error":      err,
+		})
+		return fmt.Errorf("failed to persist run state: %w", err)
+	}
 
 	// 7) Scheduling
 	nodes, err := m.Hades.ListNodes(ctx)
@@ -111,6 +126,11 @@ func (m *Manager) Submit(ctx context.Context, req *domain.SandboxRequest) error 
 			"sandbox_id": req.ID,
 			"error":      err,
 		})
+		// Mark as failed
+		initialRun.Status = domain.RunStatusFailed
+		initialRun.Error = fmt.Sprintf("failed to list nodes: %v", err)
+		initialRun.UpdatedAt = time.Now()
+		_ = m.Hades.UpdateRun(ctx, initialRun)
 		return fmt.Errorf("failed to list nodes: %w", err)
 	}
 
@@ -120,9 +140,28 @@ func (m *Manager) Submit(ctx context.Context, req *domain.SandboxRequest) error 
 			"sandbox_id": req.ID,
 			"error":      err,
 		})
+		// Mark as failed
+		initialRun.Status = domain.RunStatusFailed
+		initialRun.Error = fmt.Sprintf("failed to schedule: %v", err)
+		initialRun.UpdatedAt = time.Now()
+		_ = m.Hades.UpdateRun(ctx, initialRun)
 		return fmt.Errorf("failed to schedule sandbox: %w", err)
 	}
 	req.NodeID = nodeID
+
+	// Update run with scheduled node
+	initialRun.NodeID = nodeID
+	initialRun.Status = domain.RunStatusScheduled
+	initialRun.UpdatedAt = time.Now()
+	if err := m.Hades.UpdateRun(ctx, initialRun); err != nil {
+		m.Logger.Error(ctx, "Failed to update run state to SCHEDULED", map[string]any{
+			"sandbox_id": req.ID,
+			"error":      err,
+		})
+		// Continue anyway? If we fail to persist scheduled state, we might have an inconsistency.
+		// But if we enqueue, the agent will eventually update it to RUNNING.
+		// Let's log and continue.
+	}
 
 	m.Logger.Info(ctx, "Scheduled sandbox", map[string]any{
 		"sandbox_id": req.ID,
@@ -135,6 +174,11 @@ func (m *Manager) Submit(ctx context.Context, req *domain.SandboxRequest) error 
 			"sandbox_id": req.ID,
 			"error":      err,
 		})
+		// Mark as failed
+		initialRun.Status = domain.RunStatusFailed
+		initialRun.Error = fmt.Sprintf("failed to enqueue: %v", err)
+		initialRun.UpdatedAt = time.Now()
+		_ = m.Hades.UpdateRun(ctx, initialRun)
 		return err
 	}
 

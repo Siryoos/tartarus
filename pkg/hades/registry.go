@@ -18,6 +18,7 @@ type Registry interface {
 	// Run persistence
 	UpdateRun(ctx context.Context, run domain.SandboxRun) error
 	GetRun(ctx context.Context, id domain.SandboxID) (*domain.SandboxRun, error)
+	ListRuns(ctx context.Context) ([]domain.SandboxRun, error)
 }
 
 // HeartbeatPayload is what Hecatoncheir agents send periodically.

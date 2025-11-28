@@ -10,6 +10,8 @@
 - [x] Add lifecycle + queue reliability: ack/nack or visibility timeout in Acheron, record run status/exit codes in Hades or a run store, and integrate Erinyes to enforce max runtime/kill on breach.
 - [x] Solidify log streaming and kill: ensure agent publishes logs to Redis topics per sandbox, API streaming endpoint handles errors/timeouts, and kill commands reach the correct node.
 - [x] Policy/auth baseline: relax NetworkJudge defaults or make policy configurable, require API key auth by default, and propagate tenant/user metadata for future Cerberus work.
+- [x] Persist request state to Hades/Redis in Olympus (currently in-memory only).
+- [ ] Enforce memory limits in Erinyes (currently CPU/Runtime only).
 
 ## Observability and operations
 - [ ] Emit metrics (queue depth, launch latency, heartbeat age, failures) via Hermes adapters; add structured logs for control-plane events.

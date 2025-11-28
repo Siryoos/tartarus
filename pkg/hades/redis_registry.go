@@ -182,3 +182,32 @@ func (r *RedisRegistry) GetRun(ctx context.Context, id domain.SandboxID) (*domai
 
 	return &run, nil
 }
+
+func (r *RedisRegistry) ListRuns(ctx context.Context) ([]domain.SandboxRun, error) {
+	var runs []domain.SandboxRun
+	iter := r.client.Scan(ctx, 0, "tartarus:run:*", 0).Iterator()
+
+	for iter.Next(ctx) {
+		key := iter.Val()
+		val, err := r.client.Get(ctx, key).Result()
+		if err != nil {
+			if errors.Is(err, redis.Nil) {
+				continue // Key expired during iteration
+			}
+			return nil, fmt.Errorf("failed to get run key %s: %w", key, err)
+		}
+
+		var run domain.SandboxRun
+		if err := json.Unmarshal([]byte(val), &run); err != nil {
+			// Log error but continue? For now, maybe skip corrupt entries
+			continue
+		}
+		runs = append(runs, run)
+	}
+
+	if err := iter.Err(); err != nil {
+		return nil, fmt.Errorf("failed to scan runs: %w", err)
+	}
+
+	return runs, nil
+}
