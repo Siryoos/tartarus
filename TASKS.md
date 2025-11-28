@@ -19,10 +19,10 @@ Context: ROADMAP.md marks Phase 3 as in progress and the prior task board shows 
   - DoD: Monitor live network usage/egress against policy (bandwidth caps, banned IP attempts) during execution, not just Styx setup-time rules; enforce via Erinyes kill path with metrics and logs.
 
 ## Persistence and Durability Gaps
-- [ ] Olympus control-plane persistence verification (`pkg/olympus`, `pkg/hades`)
+- [x] Olympus control-plane persistence verification (`pkg/olympus`, `pkg/hades`)
   - Current: defaults to in-memory registry when Redis is unset; TASKS claimed persistence was done.
   - DoD: Ensure production config uses Redis-backed registry/queue by default, add restart recovery test (state survives manager restart), and document required settings.
-- [ ] Themis policy durability and versioning (`pkg/themis`)
+- [x] Themis policy durability and versioning (`pkg/themis`)
   - Current: `MemoryRepo` is volatile and has no versioning.
   - DoD: Provide Redis/SQL/file-backed repo with version stamps and optimistic updates; load policies on startup; add API/tests for list/get/upsert that survive restart.
 - [x] Agent poison-pill handling (`pkg/hecatoncheir/agent.go`, `pkg/acheron/redis_queue.go`)

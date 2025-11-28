@@ -2,6 +2,7 @@ package themis
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
@@ -54,6 +55,17 @@ func (r *MemoryRepo) UpsertPolicy(ctx context.Context, p *domain.SandboxPolicy) 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	existing, exists := r.byTplID[p.TemplateID]
+	var currentVersion int64
+	if exists {
+		currentVersion = existing.Version
+	}
+
+	if p.Version != currentVersion {
+		return fmt.Errorf("version conflict: expected %d, got %d", currentVersion, p.Version)
+	}
+
+	p.Version++
 	r.byTplID[p.TemplateID] = p
 	return nil
 }

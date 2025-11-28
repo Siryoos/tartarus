@@ -138,4 +138,5 @@ type SandboxPolicy struct {
 	NetworkPolicy NetworkPolicyRef  `json:"network"`
 	Retention     RetentionPolicy   `json:"retention"`
 	Tags          map[string]string `json:"tags"`
+	Version       int64             `json:"version"`
 }

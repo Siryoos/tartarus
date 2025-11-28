@@ -55,7 +55,12 @@ func main() {
 		}
 		queue = rq
 		logger.Info("Using Redis queue", "addr", redisAddr, "db", redisDB, "key", redisKey)
+		logger.Info("Using Redis queue", "addr", redisAddr, "db", redisDB, "key", redisKey)
 	} else {
+		if os.Getenv("TARTARUS_ENV") == "production" {
+			logger.Error("Redis queue is required in production mode (TARTARUS_ENV=production)")
+			os.Exit(1)
+		}
 		queue = acheron.NewMemoryQueue()
 		logger.Info("Using in-memory queue")
 	}
@@ -69,7 +74,12 @@ func main() {
 		}
 		registry = rr
 		logger.Info("Using Redis registry", "addr", cfg.RedisAddress)
+		logger.Info("Using Redis registry", "addr", cfg.RedisAddress)
 	} else {
+		if os.Getenv("TARTARUS_ENV") == "production" {
+			logger.Error("Redis registry is required in production mode (TARTARUS_ENV=production)")
+			os.Exit(1)
+		}
 		memReg := hades.NewMemoryRegistry()
 		registry = memReg
 		logger.Info("Using in-memory registry")
@@ -164,7 +174,12 @@ func main() {
 		})
 		control = olympus.NewRedisControlPlane(rdb)
 		logger.Info("Using Redis control plane")
+		logger.Info("Using Redis control plane")
 	} else {
+		if os.Getenv("TARTARUS_ENV") == "production" {
+			logger.Error("Redis control plane is required in production mode (TARTARUS_ENV=production)")
+			os.Exit(1)
+		}
 		control = &olympus.NoopControlPlane{}
 		logger.Info("Using Noop control plane")
 	}
