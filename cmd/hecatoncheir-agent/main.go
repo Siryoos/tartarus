@@ -7,7 +7,6 @@ import (
 	"net/netip"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -118,13 +117,10 @@ func main() {
 	metrics := hermes.NewNoopMetrics()
 
 	// Styx Host Gateway
-	bridgeName := os.Getenv("NETWORK_BRIDGE")
-	if bridgeName == "" {
-		bridgeName = "br0"
-	}
+	bridgeName := "tartarus0"
 	networkCIDR := os.Getenv("NETWORK_CIDR")
 	if networkCIDR == "" {
-		networkCIDR = "10.0.0.1/24"
+		networkCIDR = "10.200.0.0/16"
 	}
 
 	prefix, err := netip.ParsePrefix(networkCIDR)
@@ -140,12 +136,7 @@ func main() {
 	}
 
 	// Lethe File Overlay Pool
-	overlayDir := filepath.Join(os.TempDir(), "tartarus-overlays")
-	if err := os.MkdirAll(overlayDir, 0755); err != nil {
-		logger.Error("Failed to create overlay directory", "error", err)
-		os.Exit(1)
-	}
-	lethePool, err := lethe.NewFileOverlayPool(overlayDir, hermesLogger)
+	lethePool, err := lethe.NewFileOverlayPool(os.TempDir(), hermesLogger)
 	if err != nil {
 		logger.Error("Failed to initialize Lethe File Overlay Pool", "error", err)
 		os.Exit(1)
