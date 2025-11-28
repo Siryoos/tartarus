@@ -170,10 +170,11 @@ func main() {
 	}
 
 	// Judges
+	aeacusJudge := judges.NewAeacusJudge(hermesLogger)
 	resourceJudge := judges.NewResourceJudge(policyRepo, hermesLogger)
 	networkJudge := judges.NewNetworkJudge(cfg.AllowedNetworks, []netip.Prefix{}, hermesLogger)
 	judgeChain := &judges.Chain{
-		Pre: []judges.PreJudge{resourceJudge, networkJudge},
+		Pre: []judges.PreJudge{aeacusJudge, resourceJudge, networkJudge},
 	}
 
 	manager := &olympus.Manager{

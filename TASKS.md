@@ -11,7 +11,7 @@ Context: ROADMAP.md marks Phase 3 as in progress and the prior task board shows 
   - DoD: Introduce dead-letter path for invalid payloads (Cocytus), ensure atomic move back to queue or DLQ, surface metrics for poison pills and nack failures, and add regression tests.
 
 ## Missing Phase 3 Features (per ROADMAP)
-- [ ] Aeacus (Audit Judge) implementation (`pkg/judges`)
+- [x] Aeacus (Audit Judge) implementation (`pkg/judges`)
   - DoD: Add AeacusJudge to tag compliance/retention metadata and emit audit records; wire into `judges.Chain` in `cmd/olympus-api/main.go`; include unit tests and sample audit output.
 - [ ] Advanced scheduling (affinity/anti-affinity and bin-packing) (`pkg/moirai`)
   - DoD: Extend scheduler to honor placement hints/labels and provide a bin-packing strategy in addition to least-loaded; expose config toggle; add tests covering anti-affinity and tight packing scenarios.

@@ -61,6 +61,7 @@ type SandboxRequest struct {
 	Env        map[string]string `json:"env"`
 	Resources  ResourceSpec      `json:"resources"`
 	NetworkRef NetworkPolicyRef  `json:"network"`
+	Retention  RetentionPolicy   `json:"retention,omitempty"`
 	Metadata   map[string]string `json:"metadata"` // tenant, user, origin, etc.
 	CreatedAt  time.Time         `json:"created_at"`
 }
