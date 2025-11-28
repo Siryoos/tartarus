@@ -38,7 +38,8 @@ func main() {
 
 	// Privileged check
 	if os.Geteuid() != 0 {
-		logger.Warn("Hecatoncheir Agent should be run as root for networking and Firecracker operations")
+		logger.Error("Fatal: Hecatoncheir Agent must run as root to access /dev/kvm and networking")
+		os.Exit(1)
 	}
 
 	// Adapters
