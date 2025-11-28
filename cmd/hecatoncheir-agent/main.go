@@ -38,7 +38,22 @@ func main() {
 	}
 	_ = store // Silence unused variable error
 	hermesLogger := hermes.NewSlogAdapter()
-	runtime := tartarus.NewMockRuntime(logger)
+	var runtime tartarus.SandboxRuntime
+
+	fcKernel := os.Getenv("FC_KERNEL_IMAGE")
+	fcRootFS := os.Getenv("FC_ROOTFS_BASE")
+	fcSocketDir := os.Getenv("FC_SOCKET_DIR")
+	if fcSocketDir == "" {
+		fcSocketDir = "/run/firecracker"
+	}
+
+	if fcKernel != "" && fcRootFS != "" {
+		logger.Info("Initializing Firecracker Runtime", "kernel", fcKernel, "rootfs", fcRootFS)
+		runtime = tartarus.NewFirecrackerRuntime(logger, fcSocketDir, fcKernel, fcRootFS)
+	} else {
+		logger.Info("Initializing Mock Runtime (Firecracker config missing)")
+		runtime = tartarus.NewMockRuntime(logger)
+	}
 	metrics := hermes.NewNoopMetrics()
 
 	// Mocks for dependencies not yet implemented

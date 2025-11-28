@@ -17,7 +17,7 @@ func NewMockRuntime(logger *slog.Logger) *MockRuntime {
 	return &MockRuntime{Logger: logger}
 }
 
-func (r *MockRuntime) Launch(ctx context.Context, req *domain.SandboxRequest) (*domain.SandboxRun, error) {
+func (r *MockRuntime) Launch(ctx context.Context, req *domain.SandboxRequest, cfg VMConfig) (*domain.SandboxRun, error) {
 	r.Logger.Info("Launching sandbox", "id", req.ID, "template", req.Template)
 
 	// Simulate startup delay

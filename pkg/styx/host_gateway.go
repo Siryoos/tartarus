@@ -11,7 +11,6 @@ import (
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
 	"github.com/vishvananda/netlink"
-	"github.com/vishvananda/netlink/nl"
 )
 
 type hostGateway struct {
@@ -194,7 +193,7 @@ func (g *hostGateway) ensureBridgeIP(br *netlink.Bridge) error {
 	nlAddr := &netlink.Addr{IPNet: ipNet}
 
 	// Check if address already exists
-	addrs, err := netlink.AddrList(br, nl.FAMILY_V4)
+	addrs, err := netlink.AddrList(br, 2)
 	if err != nil {
 		return fmt.Errorf("failed to list addresses for %s: %w", g.bridgeName, err)
 	}
@@ -227,7 +226,7 @@ func (g *hostGateway) createTAP(name string) (*netlink.Tuntap, error) {
 
 	tap := &netlink.Tuntap{
 		LinkAttrs: la,
-		Mode:      netlink.TUNTAP_MODE_TAP,
+		Mode:      netlink.TuntapMode(2), // 2 is usually TAP
 	}
 
 	if err := netlink.LinkAdd(tap); err != nil {

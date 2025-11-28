@@ -51,10 +51,50 @@ func (a *Agent) Run(ctx context.Context) error {
 
 			a.Logger.Info(ctx, "Received request", map[string]any{"id": req.ID})
 
-			// Launch
-			run, err := a.Runtime.Launch(ctx, req)
+			// 1. Get Snapshot (Nyx)
+			snap, err := a.Nyx.GetSnapshot(ctx, req.Template)
+			if err != nil {
+				a.Logger.Error(ctx, "Failed to get snapshot", map[string]any{"error": err})
+				continue
+			}
+
+			// 2. Create Overlay (Lethe)
+			overlay, err := a.Lethe.Create(ctx, snap)
+			if err != nil {
+				a.Logger.Error(ctx, "Failed to create overlay", map[string]any{"error": err})
+				continue
+			}
+
+			// 3. Attach Network (Styx)
+			contract := &styx.Contract{
+				ID: req.NetworkRef.ID,
+			}
+			tapName, _, err := a.Styx.Attach(ctx, req.ID, contract)
+			if err != nil {
+				a.Logger.Error(ctx, "Failed to attach network", map[string]any{"error": err})
+				a.Lethe.Destroy(ctx, overlay)
+				continue
+			}
+
+			// 4. Launch (Runtime)
+			vmCfg := tartarus.VMConfig{
+				Snapshot: domain.SnapshotRef{
+					ID:       snap.ID,
+					Template: snap.Template,
+					Path:     snap.Path,
+				},
+				OverlayFS: overlay.MountPath,
+				TapDevice: tapName,
+				CPUs:      int(req.Resources.CPU),
+				MemoryMB:  int(req.Resources.Mem),
+			}
+
+			run, err := a.Runtime.Launch(ctx, req, vmCfg)
 			if err != nil {
 				a.Logger.Error(ctx, "Failed to launch", map[string]any{"error": err})
+				// Cleanup
+				a.Styx.Detach(ctx, req.ID)
+				a.Lethe.Destroy(ctx, overlay)
 				continue
 			}
 
