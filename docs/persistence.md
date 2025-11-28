@@ -32,3 +32,21 @@ When running in production mode (`TARTARUS_ENV=production`), Olympus enforces th
 - **Sandbox Runs**: Persisted in Redis via `Hades` registry. Survives Olympus restarts.
 - **Work Queue**: Persisted in Redis via `Acheron` queue. Pending tasks survive restarts.
 - **Node Registry**: Node heartbeats are stored in Redis with TTL.
+
+## Themis Policy Persistence
+
+Themis policies are persisted to ensure they survive control-plane restarts.
+
+### Configuration
+
+Themis uses the same Redis instance as Olympus.
+
+- **Storage Key**: Policies are stored under `themis:policies`.
+- **Versioning**: Each policy update increments a version counter.
+- **Durability**: Policies are loaded from Redis on startup. If Redis is unavailable in production, startup will fail.
+
+### Policy Lifecycle
+
+1. **Creation/Update**: Policies are written to Redis and broadcast to all Olympus instances.
+2. **Retrieval**: Policies are read from Redis with a local in-memory cache for performance.
+3. **Enforcement**: Rhadamanthus uses the cached policies for admission control.

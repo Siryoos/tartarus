@@ -32,5 +32,5 @@ Context: ROADMAP.md marks Phase 3 as in progress and the prior task board shows 
 ## Release Validation
 - [x] Regression suite for Phase 3 paths
   - Cover queue ack/nack behavior, Aeacus audit tagging, scheduler affinity/bin-pack decisions, Megaera network kills, and persistence across restarts.
-- [ ] Documentation refresh
+- [x] Documentation refresh
   - Update ROADMAP.md and user guides to mark Phase 3 completion, config defaults (Redis/Hades/Themis), and note Phase 4+ items (Typhon, Charon, Hypnos) as future work.
