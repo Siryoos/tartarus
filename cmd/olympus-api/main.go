@@ -68,8 +68,26 @@ func main() {
 		registry = rr
 		logger.Info("Using Redis registry", "addr", cfg.RedisAddress)
 	} else {
-		registry = hades.NewMemoryRegistry()
+		memReg := hades.NewMemoryRegistry()
+		registry = memReg
 		logger.Info("Using in-memory registry")
+
+		// Pre-populate a node for testing/dev
+		memReg.UpdateHeartbeat(context.Background(), hades.HeartbeatPayload{
+			Node: domain.NodeInfo{
+				ID:      "test-node",
+				Address: "127.0.0.1",
+				Capacity: domain.ResourceCapacity{
+					CPU: 8000,
+					Mem: 8192,
+				},
+			},
+			Load: domain.ResourceCapacity{
+				CPU: 0,
+				Mem: 0,
+			},
+			Time: time.Now(),
+		})
 	}
 
 	var store erebus.Store
@@ -100,6 +118,41 @@ func main() {
 	// Policy repository
 	policyRepo := themis.NewMemoryRepo()
 
+	// Template Manager
+	templateManager := olympus.NewMemoryTemplateManager()
+	// Add default templates
+	defaultTpl := &domain.TemplateSpec{
+		ID:          "hello-world",
+		Name:        "Hello World",
+		Description: "A simple hello world template",
+		BaseImage:   "/var/lib/tartarus/images/hello-world.ext4",
+		KernelImage: "/var/lib/tartarus/kernels/vmlinux",
+		Resources: domain.ResourceSpec{
+			CPU: 1000,
+			Mem: 128,
+		},
+	}
+	templateManager.RegisterTemplate(context.Background(), defaultTpl)
+
+	// Add default policy for hello-world
+	defaultPolicy := &domain.SandboxPolicy{
+		ID:         "default-hello-world",
+		TemplateID: "hello-world",
+		Resources: domain.ResourceSpec{
+			CPU: 1000,
+			Mem: 128,
+		},
+		NetworkPolicy: domain.NetworkPolicyRef{
+			ID:   "lockdown-no-net",
+			Name: "No Internet",
+		},
+		Retention: domain.RetentionPolicy{
+			MaxAge:      30 * time.Minute,
+			KeepOutputs: true,
+		},
+	}
+	policyRepo.UpsertPolicy(context.Background(), defaultPolicy)
+
 	// Control Plane
 	var control olympus.ControlPlane
 	if redisAddr != "" {
@@ -125,6 +178,7 @@ func main() {
 		Queue:     queue,
 		Hades:     registry,
 		Policies:  policyRepo,
+		Templates: templateManager,
 		Judges:    judgeChain,
 		Scheduler: scheduler,
 		Control:   control,
@@ -223,6 +277,32 @@ func main() {
 			// Cannot write error status if we already started writing?
 			// But StreamLogs writes to w.
 		}
+	})
+
+	mux.HandleFunc("/templates", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		tpls, err := templateManager.ListTemplates(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(tpls)
+	})
+
+	mux.HandleFunc("/policies", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		pols, err := policyRepo.ListPolicies(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(pols)
 	})
 
 	srv := &http.Server{
