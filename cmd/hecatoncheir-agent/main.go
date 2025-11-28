@@ -23,11 +23,13 @@ import (
 	"github.com/tartarus-sandbox/tartarus/pkg/hades"
 	"github.com/tartarus-sandbox/tartarus/pkg/hecatoncheir"
 	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
+	"github.com/tartarus-sandbox/tartarus/pkg/hypnos"
 	"github.com/tartarus-sandbox/tartarus/pkg/judges"
 	"github.com/tartarus-sandbox/tartarus/pkg/lethe"
 	"github.com/tartarus-sandbox/tartarus/pkg/nyx"
 	"github.com/tartarus-sandbox/tartarus/pkg/styx"
 	"github.com/tartarus-sandbox/tartarus/pkg/tartarus"
+	"github.com/tartarus-sandbox/tartarus/pkg/thanatos"
 )
 
 func main() {
@@ -176,6 +178,12 @@ func main() {
 	// Judges
 	judgeChain := &judges.Chain{}
 
+	// Hypnos (Sleep Manager)
+	hypnosManager := hypnos.NewManager(runtime, store, os.TempDir())
+
+	// Thanatos (Termination Handler)
+	thanatosHandler := thanatos.NewHandler(runtime, hypnosManager)
+
 	// Control Listener
 	var controlListener hecatoncheir.ControlListener
 	if rdb != nil {
@@ -191,6 +199,8 @@ func main() {
 		Styx:       styxGateway,
 		Judges:     judgeChain,
 		Furies:     fury,
+		Hypnos:     hypnosManager,
+		Thanatos:   thanatosHandler,
 		Queue:      queue,
 		Registry:   registry,
 		DeadLetter: cocytusSink,

@@ -46,6 +46,14 @@ type vmState struct {
 	mu          sync.Mutex
 }
 
+func (r *FirecrackerRuntime) getState(id domain.SandboxID) (*vmState, error) {
+	val, ok := r.vms.Load(id)
+	if !ok {
+		return nil, fmt.Errorf("sandbox not found: %s", id)
+	}
+	return val.(*vmState), nil
+}
+
 // NewFirecrackerRuntime creates a new runtime instance.
 func NewFirecrackerRuntime(logger *slog.Logger, socketDir, kernelImage, rootFSBase string) *FirecrackerRuntime {
 	return &FirecrackerRuntime{
@@ -467,4 +475,94 @@ func (r *FirecrackerRuntime) Wait(ctx context.Context, id domain.SandboxID) erro
 	}
 
 	return err
+}
+
+func (r *FirecrackerRuntime) Pause(ctx context.Context, id domain.SandboxID) error {
+	state, err := r.getState(id)
+	if err != nil {
+		return err
+	}
+
+	state.mu.Lock()
+	defer state.mu.Unlock()
+
+	if state.Machine == nil {
+		return fmt.Errorf("machine not initialized for %s", id)
+	}
+
+	return state.Machine.PauseVM(ctx)
+}
+
+func (r *FirecrackerRuntime) Resume(ctx context.Context, id domain.SandboxID) error {
+	state, err := r.getState(id)
+	if err != nil {
+		return err
+	}
+
+	state.mu.Lock()
+	defer state.mu.Unlock()
+
+	if state.Machine == nil {
+		return fmt.Errorf("machine not initialized for %s", id)
+	}
+
+	return state.Machine.ResumeVM(ctx)
+}
+
+func (r *FirecrackerRuntime) CreateSnapshot(ctx context.Context, id domain.SandboxID, memPath, diskPath string) error {
+	if err := os.MkdirAll(filepath.Dir(memPath), 0755); err != nil {
+		return fmt.Errorf("failed to create snapshot dir: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(diskPath), 0755); err != nil {
+		return fmt.Errorf("failed to create snapshot dir: %w", err)
+	}
+
+	state, err := r.getState(id)
+	if err != nil {
+		return err
+	}
+
+	state.mu.Lock()
+	defer state.mu.Unlock()
+
+	if state.Machine == nil {
+		return fmt.Errorf("machine not initialized for %s", id)
+	}
+
+	return state.Machine.CreateSnapshot(ctx, memPath, diskPath)
+}
+
+func (r *FirecrackerRuntime) Shutdown(ctx context.Context, id domain.SandboxID) error {
+	state, err := r.getState(id)
+	if err != nil {
+		return err
+	}
+
+	state.mu.Lock()
+	defer state.mu.Unlock()
+
+	if state.Machine == nil {
+		return fmt.Errorf("machine not initialized for %s", id)
+	}
+
+	return state.Machine.Shutdown(ctx)
+}
+
+func (r *FirecrackerRuntime) GetConfig(ctx context.Context, id domain.SandboxID) (VMConfig, *domain.SandboxRequest, error) {
+	state, err := r.getState(id)
+	if err != nil {
+		return VMConfig{}, nil, err
+	}
+
+	state.mu.Lock()
+	defer state.mu.Unlock()
+
+	if state.Request == nil {
+		return VMConfig{}, nil, fmt.Errorf("sandbox %s missing request metadata", id)
+	}
+
+	cfgCopy := state.Config
+	reqCopy := *state.Request
+
+	return cfgCopy, &reqCopy, nil
 }

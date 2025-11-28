@@ -103,6 +103,15 @@ func (m *mockRuntime) StreamLogs(ctx context.Context, id domain.SandboxID, w io.
 func (m *mockRuntime) Allocation(ctx context.Context) (domain.ResourceCapacity, error) {
 	return domain.ResourceCapacity{}, nil
 }
+func (m *mockRuntime) Pause(ctx context.Context, id domain.SandboxID) error  { return nil }
+func (m *mockRuntime) Resume(ctx context.Context, id domain.SandboxID) error { return nil }
+func (m *mockRuntime) CreateSnapshot(ctx context.Context, id domain.SandboxID, memPath, diskPath string) error {
+	return nil
+}
+func (m *mockRuntime) Shutdown(ctx context.Context, id domain.SandboxID) error { return nil }
+func (m *mockRuntime) GetConfig(ctx context.Context, id domain.SandboxID) (tartarus.VMConfig, *domain.SandboxRequest, error) {
+	return tartarus.VMConfig{}, nil, nil
+}
 
 type mockSink struct {
 	cocytus.Sink
@@ -142,6 +151,14 @@ type mockLogger struct {
 func (m *mockLogger) Info(ctx context.Context, msg string, fields map[string]any)  {}
 func (m *mockLogger) Error(ctx context.Context, msg string, fields map[string]any) {}
 
+type mockMetrics struct {
+	hermes.Metrics
+}
+
+func (m *mockMetrics) IncCounter(name string, value float64, labels ...hermes.Label)       {}
+func (m *mockMetrics) ObserveHistogram(name string, value float64, labels ...hermes.Label) {}
+func (m *mockMetrics) SetGauge(name string, value float64, labels ...hermes.Label)         {}
+
 func TestAgent_Run_ReportFailure(t *testing.T) {
 	req := &domain.SandboxRequest{
 		ID:       "req-fail",
@@ -164,6 +181,7 @@ func TestAgent_Run_ReportFailure(t *testing.T) {
 		Furies:     &mockFury{},
 		DeadLetter: sink,
 		Logger:     &mockLogger{},
+		Metrics:    &mockMetrics{},
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -216,6 +234,7 @@ func TestAgent_Run_Success_Cleanup(t *testing.T) {
 		Furies:     &mockFury{},
 		DeadLetter: &mockSink{},
 		Logger:     &mockLogger{},
+		Metrics:    &mockMetrics{},
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)

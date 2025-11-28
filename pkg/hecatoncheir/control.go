@@ -13,8 +13,10 @@ import (
 type ControlMessageType string
 
 const (
-	ControlMessageKill ControlMessageType = "KILL"
-	ControlMessageLogs ControlMessageType = "LOGS"
+	ControlMessageKill      ControlMessageType = "KILL"
+	ControlMessageLogs      ControlMessageType = "LOGS"
+	ControlMessageHibernate ControlMessageType = "HIBERNATE"
+	ControlMessageTerminate ControlMessageType = "TERMINATE"
 )
 
 // ControlMessage is a command sent to the agent.

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/shirou/gopsutil/v3/process"
+	"github.com/tartarus-sandbox/tartarus/pkg/hypnos"
 	"github.com/vishvananda/netlink"
 
 	"github.com/tartarus-sandbox/tartarus/pkg/acheron"
@@ -22,6 +23,7 @@ import (
 	"github.com/tartarus-sandbox/tartarus/pkg/nyx"
 	"github.com/tartarus-sandbox/tartarus/pkg/styx"
 	"github.com/tartarus-sandbox/tartarus/pkg/tartarus"
+	"github.com/tartarus-sandbox/tartarus/pkg/thanatos"
 )
 
 // Agent is the hundred-handed guardian on a node.
@@ -34,6 +36,8 @@ type Agent struct {
 	Styx       styx.Gateway
 	Judges     *judges.Chain
 	Furies     erinyes.Fury
+	Hypnos     *hypnos.Manager
+	Thanatos   *thanatos.Handler
 	Queue      acheron.Queue
 	Registry   hades.Registry
 	DeadLetter cocytus.Sink
@@ -301,6 +305,16 @@ func (a *Agent) controlLoop(ctx context.Context, ch <-chan ControlMessage) {
 			}
 		case ControlMessageLogs:
 			go a.streamLogs(ctx, msg.SandboxID)
+		case ControlMessageHibernate:
+			a.Logger.Info(ctx, "Hibernating sandbox", map[string]any{"sandbox_id": msg.SandboxID})
+			if _, err := a.Hypnos.Sleep(ctx, msg.SandboxID, nil); err != nil {
+				a.Logger.Error(ctx, "Failed to hibernate sandbox", map[string]any{"sandbox_id": msg.SandboxID, "error": err})
+			}
+		case ControlMessageTerminate:
+			a.Logger.Info(ctx, "Terminating sandbox", map[string]any{"sandbox_id": msg.SandboxID})
+			if _, err := a.Thanatos.Terminate(ctx, msg.SandboxID, thanatos.Options{GracePeriod: 5 * time.Second}); err != nil {
+				a.Logger.Error(ctx, "Failed to terminate sandbox", map[string]any{"sandbox_id": msg.SandboxID, "error": err})
+			}
 		}
 	}
 }

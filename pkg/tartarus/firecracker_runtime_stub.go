@@ -33,6 +33,26 @@ func (r *FirecrackerRuntime) Kill(ctx context.Context, id domain.SandboxID) erro
 	return fmt.Errorf("Firecracker runtime not supported on non-Linux platforms")
 }
 
+func (r *FirecrackerRuntime) Pause(ctx context.Context, id domain.SandboxID) error {
+	return fmt.Errorf("Firecracker runtime not supported on non-Linux platforms")
+}
+
+func (r *FirecrackerRuntime) Resume(ctx context.Context, id domain.SandboxID) error {
+	return fmt.Errorf("Firecracker runtime not supported on non-Linux platforms")
+}
+
+func (r *FirecrackerRuntime) CreateSnapshot(ctx context.Context, id domain.SandboxID, memPath, diskPath string) error {
+	return fmt.Errorf("Firecracker runtime not supported on non-Linux platforms")
+}
+
+func (r *FirecrackerRuntime) Shutdown(ctx context.Context, id domain.SandboxID) error {
+	return fmt.Errorf("Firecracker runtime not supported on non-Linux platforms")
+}
+
+func (r *FirecrackerRuntime) GetConfig(ctx context.Context, id domain.SandboxID) (VMConfig, *domain.SandboxRequest, error) {
+	return VMConfig{}, nil, fmt.Errorf("Firecracker runtime not supported on non-Linux platforms")
+}
+
 func (r *FirecrackerRuntime) List(ctx context.Context) ([]domain.SandboxRun, error) {
 	return nil, fmt.Errorf("Firecracker runtime not supported on non-Linux platforms")
 }

@@ -16,6 +16,16 @@ type SandboxRuntime interface {
 	Inspect(ctx context.Context, id domain.SandboxID) (*domain.SandboxRun, error)
 	List(ctx context.Context) ([]domain.SandboxRun, error)
 	Kill(ctx context.Context, id domain.SandboxID) error
+	// Pause quiesces a running sandbox without destroying it.
+	Pause(ctx context.Context, id domain.SandboxID) error
+	// Resume unpauses a sandbox previously paused.
+	Resume(ctx context.Context, id domain.SandboxID) error
+	// CreateSnapshot captures the VM state into the provided mem/disk file paths.
+	CreateSnapshot(ctx context.Context, id domain.SandboxID, memPath, diskPath string) error
+	// Shutdown asks the sandbox to exit gracefully (CtrlAltDel for Firecracker).
+	Shutdown(ctx context.Context, id domain.SandboxID) error
+	// GetConfig returns the VMConfig and original request used to launch the sandbox.
+	GetConfig(ctx context.Context, id domain.SandboxID) (VMConfig, *domain.SandboxRequest, error)
 	StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writer) error
 	Allocation(ctx context.Context) (domain.ResourceCapacity, error)
 	Wait(ctx context.Context, id domain.SandboxID) error
