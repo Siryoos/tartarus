@@ -9,6 +9,11 @@ import (
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
 )
 
+const (
+	// NodeTTL is the maximum time since last heartbeat before a node is considered dead
+	NodeTTL = 30 * time.Second
+)
+
 type MemoryRegistry struct {
 	nodes sync.Map // map[domain.NodeID]domain.NodeStatus
 }
@@ -19,10 +24,23 @@ func NewMemoryRegistry() *MemoryRegistry {
 
 func (r *MemoryRegistry) ListNodes(ctx context.Context) ([]domain.NodeStatus, error) {
 	var list []domain.NodeStatus
+	now := time.Now()
+
 	r.nodes.Range(func(key, value any) bool {
-		list = append(list, value.(domain.NodeStatus))
+		nodeID := key.(domain.NodeID)
+		status := value.(domain.NodeStatus)
+
+		// Check if node has expired
+		if now.Sub(status.Heartbeat) > NodeTTL {
+			// Remove expired node
+			r.nodes.Delete(nodeID)
+			return true // continue iteration
+		}
+
+		list = append(list, status)
 		return true
 	})
+
 	return list, nil
 }
 
@@ -32,11 +50,24 @@ func (r *MemoryRegistry) GetNode(ctx context.Context, id domain.NodeID) (*domain
 		return nil, errors.New("node not found")
 	}
 	status := val.(domain.NodeStatus)
+
+	// Check if node has expired
+	if time.Since(status.Heartbeat) > NodeTTL {
+		r.nodes.Delete(id)
+		return nil, errors.New("node expired")
+	}
+
 	return &status, nil
 }
 
-func (r *MemoryRegistry) UpdateHeartbeat(ctx context.Context, status domain.NodeStatus) error {
-	status.Heartbeat = time.Now()
+func (r *MemoryRegistry) UpdateHeartbeat(ctx context.Context, payload HeartbeatPayload) error {
+	// Build NodeStatus from HeartbeatPayload
+	status := domain.NodeStatus{
+		NodeInfo:  payload.Node,
+		Allocated: payload.Load,
+		Heartbeat: payload.Time,
+	}
+
 	r.nodes.Store(status.ID, status)
 	return nil
 }
@@ -47,8 +78,8 @@ func (r *MemoryRegistry) MarkDraining(ctx context.Context, id domain.NodeID) err
 		return errors.New("node not found")
 	}
 	status := val.(domain.NodeStatus)
-	// In a real implementation, we'd have a state field.
-	// For now, maybe we just log it or add a label?
+
+	// Initialize Labels map if needed
 	if status.Labels == nil {
 		status.Labels = make(map[string]string)
 	}

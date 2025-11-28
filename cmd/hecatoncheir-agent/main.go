@@ -9,12 +9,15 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/tartarus-sandbox/tartarus/pkg/acheron"
 	"github.com/tartarus-sandbox/tartarus/pkg/cocytus"
 	"github.com/tartarus-sandbox/tartarus/pkg/config"
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
 	"github.com/tartarus-sandbox/tartarus/pkg/erebus"
 	"github.com/tartarus-sandbox/tartarus/pkg/erinyes"
+	"github.com/tartarus-sandbox/tartarus/pkg/hades"
 	"github.com/tartarus-sandbox/tartarus/pkg/hecatoncheir"
 	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
 	"github.com/tartarus-sandbox/tartarus/pkg/judges"
@@ -31,6 +34,7 @@ func main() {
 
 	// Adapters
 	queue := acheron.NewMemoryQueue()
+	registry := hades.NewMemoryRegistry()
 	store, err := erebus.NewLocalStore(cfg.SnapshotPath)
 	if err != nil {
 		logger.Error("Failed to initialize store", "error", err)
@@ -97,8 +101,56 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				logger.Info("Sending heartbeat...")
-				// In a real app, we'd call Hades client here
+				// Collect real system metrics
+				vmStat, err := mem.VirtualMemory()
+				if err != nil {
+					logger.Error("Failed to get memory stats", "error", err)
+					continue
+				}
+
+				cpuCount, err := cpu.Counts(true) // logical cores
+				if err != nil {
+					logger.Error("Failed to get CPU count", "error", err)
+					continue
+				}
+
+				// Build resource capacity
+				// Total memory in MB
+				totalMemMB := domain.Megabytes(vmStat.Total / 1024 / 1024)
+				// Total CPU in milliCPU (1 core = 1000 milliCPU)
+				totalCPU := domain.MilliCPU(cpuCount * 1000)
+
+				// Build heartbeat payload
+				payload := hades.HeartbeatPayload{
+					Node: domain.NodeInfo{
+						ID:      agent.NodeID,
+						Address: "localhost", // In production, this would be actual node address
+						Labels:  map[string]string{"region": cfg.Region},
+						Capacity: domain.ResourceCapacity{
+							CPU: totalCPU,
+							Mem: totalMemMB,
+							GPU: 0,
+						},
+					},
+					Load: domain.ResourceCapacity{
+						// For now, report zero allocation
+						// In a real system, the agent would track actual allocations
+						CPU: 0,
+						Mem: 0,
+						GPU: 0,
+					},
+					Time: time.Now(),
+				}
+
+				// Send heartbeat to registry
+				if err := registry.UpdateHeartbeat(ctx, payload); err != nil {
+					logger.Error("Failed to send heartbeat", "error", err)
+				} else {
+					logger.Info("Heartbeat sent",
+						"node_id", agent.NodeID,
+						"total_mem_mb", totalMemMB,
+						"total_cpu_milli", totalCPU)
+				}
 			}
 		}
 	}()

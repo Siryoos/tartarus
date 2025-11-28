@@ -34,7 +34,7 @@ func main() {
 		os.Exit(1)
 	}
 	_ = store // Silence unused variable error
-	scheduler := olympus.NewMemoryScheduler()
+	scheduler := olympus.NewMemoryScheduler(logger)
 	metrics := hermes.NewNoopMetrics()
 	hermesLogger := hermes.NewSlogAdapter()
 

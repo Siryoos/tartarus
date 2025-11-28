@@ -12,7 +12,7 @@ import (
 type Registry interface {
 	ListNodes(ctx context.Context) ([]domain.NodeStatus, error)
 	GetNode(ctx context.Context, id domain.NodeID) (*domain.NodeStatus, error)
-	UpdateHeartbeat(ctx context.Context, status domain.NodeStatus) error
+	UpdateHeartbeat(ctx context.Context, payload HeartbeatPayload) error
 	MarkDraining(ctx context.Context, id domain.NodeID) error
 }
 
