@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,6 +19,7 @@ import (
 	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
 	"github.com/tartarus-sandbox/tartarus/pkg/judges"
 	"github.com/tartarus-sandbox/tartarus/pkg/olympus"
+	"github.com/tartarus-sandbox/tartarus/pkg/themis"
 )
 
 func main() {
@@ -38,15 +40,15 @@ func main() {
 	metrics := hermes.NewNoopMetrics()
 	hermesLogger := hermes.NewSlogAdapter()
 
-	// Mocks for Policy and Judges (since not implemented yet)
-	// We need a simple implementation for Themis Repository
-	// For now, we'll pass nil or a mock if we had one.
-	// Since Manager expects interfaces, we need to satisfy them.
-	// Let's create simple inline mocks or just use nil if the code handles it (it probably doesn't).
-	// We'll create a simple mock for Themis here.
+	// Policy repository
+	policyRepo := themis.NewMemoryRepo()
 
-	policyRepo := &mockPolicyRepo{}
-	judgeChain := &judges.Chain{} // Empty chain is valid
+	// Judges
+	resourceJudge := judges.NewResourceJudge(policyRepo, hermesLogger)
+	networkJudge := judges.NewNetworkJudge([]netip.Prefix{}, hermesLogger)
+	judgeChain := &judges.Chain{
+		Pre: []judges.PreJudge{resourceJudge, networkJudge},
+	}
 
 	manager := &olympus.Manager{
 		Queue:     queue,
@@ -71,21 +73,9 @@ func main() {
 			return
 		}
 
-		// In a real app, we'd call manager.Submit(r.Context(), &req)
-		// But Manager.Submit is empty in the scaffold.
-		// We'll simulate it here or assume Manager.Submit will be implemented later.
-		// For now, let's just enqueue it directly to prove the wiring works,
-		// or call Submit if we trust it does something (it returns nil currently).
-
 		if err := manager.Submit(r.Context(), &req); err != nil {
-			http.Error(w, "Failed to submit request", http.StatusInternalServerError)
-			return
-		}
-
-		// Since Submit is empty, let's manually enqueue to make the agent see it
-		// This is a temporary hack until Manager.Submit is implemented properly
-		if err := queue.Enqueue(r.Context(), &req); err != nil {
-			http.Error(w, "Failed to enqueue", http.StatusInternalServerError)
+			logger.Error("Failed to submit request", "error", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
@@ -115,15 +105,4 @@ func main() {
 		logger.Error("Server forced to shutdown", "error", err)
 	}
 	logger.Info("Server exited")
-}
-
-// Mock Policy Repo
-type mockPolicyRepo struct{}
-
-func (m *mockPolicyRepo) GetPolicy(ctx context.Context, tplID domain.TemplateID) (*domain.SandboxPolicy, error) {
-	return &domain.SandboxPolicy{}, nil
-}
-func (m *mockPolicyRepo) UpsertPolicy(ctx context.Context, p *domain.SandboxPolicy) error { return nil }
-func (m *mockPolicyRepo) ListPolicies(ctx context.Context) ([]*domain.SandboxPolicy, error) {
-	return nil, nil
 }

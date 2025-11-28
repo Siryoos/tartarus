@@ -65,7 +65,7 @@ func main() {
 	lethePool := &mockLethe{}
 	styxGateway := &mockStyx{}
 	cocytusSink := &mockCocytus{}
-	fury := &mockFury{}
+	fury := erinyes.NewPollFury(runtime, hermesLogger, metrics, 1*time.Second)
 	judgeChain := &judges.Chain{}
 
 	agent := &hecatoncheir.Agent{
@@ -194,10 +194,3 @@ func (m *mockStyx) Detach(ctx context.Context, sandboxID domain.SandboxID) error
 type mockCocytus struct{}
 
 func (m *mockCocytus) Write(ctx context.Context, rec *cocytus.Record) error { return nil }
-
-type mockFury struct{}
-
-func (m *mockFury) Arm(ctx context.Context, run *domain.SandboxRun, policy *erinyes.PolicySnapshot) error {
-	return nil
-}
-func (m *mockFury) Disarm(ctx context.Context, runID domain.SandboxID) error { return nil }
