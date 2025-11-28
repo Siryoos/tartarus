@@ -21,4 +21,4 @@
 - [x] Implement Cerberus authn/authz/audit gateway and replace ad-hoc bearer middleware.
 - [x] Build Charon front-door (rate limiting, circuit breaking, load-balancing) in front of Olympus.
 - [x] Add Hypnos/Thanatos lifecycle management (sleep/hibernation and graceful termination) on top of Nyx/Firecracker.
-- [ ] Deliver Phlegethon/Typhon/Persephone/Kampe once core is stable: heat-based routing, quarantine pipeline, seasonal scaling, and legacy container migration adapters.
+- [x] Deliver Phlegethon/Typhon/Persephone/Kampe once core is stable: heat-based routing, quarantine pipeline, seasonal scaling, and legacy container migration adapters.
