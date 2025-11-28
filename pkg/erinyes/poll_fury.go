@@ -117,13 +117,14 @@ func (p *PollFury) checkAndEnforce(ctx context.Context, run *domain.SandboxRun, 
 		}
 	}
 
-	// TODO: Check memory limit when memory metrics are available
-	// For now, SandboxRun doesn't include current memory usage,
-	// so we can't enforce memory limits yet.
-	// Future implementation would check:
-	// if policy.MaxMemory > 0 && currentRun.MemoryUsage > policy.MaxMemory {
-	//     p.killForViolation(ctx, run.ID, "memory_exceeded", ...)
-	// }
+	// Check memory limit
+	if policy.MaxMemory > 0 && currentRun.MemoryUsage > policy.MaxMemory {
+		p.killForViolation(ctx, run.ID, "memory_exceeded", map[string]any{
+			"sandbox_id":   run.ID,
+			"memory_usage": currentRun.MemoryUsage,
+			"max_memory":   policy.MaxMemory,
+		})
+	}
 }
 
 // killForViolation kills a sandbox for policy violation.

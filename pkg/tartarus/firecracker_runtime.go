@@ -277,13 +277,33 @@ func (r *FirecrackerRuntime) Inspect(ctx context.Context, id domain.SandboxID) (
 		}
 	}
 
+	// Get memory usage
+	var memUsage domain.Megabytes
+	if state.Cmd != nil && state.Cmd.Process != nil && status == domain.RunStatusRunning {
+		// Read /proc/<pid>/statm
+		// Format: size resident shared text lib data dt
+		// resident is in pages
+		pid := state.Cmd.Process.Pid
+		statmPath := fmt.Sprintf("/proc/%d/statm", pid)
+		if content, err := os.ReadFile(statmPath); err == nil {
+			fields := strings.Fields(string(content))
+			if len(fields) >= 2 {
+				var rssPages int64
+				fmt.Sscanf(fields[1], "%d", &rssPages)
+				// Assume 4KB pages
+				memUsage = domain.Megabytes(rssPages * 4 / 1024)
+			}
+		}
+	}
+
 	return &domain.SandboxRun{
-		ID:        state.Request.ID,
-		RequestID: state.Request.ID,
-		Status:    status,
-		ExitCode:  state.ExitCode,
-		StartedAt: state.StartedAt,
-		UpdatedAt: time.Now(),
+		ID:          state.Request.ID,
+		RequestID:   state.Request.ID,
+		Status:      status,
+		ExitCode:    state.ExitCode,
+		StartedAt:   state.StartedAt,
+		UpdatedAt:   time.Now(),
+		MemoryUsage: memUsage,
 	}, nil
 }
 

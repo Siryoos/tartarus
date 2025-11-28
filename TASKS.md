@@ -11,7 +11,7 @@
 - [x] Solidify log streaming and kill: ensure agent publishes logs to Redis topics per sandbox, API streaming endpoint handles errors/timeouts, and kill commands reach the correct node.
 - [x] Policy/auth baseline: relax NetworkJudge defaults or make policy configurable, require API key auth by default, and propagate tenant/user metadata for future Cerberus work.
 - [x] Persist request state to Hades/Redis in Olympus (currently in-memory only).
-- [ ] Enforce memory limits in Erinyes (currently CPU/Runtime only).
+- [x] Enforce memory limits in Erinyes (currently CPU/Runtime only).
 
 ## Observability and operations
 - [ ] Emit metrics (queue depth, launch latency, heartbeat age, failures) via Hermes adapters; add structured logs for control-plane events.

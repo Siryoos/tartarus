@@ -59,6 +59,10 @@ func (r *MockRuntime) Inspect(ctx context.Context, id domain.SandboxID) (*domain
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if run, ok := r.runs[id]; ok {
+		// Mock memory usage: 50% of allocated
+		if cfg, ok := r.configs[id]; ok {
+			run.MemoryUsage = domain.Megabytes(cfg.MemoryMB / 2)
+		}
 		return run, nil
 	}
 	return nil, errors.New("sandbox not found")
