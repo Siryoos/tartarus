@@ -10,6 +10,16 @@ type Config struct {
 	Region       string
 	SnapshotPath string
 	LogLevel     string
+
+	RedisAddress string
+	RedisDB      int
+	RedisPass    string
+
+	S3Endpoint  string
+	S3Region    string
+	S3Bucket    string
+	S3AccessKey string
+	S3SecretKey string
 }
 
 func Load() *Config {
@@ -18,6 +28,16 @@ func Load() *Config {
 		Region:       getEnv("REGION", "local"),
 		SnapshotPath: getEnv("SNAPSHOT_PATH", "/tmp/tartarus/snapshots"),
 		LogLevel:     getEnv("LOG_LEVEL", "INFO"),
+
+		RedisAddress: getEnv("REDIS_ADDR", ""),
+		RedisDB:      GetEnvInt("REDIS_DB", 0),
+		RedisPass:    getEnv("REDIS_PASSWORD", ""),
+
+		S3Endpoint:  getEnv("S3_ENDPOINT", ""),
+		S3Region:    getEnv("S3_REGION", "us-east-1"),
+		S3Bucket:    getEnv("S3_BUCKET", "tartarus-snapshots"),
+		S3AccessKey: getEnv("AWS_ACCESS_KEY_ID", ""),
+		S3SecretKey: getEnv("AWS_SECRET_ACCESS_KEY", ""),
 	}
 }
 

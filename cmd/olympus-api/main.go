@@ -54,11 +54,39 @@ func main() {
 		queue = acheron.NewMemoryQueue()
 		logger.Info("Using in-memory queue")
 	}
-	registry := hades.NewMemoryRegistry()
-	store, err := erebus.NewLocalStore(cfg.SnapshotPath)
-	if err != nil {
-		logger.Error("Failed to initialize store", "error", err)
-		os.Exit(1)
+
+	var registry hades.Registry
+	if cfg.RedisAddress != "" {
+		rr, err := hades.NewRedisRegistry(cfg.RedisAddress, cfg.RedisDB, cfg.RedisPass)
+		if err != nil {
+			logger.Error("Failed to initialize Redis registry", "error", err)
+			os.Exit(1)
+		}
+		registry = rr
+		logger.Info("Using Redis registry", "addr", cfg.RedisAddress)
+	} else {
+		registry = hades.NewMemoryRegistry()
+		logger.Info("Using in-memory registry")
+	}
+
+	var store erebus.Store
+	if cfg.S3Endpoint != "" || cfg.S3Region != "" {
+		// If S3 config is present, use S3Store
+		s3Store, err := erebus.NewS3Store(context.Background(), cfg.S3Endpoint, cfg.S3Region, cfg.S3Bucket, cfg.S3AccessKey, cfg.S3SecretKey, cfg.SnapshotPath)
+		if err != nil {
+			logger.Error("Failed to initialize S3 store", "error", err)
+			os.Exit(1)
+		}
+		store = s3Store
+		logger.Info("Using S3 store", "bucket", cfg.S3Bucket)
+	} else {
+		localStore, err := erebus.NewLocalStore(cfg.SnapshotPath)
+		if err != nil {
+			logger.Error("Failed to initialize local store", "error", err)
+			os.Exit(1)
+		}
+		store = localStore
+		logger.Info("Using local store", "path", cfg.SnapshotPath)
 	}
 	_ = store // Silence unused variable error
 	scheduler := olympus.NewMemoryScheduler(logger)

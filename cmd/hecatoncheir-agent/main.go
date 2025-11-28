@@ -60,12 +60,26 @@ func main() {
 		logger.Info("Using in-memory queue")
 	}
 	registry := hades.NewMemoryRegistry()
-	store, err := erebus.NewLocalStore(cfg.SnapshotPath)
-	if err != nil {
-		logger.Error("Failed to initialize store", "error", err)
-		os.Exit(1)
+
+	var store erebus.Store
+	if cfg.S3Endpoint != "" || cfg.S3Region != "" {
+		s3Store, err := erebus.NewS3Store(context.Background(), cfg.S3Endpoint, cfg.S3Region, cfg.S3Bucket, cfg.S3AccessKey, cfg.S3SecretKey, cfg.SnapshotPath)
+		if err != nil {
+			logger.Error("Failed to initialize S3 store", "error", err)
+			os.Exit(1)
+		}
+		store = s3Store
+		logger.Info("Using S3 store", "bucket", cfg.S3Bucket)
+	} else {
+		localStore, err := erebus.NewLocalStore(cfg.SnapshotPath)
+		if err != nil {
+			logger.Error("Failed to initialize local store", "error", err)
+			os.Exit(1)
+		}
+		store = localStore
+		logger.Info("Using local store", "path", cfg.SnapshotPath)
 	}
-	_ = store // Silence unused variable error
+	_ = store // Silence unused variable error for now, until Nyx uses it
 	hermesLogger := hermes.NewSlogAdapter()
 	var runtime tartarus.SandboxRuntime
 
