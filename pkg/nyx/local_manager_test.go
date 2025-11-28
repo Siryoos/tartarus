@@ -251,3 +251,68 @@ func TestLocalManager_Invalidate(t *testing.T) {
 		t.Error("Expected snapshots to be cleared")
 	}
 }
+
+func TestLocalManager_GetSnapshot_ReadThrough(t *testing.T) {
+	// Setup
+	tmpDir, err := os.MkdirTemp("", "nyx-test-rt-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	storeDir := filepath.Join(tmpDir, "store")
+	snapDir1 := filepath.Join(tmpDir, "snapshots1")
+	snapDir2 := filepath.Join(tmpDir, "snapshots2")
+
+	// Shared store
+	store, err := erebus.NewLocalStore(storeDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	logger := hermes.NewSlogAdapter()
+
+	// Manager 1: Prepares the snapshot
+	mgr1, err := NewLocalManager(store, snapDir1, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mgr1.vmLauncher = func(ctx context.Context, tpl *domain.TemplateSpec, socketPath string) (SnapshotMachine, error) {
+		return &MockSnapshotMachine{}, nil
+	}
+
+	tplID := domain.TemplateID("tpl-rt")
+	tpl := &domain.TemplateSpec{ID: tplID}
+
+	// Prepare snapshot with Manager 1
+	snap, err := mgr1.Prepare(context.Background(), tpl)
+	if err != nil {
+		t.Fatalf("Manager 1 Prepare failed: %v", err)
+	}
+
+	// Manager 2: Should fetch from store
+	mgr2, err := NewLocalManager(store, snapDir2, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// No VM launcher needed for read-through, but set it just in case logic drifts
+	mgr2.vmLauncher = func(ctx context.Context, tpl *domain.TemplateSpec, socketPath string) (SnapshotMachine, error) {
+		return nil, os.ErrInvalid // Should not be called
+	}
+
+	// Get snapshot with Manager 2
+	got, err := mgr2.GetSnapshot(context.Background(), tplID)
+	if err != nil {
+		t.Fatalf("Manager 2 GetSnapshot failed: %v", err)
+	}
+
+	if got.ID != snap.ID {
+		t.Errorf("Expected snapshot ID %s, got %s", snap.ID, got.ID)
+	}
+
+	// Verify files exist in Manager 2's snapshot dir
+	memPath := filepath.Join(snapDir2, "snapshots", string(tplID), string(snap.ID)+".mem")
+	if _, err := os.Stat(memPath); err != nil {
+		t.Errorf("Expected mem file to be downloaded to %s", memPath)
+	}
+}
