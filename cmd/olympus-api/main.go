@@ -15,6 +15,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/tartarus-sandbox/tartarus/pkg/acheron"
+	"github.com/tartarus-sandbox/tartarus/pkg/cerberus"
 	"github.com/tartarus-sandbox/tartarus/pkg/config"
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
 	"github.com/tartarus-sandbox/tartarus/pkg/erebus"
@@ -320,9 +321,46 @@ func main() {
 		json.NewEncoder(w).Encode(pols)
 	})
 
+	// Setup Cerberus gateway for authentication, authorization, and audit
+	apiKey := os.Getenv("TARTARUS_API_KEY")
+	var cerberusAuth cerberus.Authenticator
+	if apiKey == "" {
+		logger.Warn("Running in INSECURE mode: TARTARUS_API_KEY is not set. All requests are allowed.")
+		// Create a permissive authenticator that accepts any credentials
+		cerberusAuth = cerberus.NewSimpleAPIKeyAuthenticator("")
+	} else {
+		cerberusAuth = cerberus.NewSimpleAPIKeyAuthenticator(apiKey)
+	}
+
+	// Use allow-all authorizer for now (future: RBAC with policies)
+	cerberusAuthz := cerberus.NewAllowAllAuthorizer()
+
+	// Setup composite auditor (logs + metrics)
+	cerberusAudit := cerberus.NewCompositeAuditor(
+		cerberus.NewLogAuditor(logger),
+		cerberus.NewMetricsAuditor(),
+	)
+
+	// Create the three-headed gateway
+	cerberusGateway := cerberus.NewGateway(cerberusAuth, cerberusAuthz, cerberusAudit)
+
+	// Create HTTP middleware
+	cerberusMiddleware := cerberus.NewHTTPMiddleware(
+		cerberusGateway,
+		cerberus.NewBearerTokenExtractor(),
+		cerberus.NewDefaultResourceMapper(),
+	)
+
+	// Wrap the mux with Cerberus middleware
+	var handler http.Handler = mux
+	if apiKey != "" {
+		// Only apply Cerberus if API key is set
+		handler = cerberusMiddleware.Wrap(mux)
+	}
+
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
-		Handler: olympus.AuthMiddleware(logger, mux),
+		Handler: handler,
 	}
 
 	go func() {

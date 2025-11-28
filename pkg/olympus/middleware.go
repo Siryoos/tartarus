@@ -12,6 +12,10 @@ import (
 // It checks the TARTARUS_API_KEY environment variable.
 // If the variable is not set, it logs a warning and allows all requests (INSECURE mode).
 // If set, it requires the Authorization header to contain "Bearer <key>".
+//
+// Deprecated: Use pkg/cerberus.HTTPMiddleware instead for more comprehensive
+// authentication, authorization, and audit capabilities. This function is
+// maintained for backward compatibility only.
 func AuthMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
 	apiKey := os.Getenv("TARTARUS_API_KEY")
 	if apiKey == "" {

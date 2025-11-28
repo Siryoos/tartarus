@@ -18,7 +18,7 @@
 - [ ] Ship a dev stack (docker-compose or scripts) that boots Redis + API + agent with sane defaults for kernel/rootfs/snapshot paths and documents required host capabilities.
 
 ## Extended components backlog (design only)
-- [ ] Implement Cerberus authn/authz/audit gateway and replace ad-hoc bearer middleware.
+- [x] Implement Cerberus authn/authz/audit gateway and replace ad-hoc bearer middleware.
 - [ ] Build Charon front-door (rate limiting, circuit breaking, load-balancing) in front of Olympus.
 - [ ] Add Hypnos/Thanatos lifecycle management (sleep/hibernation and graceful termination) on top of Nyx/Firecracker.
 - [ ] Deliver Phlegethon/Typhon/Persephone/Kampe once core is stable: heat-based routing, quarantine pipeline, seasonal scaling, and legacy container migration adapters.
