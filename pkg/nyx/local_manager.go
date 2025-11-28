@@ -3,8 +3,10 @@
 package nyx
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -16,6 +18,7 @@ import (
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
 	"github.com/tartarus-sandbox/tartarus/pkg/erebus"
 	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
+	"golang.org/x/sync/singleflight"
 )
 
 type LocalManager struct {
@@ -25,6 +28,7 @@ type LocalManager struct {
 
 	mu         sync.Mutex
 	byTemplate map[domain.TemplateID][]*Snapshot
+	group      singleflight.Group
 
 	// vmLauncher is the function used to create a paused VM.
 	// It is exposed for testing purposes.
@@ -59,7 +63,6 @@ func (m *LocalManager) Prepare(ctx context.Context, tpl *domain.TemplateSpec) (*
 	// Check if we already have a snapshot
 	if snaps, ok := m.byTemplate[tpl.ID]; ok && len(snaps) > 0 {
 		// Return the most recent one (last in list, assuming append order)
-		// Or sort? For now, just return the last one.
 		return snaps[len(snaps)-1], nil
 	}
 
@@ -78,16 +81,6 @@ func (m *LocalManager) Prepare(ctx context.Context, tpl *domain.TemplateSpec) (*
 
 	socketPath := filepath.Join(socketDir, "firecracker.sock")
 
-	// Define paths for the snapshot files
-	// We will write them to a temp location first, then Put to Erebus?
-	// Or directly to where Erebus expects them if it's a LocalStore?
-	// The requirement says "Write these snapshot files into SnapshotDir using the erebus.Store abstraction".
-	// Firecracker needs a file path to write to.
-	// If Erebus is LocalStore, we can give it the final path?
-	// But Erebus interface is Put(key, reader).
-	// Firecracker writes directly to disk.
-	// So we should let Firecracker write to a temp file, then stream it to Erebus.
-
 	memFile := filepath.Join(socketDir, "snapshot.mem")
 	diskFile := filepath.Join(socketDir, "snapshot.disk")
 
@@ -99,7 +92,6 @@ func (m *LocalManager) Prepare(ctx context.Context, tpl *domain.TemplateSpec) (*
 	defer machine.StopVMM() // Cleanup
 
 	// Create Snapshot
-	// Firecracker SDK CreateSnapshot signature: CreateSnapshot(ctx, memFilePath, snapshotPath, opts...)
 	if err := machine.CreateSnapshot(ctx, memFile, diskFile); err != nil {
 		return nil, fmt.Errorf("failed to create snapshot: %w", err)
 	}
@@ -107,6 +99,7 @@ func (m *LocalManager) Prepare(ctx context.Context, tpl *domain.TemplateSpec) (*
 	// Persist to Erebus
 	memKey := fmt.Sprintf("snapshots/%s/%s.mem", tpl.ID, snapID)
 	diskKey := fmt.Sprintf("snapshots/%s/%s.disk", tpl.ID, snapID)
+	latestKey := fmt.Sprintf("snapshots/%s/latest", tpl.ID)
 
 	if err := m.uploadFile(ctx, memKey, memFile); err != nil {
 		return nil, err
@@ -114,11 +107,35 @@ func (m *LocalManager) Prepare(ctx context.Context, tpl *domain.TemplateSpec) (*
 	if err := m.uploadFile(ctx, diskKey, diskFile); err != nil {
 		return nil, err
 	}
+	// Update 'latest' pointer
+	if err := m.Store.Put(ctx, latestKey, bytes.NewReader([]byte(snapID))); err != nil {
+		return nil, fmt.Errorf("failed to update latest pointer: %w", err)
+	}
+
+	// Move files to local cache (SnapshotDir) so they are available for immediate use
+	// The runtime expects them at SnapshotDir/snapshots/<tplID>/<snapID>.{mem,disk} usually,
+	// or we can just use the paths we have.
+	// But GetSnapshot logic below assumes they are in SnapshotDir.
+	// So let's install them there.
+	finalDir := filepath.Join(m.SnapshotDir, "snapshots", string(tpl.ID))
+	if err := os.MkdirAll(finalDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create snapshot final dir: %w", err)
+	}
+
+	finalMemPath := filepath.Join(finalDir, string(snapID)+".mem")
+	finalDiskPath := filepath.Join(finalDir, string(snapID)+".disk")
+
+	if err := copyFile(memFile, finalMemPath); err != nil {
+		return nil, fmt.Errorf("failed to cache mem file: %w", err)
+	}
+	if err := copyFile(diskFile, finalDiskPath); err != nil {
+		return nil, fmt.Errorf("failed to cache disk file: %w", err)
+	}
 
 	// Create Snapshot object
 	// Path convention: snapshots/<templateID>/<snapshotID>
 	// The runtime will append .mem and .disk
-	basePath := fmt.Sprintf("snapshots/%s/%s", tpl.ID, snapID)
+	basePath := filepath.Join(m.SnapshotDir, "snapshots", string(tpl.ID), string(snapID))
 
 	snap := &Snapshot{
 		ID:        snapID,
@@ -134,25 +151,94 @@ func (m *LocalManager) Prepare(ctx context.Context, tpl *domain.TemplateSpec) (*
 }
 
 func (m *LocalManager) GetSnapshot(ctx context.Context, tplID domain.TemplateID) (*Snapshot, error) {
+	// 1. Check in-memory cache first
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	snaps, ok := m.byTemplate[tplID]
-	if !ok || len(snaps) == 0 {
-		// Auto-prepare?
-		// We need the TemplateSpec to prepare.
-		// If we don't have it, we can't auto-prepare unless we fetch it from somewhere.
-		// The interface doesn't give us the spec here.
-		// So we can't auto-prepare in GetSnapshot unless we have access to a Template registry.
-		// For now, return error or empty?
-		// Requirement says: "If none exist: Option 1: call Prepare and return its result."
-		// But Prepare needs *domain.TemplateSpec. GetSnapshot only has tplID.
-		// I will return an error for now, as I don't have the spec.
-		return nil, fmt.Errorf("no snapshot found for template %s", tplID)
+	if ok && len(snaps) > 0 {
+		m.mu.Unlock()
+		return snaps[len(snaps)-1], nil
 	}
+	m.mu.Unlock()
 
-	// Return the most recent
-	return snaps[len(snaps)-1], nil
+	// 2. Read-through from Erebus
+	res, err, _ := m.group.Do(string(tplID), func() (interface{}, error) {
+		// Double check memory
+		m.mu.Lock()
+		if snaps, ok := m.byTemplate[tplID]; ok && len(snaps) > 0 {
+			m.mu.Unlock()
+			return snaps[len(snaps)-1], nil
+		}
+		m.mu.Unlock()
+
+		// Fetch 'latest' pointer
+		latestKey := fmt.Sprintf("snapshots/%s/latest", tplID)
+		r, err := m.Store.Get(ctx, latestKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get latest snapshot pointer: %w", err)
+		}
+		defer r.Close()
+
+		snapIDBytes, err := io.ReadAll(r)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read latest snapshot pointer: %w", err)
+		}
+		snapID := domain.SnapshotID(string(snapIDBytes))
+
+		// Check if we have this snapshot locally on disk (but not in memory)
+		finalDir := filepath.Join(m.SnapshotDir, "snapshots", string(tplID))
+		finalMemPath := filepath.Join(finalDir, string(snapID)+".mem")
+		finalDiskPath := filepath.Join(finalDir, string(snapID)+".disk")
+		basePath := filepath.Join(m.SnapshotDir, "snapshots", string(tplID), string(snapID))
+
+		// If files exist, just load into memory
+		if _, err := os.Stat(finalMemPath); err == nil {
+			if _, err := os.Stat(finalDiskPath); err == nil {
+				snap := &Snapshot{
+					ID:        snapID,
+					Template:  tplID,
+					Path:      basePath,
+					CreatedAt: time.Now(), // We don't know the real time, but that's okay
+				}
+				m.mu.Lock()
+				m.byTemplate[tplID] = append(m.byTemplate[tplID], snap)
+				m.mu.Unlock()
+				return snap, nil
+			}
+		}
+
+		// Download files
+		if err := os.MkdirAll(finalDir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create snapshot dir: %w", err)
+		}
+
+		memKey := fmt.Sprintf("snapshots/%s/%s.mem", tplID, snapID)
+		diskKey := fmt.Sprintf("snapshots/%s/%s.disk", tplID, snapID)
+
+		if err := m.downloadFile(ctx, memKey, finalMemPath); err != nil {
+			return nil, err
+		}
+		if err := m.downloadFile(ctx, diskKey, finalDiskPath); err != nil {
+			return nil, err
+		}
+
+		snap := &Snapshot{
+			ID:        snapID,
+			Template:  tplID,
+			Path:      basePath,
+			CreatedAt: time.Now(),
+		}
+
+		m.mu.Lock()
+		m.byTemplate[tplID] = append(m.byTemplate[tplID], snap)
+		m.mu.Unlock()
+
+		return snap, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return res.(*Snapshot), nil
 }
 
 func (m *LocalManager) ListSnapshots(ctx context.Context, tplID domain.TemplateID) ([]*Snapshot, error) {
@@ -160,7 +246,6 @@ func (m *LocalManager) ListSnapshots(ctx context.Context, tplID domain.TemplateI
 	defer m.mu.Unlock()
 
 	snaps := m.byTemplate[tplID]
-	// Return a copy
 	result := make([]*Snapshot, len(snaps))
 	copy(result, snaps)
 	return result, nil
@@ -171,11 +256,10 @@ func (m *LocalManager) Invalidate(ctx context.Context, tplID domain.TemplateID) 
 	defer m.mu.Unlock()
 
 	delete(m.byTemplate, tplID)
-	// TODO: Delete files from Erebus
+	// TODO: Delete files from Erebus?
 	return nil
 }
 
-// Helper to upload file to Erebus
 func (m *LocalManager) uploadFile(ctx context.Context, key string, path string) error {
 	f, err := os.Open(path)
 	if err != nil {
@@ -189,13 +273,32 @@ func (m *LocalManager) uploadFile(ctx context.Context, key string, path string) 
 	return nil
 }
 
-// createPausedVM launches a VM and pauses it.
-func (m *LocalManager) createPausedVM(ctx context.Context, tpl *domain.TemplateSpec, socketPath string) (SnapshotMachine, error) {
-	// Basic configuration similar to FirecrackerRuntime
-	// We need kernel image and rootfs.
-	// tpl has KernelImage and BaseImage.
+func (m *LocalManager) downloadFile(ctx context.Context, key string, path string) error {
+	r, err := m.Store.Get(ctx, key)
+	if err != nil {
+		return fmt.Errorf("failed to get %s from erebus: %w", key, err)
+	}
+	defer r.Close()
 
-	// Convert resources
+	// Write to temp file first
+	tmpPath := path + ".tmp"
+	f, err := os.Create(tmpPath)
+	if err != nil {
+		return fmt.Errorf("failed to create temp file %s: %w", tmpPath, err)
+	}
+	defer f.Close()
+
+	if _, err := io.Copy(f, r); err != nil {
+		return fmt.Errorf("failed to download %s: %w", key, err)
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("failed to rename %s to %s: %w", tmpPath, path, err)
+	}
+	return nil
+}
+
+func (m *LocalManager) createPausedVM(ctx context.Context, tpl *domain.TemplateSpec, socketPath string) (SnapshotMachine, error) {
 	memSz := int64(tpl.Resources.Mem)
 	if memSz == 0 {
 		memSz = 128
@@ -218,14 +321,11 @@ func (m *LocalManager) createPausedVM(ctx context.Context, tpl *domain.TemplateS
 				DriveID:      firecracker.String("rootfs"),
 				PathOnHost:   firecracker.String(tpl.BaseImage),
 				IsRootDevice: firecracker.Bool(true),
-				IsReadOnly:   firecracker.Bool(false), // Needs to be writable for boot?
+				IsReadOnly:   firecracker.Bool(false),
 			},
 		},
-		// No network needed for snapshot preparation usually, unless warmup requires it.
-		// For now, no network.
 	}
 
-	// Command builder
 	cmd := firecracker.VMCommandBuilder{}.
 		WithSocketPath(socketPath).
 		Build(ctx)
@@ -239,11 +339,27 @@ func (m *LocalManager) createPausedVM(ctx context.Context, tpl *domain.TemplateS
 		return nil, fmt.Errorf("failed to start machine: %w", err)
 	}
 
-	// Pause the VM
 	if err := machine.PauseVM(ctx); err != nil {
 		machine.StopVMM()
 		return nil, fmt.Errorf("failed to pause VM: %w", err)
 	}
 
 	return machine, nil
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	return err
 }

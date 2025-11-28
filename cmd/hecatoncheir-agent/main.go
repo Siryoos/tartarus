@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -35,6 +36,11 @@ func main() {
 	cfg := config.Load()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	logger.Info("Starting Hecatoncheir Agent", "region", cfg.Region)
+
+	// Privileged check
+	if os.Geteuid() != 0 {
+		logger.Warn("Hecatoncheir Agent should be run as root for networking and Firecracker operations")
+	}
 
 	// Adapters
 	var queue acheron.Queue
@@ -72,6 +78,7 @@ func main() {
 	}
 	registry := hades.NewMemoryRegistry()
 
+	// Erebus Store
 	var store erebus.Store
 	if cfg.S3Endpoint != "" || cfg.S3Region != "" {
 		s3Store, err := erebus.NewS3Store(context.Background(), cfg.S3Endpoint, cfg.S3Region, cfg.S3Bucket, cfg.S3AccessKey, cfg.S3SecretKey, cfg.SnapshotPath)
@@ -90,7 +97,7 @@ func main() {
 		store = localStore
 		logger.Info("Using local store", "path", cfg.SnapshotPath)
 	}
-	_ = store // Silence unused variable error for now, until Nyx uses it
+
 	hermesLogger := hermes.NewSlogAdapter()
 	var runtime tartarus.SandboxRuntime
 
@@ -110,12 +117,54 @@ func main() {
 	}
 	metrics := hermes.NewNoopMetrics()
 
-	// Mocks for dependencies not yet implemented
-	nyxManager := &mockNyx{}
-	lethePool := &mockLethe{}
-	styxGateway := &mockStyx{}
-	cocytusSink := &mockCocytus{}
+	// Styx Host Gateway
+	bridgeName := os.Getenv("NETWORK_BRIDGE")
+	if bridgeName == "" {
+		bridgeName = "br0"
+	}
+	networkCIDR := os.Getenv("NETWORK_CIDR")
+	if networkCIDR == "" {
+		networkCIDR = "10.0.0.1/24"
+	}
+
+	prefix, err := netip.ParsePrefix(networkCIDR)
+	if err != nil {
+		logger.Error("Invalid network CIDR", "cidr", networkCIDR, "error", err)
+		os.Exit(1)
+	}
+
+	styxGateway, err := styx.NewHostGateway(bridgeName, prefix)
+	if err != nil {
+		logger.Error("Failed to initialize Styx Host Gateway", "error", err)
+		os.Exit(1)
+	}
+
+	// Lethe File Overlay Pool
+	overlayDir := filepath.Join(os.TempDir(), "tartarus-overlays")
+	if err := os.MkdirAll(overlayDir, 0755); err != nil {
+		logger.Error("Failed to create overlay directory", "error", err)
+		os.Exit(1)
+	}
+	lethePool, err := lethe.NewFileOverlayPool(overlayDir, hermesLogger)
+	if err != nil {
+		logger.Error("Failed to initialize Lethe File Overlay Pool", "error", err)
+		os.Exit(1)
+	}
+
+	// Nyx Local Manager
+	nyxManager, err := nyx.NewLocalManager(store, cfg.SnapshotPath, hermesLogger)
+	if err != nil {
+		logger.Error("Failed to initialize Nyx Local Manager", "error", err)
+		os.Exit(1)
+	}
+
+	// Cocytus Log Sink
+	cocytusSink := cocytus.NewLogSink(logger)
+
+	// Fury Watchdog
 	fury := erinyes.NewPollFury(runtime, hermesLogger, metrics, 1*time.Second)
+
+	// Judges
 	judgeChain := &judges.Chain{}
 
 	agent := &hecatoncheir.Agent{
@@ -226,39 +275,6 @@ func main() {
 
 	logger.Info("Shutting down agent...")
 }
-
-// Mocks
-
-type mockNyx struct{}
-
-func (m *mockNyx) Prepare(ctx context.Context, tpl *domain.TemplateSpec) (*nyx.Snapshot, error) {
-	return &nyx.Snapshot{}, nil
-}
-func (m *mockNyx) GetSnapshot(ctx context.Context, tplID domain.TemplateID) (*nyx.Snapshot, error) {
-	return &nyx.Snapshot{}, nil
-}
-func (m *mockNyx) ListSnapshots(ctx context.Context, tplID domain.TemplateID) ([]*nyx.Snapshot, error) {
-	return nil, nil
-}
-func (m *mockNyx) Invalidate(ctx context.Context, tplID domain.TemplateID) error { return nil }
-
-type mockLethe struct{}
-
-func (m *mockLethe) Create(ctx context.Context, snapshot *nyx.Snapshot) (*lethe.Overlay, error) {
-	return &lethe.Overlay{}, nil
-}
-func (m *mockLethe) Destroy(ctx context.Context, overlay *lethe.Overlay) error { return nil }
-
-type mockStyx struct{}
-
-func (m *mockStyx) Attach(ctx context.Context, sandboxID domain.SandboxID, contract *styx.Contract) (string, netip.Addr, error) {
-	return "tap0", netip.Addr{}, nil
-}
-func (m *mockStyx) Detach(ctx context.Context, sandboxID domain.SandboxID) error { return nil }
-
-type mockCocytus struct{}
-
-func (m *mockCocytus) Write(ctx context.Context, rec *cocytus.Record) error { return nil }
 
 func watchControl(ctx context.Context, rdb *redis.Client, nodeID domain.NodeID, runtime tartarus.SandboxRuntime, logger *slog.Logger) {
 	topic := fmt.Sprintf("tartarus:control:%s", nodeID)
