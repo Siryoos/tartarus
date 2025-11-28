@@ -115,7 +115,7 @@ func main() {
 	_ = store // Silence unused variable error
 	_ = store // Silence unused variable error
 	hermesLogger := hermes.NewSlogAdapter()
-	scheduler := moirai.NewLeastLoadedScheduler(hermesLogger)
+	scheduler := moirai.NewScheduler(cfg.SchedulerStrategy, hermesLogger)
 
 	// Policy repository
 	policyRepo := themis.NewMemoryRepo()

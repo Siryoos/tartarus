@@ -9,17 +9,17 @@ import (
 	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
 )
 
-type LeastLoadedScheduler struct {
+type BinPackingScheduler struct {
 	Logger hermes.Logger
 }
 
-func NewLeastLoadedScheduler(logger hermes.Logger) *LeastLoadedScheduler {
-	return &LeastLoadedScheduler{
+func NewBinPackingScheduler(logger hermes.Logger) *BinPackingScheduler {
+	return &BinPackingScheduler{
 		Logger: logger,
 	}
 }
 
-func (s *LeastLoadedScheduler) ChooseNode(ctx context.Context, req *domain.SandboxRequest, nodes []domain.NodeStatus) (domain.NodeID, error) {
+func (s *BinPackingScheduler) ChooseNode(ctx context.Context, req *domain.SandboxRequest, nodes []domain.NodeStatus) (domain.NodeID, error) {
 	type candidate struct {
 		node    domain.NodeStatus
 		freeMem domain.Megabytes
@@ -52,13 +52,13 @@ func (s *LeastLoadedScheduler) ChooseNode(ctx context.Context, req *domain.Sandb
 		return "", ErrNoCapacity
 	}
 
-	// 3. Sort by Available Memory (descending)
+	// 4. Sort by Available Memory (ASCENDING) - Tightest Fit
 	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].freeMem > candidates[j].freeMem
+		return candidates[i].freeMem < candidates[j].freeMem
 	})
 
 	best := candidates[0]
-	s.Logger.Info(ctx, "Scheduled sandbox", map[string]any{
+	s.Logger.Info(ctx, "Scheduled sandbox (bin-packing)", map[string]any{
 		"sandbox_id":  req.ID,
 		"node_id":     best.node.ID,
 		"free_mem_mb": best.freeMem,

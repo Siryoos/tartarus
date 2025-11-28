@@ -12,6 +12,8 @@ type Config struct {
 	SnapshotPath string
 	LogLevel     string
 
+	SchedulerStrategy string
+
 	RedisAddress string
 	RedisDB      int
 	RedisPass    string
@@ -31,6 +33,8 @@ func Load() *Config {
 		Region:       getEnv("REGION", "local"),
 		SnapshotPath: getEnv("SNAPSHOT_PATH", "/tmp/tartarus/snapshots"),
 		LogLevel:     getEnv("LOG_LEVEL", "INFO"),
+
+		SchedulerStrategy: getEnv("SCHEDULER_STRATEGY", "least-loaded"),
 
 		RedisAddress: getEnv("REDIS_ADDR", ""),
 		RedisDB:      GetEnvInt("REDIS_DB", 0),
