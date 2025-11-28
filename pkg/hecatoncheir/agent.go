@@ -130,6 +130,26 @@ func (a *Agent) Run(ctx context.Context) error {
 			}
 
 			a.Logger.Info(ctx, "Sandbox launched", map[string]any{"run_id": run.ID})
+
+			// 5. Wait & Cleanup
+			go func(runID domain.SandboxID, reqID domain.SandboxID, ov *lethe.Overlay) {
+				// Wait for completion
+				if err := a.Runtime.Wait(context.Background(), runID); err != nil {
+					a.Logger.Error(context.Background(), "Wait failed", map[string]any{"run_id": runID, "error": err})
+				}
+
+				a.Logger.Info(context.Background(), "Sandbox exited", map[string]any{"run_id": runID})
+
+				// Cleanup Network
+				if err := a.Styx.Detach(context.Background(), reqID); err != nil {
+					a.Logger.Error(context.Background(), "Failed to detach network", map[string]any{"req_id": reqID, "error": err})
+				}
+
+				// Cleanup Overlay
+				if err := a.Lethe.Destroy(context.Background(), ov); err != nil {
+					a.Logger.Error(context.Background(), "Failed to destroy overlay", map[string]any{"overlay_id": ov.ID, "error": err})
+				}
+			}(run.ID, req.ID, overlay)
 		}
 	}
 }

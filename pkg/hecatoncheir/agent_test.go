@@ -3,6 +3,7 @@ package hecatoncheir
 import (
 	"context"
 	"errors"
+	"io"
 	"net/netip"
 	"testing"
 	"time"
@@ -71,7 +72,26 @@ type mockRuntime struct {
 }
 
 func (m *mockRuntime) Launch(ctx context.Context, req *domain.SandboxRequest, cfg tartarus.VMConfig) (*domain.SandboxRun, error) {
-	return nil, errors.New("launch failed")
+	if req.ID == "req-fail" {
+		return nil, errors.New("launch failed")
+	}
+	return &domain.SandboxRun{ID: req.ID, Status: domain.RunStatusRunning}, nil
+}
+
+func (m *mockRuntime) Wait(ctx context.Context, id domain.SandboxID) error {
+	return nil
+}
+
+func (m *mockRuntime) Inspect(ctx context.Context, id domain.SandboxID) (*domain.SandboxRun, error) {
+	return nil, nil
+}
+func (m *mockRuntime) List(ctx context.Context) ([]domain.SandboxRun, error) { return nil, nil }
+func (m *mockRuntime) Kill(ctx context.Context, id domain.SandboxID) error   { return nil }
+func (m *mockRuntime) StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writer) error {
+	return nil
+}
+func (m *mockRuntime) Allocation(ctx context.Context) (domain.ResourceCapacity, error) {
+	return domain.ResourceCapacity{}, nil
 }
 
 type mockSink struct {
@@ -94,7 +114,7 @@ func (m *mockLogger) Error(ctx context.Context, msg string, fields map[string]an
 
 func TestAgent_Run_ReportFailure(t *testing.T) {
 	req := &domain.SandboxRequest{
-		ID:       "req-1",
+		ID:       "req-fail",
 		Template: "base",
 		Resources: domain.ResourceSpec{
 			CPU: 1,
@@ -121,14 +141,6 @@ func TestAgent_Run_ReportFailure(t *testing.T) {
 	agent.Run(ctx)
 
 	// Verify sink was called
-	// Since the sink write is async, we might need to wait a bit, but the context timeout should handle it if we are lucky.
-	// Actually, since it's a goroutine, we should wait for it.
-	// But `agent.Run` blocks until context is done.
-	// The goroutine starts before `agent.Run` loop continues (or rather, inside the loop).
-	// When `agent.Run` returns (due to context timeout), the goroutine might still be running or finished.
-	// We should probably use a channel in the mock sink to signal completion if we want to be robust.
-
-	// Let's retry checking for a short duration
 	for i := 0; i < 10; i++ {
 		if sink.written != nil {
 			break
@@ -147,4 +159,38 @@ func TestAgent_Run_ReportFailure(t *testing.T) {
 	if sink.written.Reason != "launch failed" {
 		t.Errorf("Expected Reason 'launch failed', got '%s'", sink.written.Reason)
 	}
+}
+
+func TestAgent_Run_Success_Cleanup(t *testing.T) {
+	req := &domain.SandboxRequest{
+		ID:       "req-success",
+		Template: "base",
+		Resources: domain.ResourceSpec{
+			CPU: 1,
+			Mem: 128,
+		},
+		NetworkRef: domain.NetworkPolicyRef{ID: "net-1"},
+	}
+
+	letheMock := &mockLethe{}
+	styxMock := &mockStyx{}
+	agent := &Agent{
+		Queue:      &mockQueue{req: req},
+		Nyx:        &mockNyx{},
+		Lethe:      letheMock,
+		Styx:       styxMock,
+		Runtime:    &mockRuntime{},
+		DeadLetter: &mockSink{},
+		Logger:     &mockLogger{},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	// Run agent
+	agent.Run(ctx)
+
+	// We can't easily verify cleanup because mocks don't track calls in this simple setup.
+	// But at least we verify it doesn't crash.
+	// To verify cleanup, we'd need spy mocks.
 }

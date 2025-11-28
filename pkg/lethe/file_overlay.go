@@ -44,7 +44,9 @@ func (p *FileOverlayPool) Create(ctx context.Context, snapshot *nyx.Snapshot) (*
 	}
 
 	// Copy the snapshot file to the overlay path
-	if err := copyFile(snapshot.Path, overlayPath); err != nil {
+	// Snapshot.Path is the base path (without extension), but we need the disk image.
+	snapshotDiskPath := snapshot.Path + ".disk"
+	if err := copyFile(snapshotDiskPath, overlayPath); err != nil {
 		return nil, fmt.Errorf("failed to copy snapshot: %w", err)
 	}
 

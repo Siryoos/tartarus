@@ -106,3 +106,14 @@ func (r *MockRuntime) Allocation(ctx context.Context) (domain.ResourceCapacity, 
 		GPU: 0,
 	}, nil
 }
+
+func (r *MockRuntime) Wait(ctx context.Context, id domain.SandboxID) error {
+	// For mock, we just return immediately or wait a bit?
+	// Let's simulate a short run.
+	select {
+	case <-time.After(2 * time.Second):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}

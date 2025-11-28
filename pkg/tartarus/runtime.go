@@ -17,6 +17,7 @@ type SandboxRuntime interface {
 	Kill(ctx context.Context, id domain.SandboxID) error
 	StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writer) error
 	Allocation(ctx context.Context) (domain.ResourceCapacity, error)
+	Wait(ctx context.Context, id domain.SandboxID) error
 }
 
 // VMConfig captures low-level configuration required by the runtime.

@@ -9,7 +9,9 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -32,12 +34,16 @@ type FirecrackerRuntime struct {
 }
 
 type vmState struct {
-	Machine    *firecracker.Machine
-	SocketPath string
-	LogPath    string
-	StartedAt  time.Time
-	Request    *domain.SandboxRequest
-	Config     VMConfig
+	Machine     *firecracker.Machine
+	Cmd         *exec.Cmd
+	SocketPath  string
+	LogPath     string
+	ConsolePath string
+	StartedAt   time.Time
+	Request     *domain.SandboxRequest
+	Config      VMConfig
+	ExitCode    *int
+	mu          sync.Mutex
 }
 
 // NewFirecrackerRuntime creates a new runtime instance.
@@ -61,6 +67,7 @@ func (r *FirecrackerRuntime) Launch(ctx context.Context, req *domain.SandboxRequ
 
 	socketPath := filepath.Join(r.SocketDir, fmt.Sprintf("fc-%s.sock", req.ID))
 	logPath := filepath.Join(r.SocketDir, fmt.Sprintf("fc-%s.log", req.ID))
+	consolePath := filepath.Join(r.SocketDir, fmt.Sprintf("fc-%s.console", req.ID))
 
 	// Determine RootFS path
 	// If cfg.OverlayFS is set, use it. Otherwise use RootFSBase (or cfg.Snapshot.Path if we had it)
@@ -80,9 +87,52 @@ func (r *FirecrackerRuntime) Launch(ctx context.Context, req *domain.SandboxRequ
 		cpuCount = 1
 	}
 
+	// Construct Kernel Args
+	// We want: console=ttyS0 reboot=k panic=1 pci=off init=/bin/sh -- -c "export VAR=VAL; exec cmd args..."
+	// Note: We use /bin/sh to setup env and exec the actual command.
+	kernelArgs := "console=ttyS0 reboot=k panic=1 pci=off"
+
+	if len(req.Command) > 0 {
+		// Build the shell script
+		var scriptBuilder strings.Builder
+
+		// 1. Export Environment Variables
+		for k, v := range req.Env {
+			// Simple escaping for single quotes
+			val := strings.ReplaceAll(v, "'", "'\\''")
+			scriptBuilder.WriteString(fmt.Sprintf("export %s='%s'; ", k, val))
+		}
+
+		// 2. Build the command
+		// We assume req.Command[0] is the binary, and req.Args are arguments.
+		// If req.Args is empty, we just use req.Command.
+		// Actually domain.SandboxRequest has Command []string and Args []string.
+		// Usually Command is ["/bin/prog"] and Args is ["-flag", "val"].
+		// We'll combine them.
+		fullCmd := append(req.Command, req.Args...)
+
+		// Exec the command so it takes over PID 1 (or whatever sh was)
+		scriptBuilder.WriteString("exec")
+		for _, part := range fullCmd {
+			// Escape arguments
+			arg := strings.ReplaceAll(part, "'", "'\\''")
+			scriptBuilder.WriteString(fmt.Sprintf(" '%s'", arg))
+		}
+
+		// Append init=/bin/sh and the script
+		// We pass the script as an argument to sh -c
+		// We use double quotes for the kernel command line to group the script as one argument.
+		// We must escape double quotes in the script itself.
+		script := scriptBuilder.String()
+		scriptEscaped := strings.ReplaceAll(script, "\"", "\\\"")
+
+		kernelArgs = fmt.Sprintf("%s init=/bin/sh -- -c \"%s\"", kernelArgs, scriptEscaped)
+	}
+
 	fcCfg := firecracker.Config{
 		SocketPath:      socketPath,
 		KernelImagePath: r.KernelImage,
+		KernelArgs:      kernelArgs,
 		LogPath:         logPath,
 		MachineCfg: models.MachineConfiguration{
 			VcpuCount:  firecracker.Int64(cpuCount),
@@ -111,14 +161,27 @@ func (r *FirecrackerRuntime) Launch(ctx context.Context, req *domain.SandboxRequ
 		}
 	}
 
-	// Create command to start firecracker
-	// The SDK needs a way to start the process.
-	// We can use firecracker.NewMachine which handles the process if we provide the binary command?
-	// Actually, NewMachine expects us to manage the process or it manages it if we provide the cmd.
-	// Standard way:
+	// Create console log file
+	consoleFile, err := os.Create(consolePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create console log: %w", err)
+	}
+	// We don't close consoleFile here; we pass it to the cmd.
+	// The cmd will hold it open. We can close it in Kill or when cmd finishes?
+	// Actually exec.Cmd doesn't close Stdout/Stderr if they are *os.File.
+	// We should close it after the process starts? No, then the process can't write to it?
+	// Wait, if we pass *os.File to Cmd.Stdout, the child inherits the fd.
+	// We can close our handle after Start().
+	// But we are using firecracker.NewMachine which calls Start internally?
+	// No, NewMachine just creates the struct. machine.Start() starts it.
+	// But we build the cmd first.
+
 	cmd := firecracker.VMCommandBuilder{}.
 		WithSocketPath(socketPath).
-		Build(ctx) // Assumes 'firecracker' is in PATH
+		Build(ctx)
+
+	cmd.Stdout = consoleFile
+	cmd.Stderr = consoleFile
 
 	// Check if we are restoring from a snapshot
 	if cfg.Snapshot.Path != "" {
@@ -131,25 +194,39 @@ func (r *FirecrackerRuntime) Launch(ctx context.Context, req *domain.SandboxRequ
 		}
 		// Clear KernelImagePath as we are restoring
 		fcCfg.KernelImagePath = ""
+		// KernelArgs might be ignored during restore?
+		// Usually yes, the VM state includes memory and cpu state.
+		// So we can't change the command when restoring from a snapshot unless the snapshot was paused at bootloader?
+		// Firecracker snapshots are full system state.
+		// So we can't inject a new command into a restored snapshot.
+		// The request should probably match the snapshot's original intent or we just resume it.
+		// For now, we assume if snapshot is present, we just resume it.
 	}
 
 	machine, err := firecracker.NewMachine(ctx, fcCfg, firecracker.WithProcessRunner(cmd))
 	if err != nil {
+		consoleFile.Close()
 		return nil, fmt.Errorf("failed to create machine: %w", err)
 	}
 
 	if err := machine.Start(ctx); err != nil {
+		consoleFile.Close()
 		return nil, fmt.Errorf("failed to start machine: %w", err)
 	}
 
+	// Close our handle to the console file, the child process has its own.
+	consoleFile.Close()
+
 	// Store state
 	state := &vmState{
-		Machine:    machine,
-		SocketPath: socketPath,
-		LogPath:    logPath,
-		StartedAt:  time.Now(),
-		Request:    req,
-		Config:     cfg,
+		Machine:     machine,
+		Cmd:         cmd,
+		SocketPath:  socketPath,
+		LogPath:     logPath,
+		ConsolePath: consolePath,
+		StartedAt:   time.Now(),
+		Request:     req,
+		Config:      cfg,
 	}
 	r.vms.Store(req.ID, state)
 
@@ -170,23 +247,23 @@ func (r *FirecrackerRuntime) Inspect(ctx context.Context, id domain.SandboxID) (
 	}
 	state := val.(*vmState)
 
-	// Check if process is still running
-	// This is a simplified check.
-	// In a real system we'd query the socket.
+	state.mu.Lock()
+	defer state.mu.Unlock()
+
 	status := domain.RunStatusRunning
-
-	// If we can check the process:
-	// The SDK machine struct has a PID, but it's not always exposed directly depending on version/usage.
-	// But we can try to call DescribeInstanceInfo.
-	// info, err := state.Machine.DescribeInstanceInfo(ctx)
-	// if err != nil { ... }
-
-	// For now, assume running if in map.
+	if state.ExitCode != nil {
+		if *state.ExitCode == 0 {
+			status = domain.RunStatusSucceeded
+		} else {
+			status = domain.RunStatusFailed
+		}
+	}
 
 	return &domain.SandboxRun{
 		ID:        state.Request.ID,
 		RequestID: state.Request.ID,
 		Status:    status,
+		ExitCode:  state.ExitCode,
 		StartedAt: state.StartedAt,
 		UpdatedAt: time.Now(),
 	}, nil
@@ -196,10 +273,22 @@ func (r *FirecrackerRuntime) List(ctx context.Context) ([]domain.SandboxRun, err
 	var list []domain.SandboxRun
 	r.vms.Range(func(key, value any) bool {
 		state := value.(*vmState)
+		state.mu.Lock()
+		status := domain.RunStatusRunning
+		if state.ExitCode != nil {
+			if *state.ExitCode == 0 {
+				status = domain.RunStatusSucceeded
+			} else {
+				status = domain.RunStatusFailed
+			}
+		}
+		state.mu.Unlock()
+
 		list = append(list, domain.SandboxRun{
 			ID:        state.Request.ID,
 			RequestID: state.Request.ID,
-			Status:    domain.RunStatusRunning, // Simplified
+			Status:    status,
+			ExitCode:  state.ExitCode,
 			StartedAt: state.StartedAt,
 			UpdatedAt: time.Now(),
 		})
@@ -219,17 +308,16 @@ func (r *FirecrackerRuntime) Kill(ctx context.Context, id domain.SandboxID) erro
 
 	// Stop VMM
 	if err := state.Machine.StopVMM(); err != nil {
-		// Try to kill process if StopVMM fails or if we want to force it
-		// But StopVMM sends the shutdown command.
 		r.Logger.Warn("StopVMM failed", "error", err)
-		// We could try sending SIGKILL to the process if we had the PID.
 	}
 
 	// Clean up
 	r.vms.Delete(id)
 	os.Remove(state.SocketPath)
-	// We keep the log file for now? Or delete it?
-	// Usually logs are kept for a bit.
+	// We keep the log/console files for debugging/streaming?
+	// If we delete them, StreamLogs might fail if called after Kill.
+	// Usually we might want to keep them for a bit or let a reaper clean them up.
+	// For now, we'll leave them.
 
 	return nil
 }
@@ -241,20 +329,13 @@ func (r *FirecrackerRuntime) StreamLogs(ctx context.Context, id domain.SandboxID
 	}
 	state := val.(*vmState)
 
-	// Simple implementation: tail the log file
-	// This is blocking, so it fits the StreamLogs pattern.
-
-	file, err := os.Open(state.LogPath)
+	// Tail the console log file
+	file, err := os.Open(state.ConsolePath)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	// Read until EOF, then wait and read more
-	// Similar to 'tail -f'
-	// For this PR, just copy what's there and maybe poll.
-
-	// A better way for "StreamLogs" which implies following:
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -271,12 +352,15 @@ func (r *FirecrackerRuntime) StreamLogs(ctx context.Context, id domain.SandboxID
 				}
 			}
 			if err == io.EOF {
-				// Clear EOF to keep reading
-				// In Go, os.File doesn't need clearing for EOF if we just read again later?
-				// Actually, once EOF is hit, Read returns EOF.
-				// We need to seek? No, just Read again if file grew?
-				// Actually, standard file read returns EOF.
-				// We might need to check file size or just ignore EOF and sleep.
+				// Check if process is still running
+				state.mu.Lock()
+				done := state.ExitCode != nil
+				state.mu.Unlock()
+				if done {
+					// If done and EOF, we are finished
+					return nil
+				}
+				// Else wait for more logs
 				continue
 			}
 			if err != nil {
@@ -292,8 +376,13 @@ func (r *FirecrackerRuntime) Allocation(ctx context.Context) (domain.ResourceCap
 
 	r.vms.Range(func(key, value any) bool {
 		state := value.(*vmState)
-		cpu += domain.MilliCPU(state.Config.CPUs * 1000)
-		mem += domain.Megabytes(state.Config.MemoryMB)
+		// Only count running VMs?
+		state.mu.Lock()
+		if state.ExitCode == nil {
+			cpu += domain.MilliCPU(state.Config.CPUs * 1000)
+			mem += domain.Megabytes(state.Config.MemoryMB)
+		}
+		state.mu.Unlock()
 		return true
 	})
 
@@ -302,4 +391,42 @@ func (r *FirecrackerRuntime) Allocation(ctx context.Context) (domain.ResourceCap
 		Mem: mem,
 		GPU: 0,
 	}, nil
+}
+
+func (r *FirecrackerRuntime) Wait(ctx context.Context, id domain.SandboxID) error {
+	val, ok := r.vms.Load(id)
+	if !ok {
+		return fmt.Errorf("sandbox not found: %s", id)
+	}
+	state := val.(*vmState)
+
+	// Wait for the VM to exit.
+	err := state.Machine.Wait(ctx)
+
+	// Capture exit code
+	state.mu.Lock()
+	defer state.mu.Unlock()
+
+	if state.Cmd.ProcessState != nil {
+		code := state.Cmd.ProcessState.ExitCode()
+		state.ExitCode = &code
+	} else {
+		// Should not happen if Wait returned?
+		// Unless Wait returned error before process started?
+		// Or if Wait doesn't populate ProcessState?
+		// exec.Cmd.Wait() populates ProcessState.
+		// firecracker-go-sdk Machine.Wait() calls cmd.Wait().
+		// So it should be there.
+		// If err != nil, it might still be there.
+		if state.Cmd.ProcessState != nil {
+			code := state.Cmd.ProcessState.ExitCode()
+			state.ExitCode = &code
+		} else {
+			// Fallback
+			c := -1
+			state.ExitCode = &c
+		}
+	}
+
+	return err
 }
