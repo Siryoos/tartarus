@@ -3,6 +3,7 @@ package tartarus
 import (
 	"context"
 	"io"
+	"net/netip"
 
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
 )
@@ -26,6 +27,9 @@ type VMConfig struct {
 	Snapshot  domain.SnapshotRef
 	OverlayFS string // mount path for Lethe overlay
 	TapDevice string // Styx-provided TAP name
+	IP        netip.Addr
+	Gateway   netip.Addr
+	CIDR      netip.Prefix
 	CPUs      int
 	MemoryMB  int
 }

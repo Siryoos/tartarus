@@ -39,20 +39,20 @@ func NewHostGateway(bridgeName string, cidr netip.Prefix) (Gateway, error) {
 	}, nil
 }
 
-func (g *hostGateway) Attach(ctx context.Context, sandboxID domain.SandboxID, contract *Contract) (string, netip.Addr, error) {
+func (g *hostGateway) Attach(ctx context.Context, sandboxID domain.SandboxID, contract *Contract) (string, netip.Addr, netip.Addr, netip.Prefix, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	// 1. Ensure Bridge Exists
 	br, err := g.ensureBridge()
 	if err != nil {
-		return "", netip.Addr{}, fmt.Errorf("failed to ensure bridge %s: %w", g.bridgeName, err)
+		return "", netip.Addr{}, netip.Addr{}, netip.Prefix{}, fmt.Errorf("failed to ensure bridge %s: %w", g.bridgeName, err)
 	}
 
 	// 2. Allocate IP
 	ip, err := g.allocateIP(sandboxID)
 	if err != nil {
-		return "", netip.Addr{}, fmt.Errorf("failed to allocate IP for sandbox %s: %w", sandboxID, err)
+		return "", netip.Addr{}, netip.Addr{}, netip.Prefix{}, fmt.Errorf("failed to allocate IP for sandbox %s: %w", sandboxID, err)
 	}
 
 	// 3. Create TAP
@@ -61,7 +61,7 @@ func (g *hostGateway) Attach(ctx context.Context, sandboxID domain.SandboxID, co
 	if err != nil {
 		// Rollback IP allocation
 		delete(g.allocations, sandboxID)
-		return "", netip.Addr{}, fmt.Errorf("failed to create TAP %s: %w", tapName, err)
+		return "", netip.Addr{}, netip.Addr{}, netip.Prefix{}, fmt.Errorf("failed to create TAP %s: %w", tapName, err)
 	}
 
 	// 4. Attach TAP to Bridge
@@ -69,17 +69,29 @@ func (g *hostGateway) Attach(ctx context.Context, sandboxID domain.SandboxID, co
 		// Rollback
 		_ = netlink.LinkDel(tap)
 		delete(g.allocations, sandboxID)
-		return "", netip.Addr{}, fmt.Errorf("failed to attach TAP %s to bridge %s: %w", tapName, g.bridgeName, err)
+		return "", netip.Addr{}, netip.Addr{}, netip.Prefix{}, fmt.Errorf("failed to attach TAP %s to bridge %s: %w", tapName, g.bridgeName, err)
 	}
 
-	// 5. Configure iptables
+	// 5. Configure iptables (Global NAT/Forwarding)
 	if err := g.ensureIptablesRules(); err != nil {
-		// We don't strictly rollback here as rules are global/idempotent, but it's an error.
-		// For strict correctness we might want to warn, but let's return error.
-		return "", netip.Addr{}, fmt.Errorf("failed to configure iptables: %w", err)
+		return "", netip.Addr{}, netip.Addr{}, netip.Prefix{}, fmt.Errorf("failed to configure iptables: %w", err)
 	}
 
-	return tapName, ip, nil
+	// 6. Enforce Contract (Per-Sandbox Rules)
+	if err := g.enforceContract(tapName, contract); err != nil {
+		// Rollback
+		_ = netlink.LinkDel(tap)
+		delete(g.allocations, sandboxID)
+		return "", netip.Addr{}, netip.Addr{}, netip.Prefix{}, fmt.Errorf("failed to enforce contract: %w", err)
+	}
+
+	// Gateway IP is the bridge IP (first IP in CIDR, usually .1)
+	// We derived it in ensureBridgeIP as .1
+	// Let's recalculate it or store it.
+	// For now, recalculate:
+	gatewayIP := g.bridgeCIDR.Addr().Next()
+
+	return tapName, ip, gatewayIP, g.bridgeCIDR, nil
 }
 
 func (g *hostGateway) Detach(ctx context.Context, sandboxID domain.SandboxID) error {
@@ -319,6 +331,51 @@ func (g *hostGateway) ensureIptablesRules() error {
 	if !exists {
 		if err := g.ipt.Append("filter", "FORWARD", "-o", g.bridgeName, "-j", "ACCEPT"); err != nil {
 			return err
+		}
+	}
+
+	return nil
+}
+
+func (g *hostGateway) enforceContract(tapName string, contract *Contract) error {
+	if contract == nil {
+		return nil
+	}
+
+	// We use the FORWARD chain to control traffic from the TAP interface.
+	// iptables -A FORWARD -i <tapName> ...
+
+	// 1. Deny Metadata (169.254.169.254)
+	if contract.DenyMetadata {
+		if err := g.ipt.Insert("filter", "FORWARD", 1, "-i", tapName, "-d", "169.254.169.254/32", "-j", "DROP"); err != nil {
+			return fmt.Errorf("failed to deny metadata: %w", err)
+		}
+	}
+
+	// 2. Deny Private Networks (RFC1918)
+	if contract.DenyPrivate {
+		privateNets := []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"}
+		for _, net := range privateNets {
+			// But we must allow traffic to the allowed CIDRs if they overlap.
+			// iptables rules are first-match wins.
+			// So we should put ALLOW rules before DENY rules.
+			// However, here we are inserting at the top (pos 1).
+			// So if we insert DENY first, then ALLOW, the ALLOW will be at pos 1, and DENY at pos 2.
+			// So:
+			// 1. Insert DENY Private
+			// 2. Insert ALLOW Specific
+
+			if err := g.ipt.Insert("filter", "FORWARD", 1, "-i", tapName, "-d", net, "-j", "DROP"); err != nil {
+				return fmt.Errorf("failed to deny private net %s: %w", net, err)
+			}
+		}
+	}
+
+	// 3. Allow Specific CIDRs
+	// These should override DenyPrivate, so we insert them AFTER DenyPrivate (which pushes them to the top).
+	for _, cidr := range contract.AllowedCIDRs {
+		if err := g.ipt.Insert("filter", "FORWARD", 1, "-i", tapName, "-d", cidr.String(), "-j", "ACCEPT"); err != nil {
+			return fmt.Errorf("failed to allow cidr %s: %w", cidr, err)
 		}
 	}
 

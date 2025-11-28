@@ -24,8 +24,8 @@ func NewHostGateway(bridgeName string, cidr netip.Prefix) (Gateway, error) {
 	}, nil
 }
 
-func (g *hostGateway) Attach(ctx context.Context, sandboxID domain.SandboxID, contract *Contract) (string, netip.Addr, error) {
-	return "", netip.Addr{}, fmt.Errorf("host gateway not supported on non-Linux platforms")
+func (g *hostGateway) Attach(ctx context.Context, sandboxID domain.SandboxID, contract *Contract) (string, netip.Addr, netip.Addr, netip.Prefix, error) {
+	return "", netip.Addr{}, netip.Addr{}, netip.Prefix{}, fmt.Errorf("host gateway not supported on non-Linux platforms")
 }
 
 func (g *hostGateway) Detach(ctx context.Context, sandboxID domain.SandboxID) error {

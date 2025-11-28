@@ -19,6 +19,6 @@ type Contract struct {
 // Gateway is Styx: configures TAP devices + firewall rules for each sandbox.
 
 type Gateway interface {
-	Attach(ctx context.Context, sandboxID domain.SandboxID, contract *Contract) (tapName string, ip netip.Addr, err error)
+	Attach(ctx context.Context, sandboxID domain.SandboxID, contract *Contract) (tapName string, ip netip.Addr, gateway netip.Addr, cidr netip.Prefix, err error)
 	Detach(ctx context.Context, sandboxID domain.SandboxID) error
 }

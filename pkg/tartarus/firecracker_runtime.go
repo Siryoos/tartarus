@@ -96,6 +96,24 @@ func (r *FirecrackerRuntime) Launch(ctx context.Context, req *domain.SandboxRequ
 		// Build the shell script
 		var scriptBuilder strings.Builder
 
+		// 0. Configure Network (if provided)
+		if cfg.IP.IsValid() {
+			// ip addr add <IP>/<MASK> dev eth0
+			// ip link set eth0 up
+			// ip route add default via <GATEWAY>
+
+			// Calculate mask from CIDR
+			// cfg.CIDR is the network prefix, e.g. 10.200.0.0/16
+			// We want the mask bits from it.
+			bits := cfg.CIDR.Bits()
+
+			scriptBuilder.WriteString(fmt.Sprintf("ip addr add %s/%d dev eth0; ", cfg.IP, bits))
+			scriptBuilder.WriteString("ip link set eth0 up; ")
+			if cfg.Gateway.IsValid() {
+				scriptBuilder.WriteString(fmt.Sprintf("ip route add default via %s; ", cfg.Gateway))
+			}
+		}
+
 		// 1. Export Environment Variables
 		for k, v := range req.Env {
 			// Simple escaping for single quotes

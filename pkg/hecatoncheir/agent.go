@@ -81,7 +81,7 @@ func (a *Agent) Run(ctx context.Context) error {
 			contract := &styx.Contract{
 				ID: req.NetworkRef.ID,
 			}
-			tapName, _, err := a.Styx.Attach(ctx, req.ID, contract)
+			tapName, ip, gateway, cidr, err := a.Styx.Attach(ctx, req.ID, contract)
 			if err != nil {
 				a.Logger.Error(ctx, "Failed to attach network", map[string]any{"error": err})
 				a.Lethe.Destroy(ctx, overlay)
@@ -97,6 +97,9 @@ func (a *Agent) Run(ctx context.Context) error {
 				},
 				OverlayFS: overlay.MountPath,
 				TapDevice: tapName,
+				IP:        ip,
+				Gateway:   gateway,
+				CIDR:      cidr,
 				CPUs:      int(req.Resources.CPU),
 				MemoryMB:  int(req.Resources.Mem),
 			}
