@@ -42,6 +42,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Node Identity
+	nodeID := domain.NodeID("node-" + cfg.Region + "-1")
+
 	// Adapters
 	var queue acheron.Queue
 	redisAddr := os.Getenv("REDIS_ADDR")
@@ -56,8 +59,10 @@ func main() {
 		if redisKey == "" {
 			redisKey = "tartarus:queue"
 		}
+		// Append NodeID to key for per-node queue
+		redisKey = fmt.Sprintf("%s:%s", redisKey, nodeID)
 
-		rq, err := acheron.NewRedisQueue(redisAddr, redisDB, redisKey)
+		rq, err := acheron.NewRedisQueue(redisAddr, redisDB, redisKey, false)
 		if err != nil {
 			logger.Error("Failed to initialize Redis queue", "error", err)
 			os.Exit(1)
@@ -173,7 +178,7 @@ func main() {
 	judgeChain := &judges.Chain{}
 
 	agent := &hecatoncheir.Agent{
-		NodeID:     domain.NodeID("node-" + cfg.Region + "-1"),
+		NodeID:     nodeID,
 		Runtime:    runtime,
 		Nyx:        nyxManager,
 		Lethe:      lethePool,

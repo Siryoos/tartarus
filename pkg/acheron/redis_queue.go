@@ -11,11 +11,12 @@ import (
 )
 
 type RedisQueue struct {
-	client *redis.Client
-	key    string
+	client  *redis.Client
+	key     string
+	routing bool
 }
 
-func NewRedisQueue(addr string, db int, key string) (*RedisQueue, error) {
+func NewRedisQueue(addr string, db int, key string, routing bool) (*RedisQueue, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr: addr,
 		DB:   db,
@@ -29,8 +30,9 @@ func NewRedisQueue(addr string, db int, key string) (*RedisQueue, error) {
 	}
 
 	return &RedisQueue{
-		client: client,
-		key:    key,
+		client:  client,
+		key:     key,
+		routing: routing,
 	}, nil
 }
 
@@ -40,7 +42,12 @@ func (q *RedisQueue) Enqueue(ctx context.Context, req *domain.SandboxRequest) er
 		return fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	if err := q.client.RPush(ctx, q.key, data).Err(); err != nil {
+	targetKey := q.key
+	if q.routing && req.NodeID != "" {
+		targetKey = fmt.Sprintf("%s:%s", q.key, req.NodeID)
+	}
+
+	if err := q.client.RPush(ctx, targetKey, data).Err(); err != nil {
 		return fmt.Errorf("failed to enqueue request: %w", err)
 	}
 

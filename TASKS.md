@@ -2,7 +2,7 @@
 
 ## Core platform gaps (target: first release)
 - [x] Use Redis-backed Hades registry in the Hecatoncheir agent and send real heartbeats with allocations so Olympus can see nodes across processes.
-- [ ] Drive scheduling from Olympus: list nodes, pick via `pkg/moirai`, persist placement/run IDs, and route enqueue/control messages to the chosen agent (per-node queues or routing metadata).
+- [x] Drive scheduling from Olympus: list nodes, pick via `pkg/moirai`, persist placement/run IDs, and route enqueue/control messages to the chosen agent (per-node queues or routing metadata).
 - [ ] Provide template + policy management so Nyx can prepare snapshots (kernel/rootfs paths) and Themis stores policies; expose basic APIs/fixtures for default templates.
 - [ ] Repair snapshot/overlay pipeline: align Nyx snapshot paths with on-disk `.mem`/`.disk`, make Lethe create usable writable layers, and clean up overlays when runs end.
 - [ ] Make the Firecracker runtime boot user workloads: wire command/env into VM boot, ensure rootfs uses overlay, capture guest stdout/stderr for log streaming, and return exit codes; keep Mock runtime only for tests.

@@ -92,7 +92,32 @@ func (m *Manager) Submit(ctx context.Context, req *domain.SandboxRequest) error 
 	// 5) Persistence (Optional/Future)
 	// TODO: Persist request state to Hades/Redis
 
-	// 6) Enqueue into Acheron
+	// 6) Scheduling
+	nodes, err := m.Hades.ListNodes(ctx)
+	if err != nil {
+		m.Logger.Error(ctx, "Failed to list nodes for scheduling", map[string]any{
+			"sandbox_id": req.ID,
+			"error":      err,
+		})
+		return fmt.Errorf("failed to list nodes: %w", err)
+	}
+
+	nodeID, err := m.Scheduler.ChooseNode(ctx, req, nodes)
+	if err != nil {
+		m.Logger.Error(ctx, "Failed to schedule sandbox", map[string]any{
+			"sandbox_id": req.ID,
+			"error":      err,
+		})
+		return fmt.Errorf("failed to schedule sandbox: %w", err)
+	}
+	req.NodeID = nodeID
+
+	m.Logger.Info(ctx, "Scheduled sandbox", map[string]any{
+		"sandbox_id": req.ID,
+		"node_id":    nodeID,
+	})
+
+	// 7) Enqueue into Acheron
 	if err := m.Queue.Enqueue(ctx, req); err != nil {
 		m.Logger.Error(ctx, "Failed to enqueue request", map[string]any{
 			"sandbox_id": req.ID,
