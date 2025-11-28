@@ -24,17 +24,24 @@ func (r *RedisControlPlane) Kill(ctx context.Context, nodeID domain.NodeID, sand
 }
 
 func (r *RedisControlPlane) StreamLogs(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID, w io.Writer) error {
-	// 1. Trigger agent to start streaming
+	// 1. Subscribe to logs FIRST to avoid race condition
+	logsTopic := fmt.Sprintf("tartarus:logs:%s", sandboxID)
+	pubsub := r.client.Subscribe(ctx, logsTopic)
+	// Verify subscription
+	if _, err := pubsub.Receive(ctx); err != nil {
+		pubsub.Close()
+		return err
+	}
+	defer pubsub.Close()
+
+	// 2. Trigger agent to start streaming
 	controlTopic := fmt.Sprintf("tartarus:control:%s", nodeID)
 	msg := fmt.Sprintf("LOGS %s", sandboxID)
 	if err := r.client.Publish(ctx, controlTopic, msg).Err(); err != nil {
 		return err
 	}
 
-	// 2. Subscribe to logs
-	logsTopic := fmt.Sprintf("tartarus:logs:%s", sandboxID)
-	pubsub := r.client.Subscribe(ctx, logsTopic)
-	defer pubsub.Close()
+	// 3. Stream logs to writer
 
 	ch := pubsub.Channel()
 

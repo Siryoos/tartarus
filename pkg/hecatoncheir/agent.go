@@ -3,6 +3,7 @@ package hecatoncheir
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"time"
 
 	"strings"
@@ -36,6 +37,7 @@ type Agent struct {
 	Queue      acheron.Queue
 	Registry   hades.Registry
 	DeadLetter cocytus.Sink
+	Control    ControlListener
 	Metrics    hermes.Metrics
 	Logger     hermes.Logger
 }
@@ -48,6 +50,16 @@ func (a *Agent) Run(ctx context.Context) error {
 	if err := a.Reconcile(ctx); err != nil {
 		a.Logger.Error(ctx, "Reconciliation failed", map[string]any{"error": err})
 		// We continue even if reconciliation fails, but logging is critical
+	}
+
+	// Start Control Loop
+	if a.Control != nil {
+		controlCh, err := a.Control.Listen(ctx)
+		if err != nil {
+			a.Logger.Error(ctx, "Failed to start control listener", map[string]any{"error": err})
+		} else {
+			go a.controlLoop(ctx, controlCh)
+		}
 	}
 
 	for {
@@ -253,4 +265,55 @@ func (a *Agent) Reconcile(ctx context.Context) error {
 
 	a.Logger.Info(ctx, "Reconciliation complete", nil)
 	return nil
+}
+
+func (a *Agent) controlLoop(ctx context.Context, ch <-chan ControlMessage) {
+	a.Logger.Info(ctx, "Control loop started", nil)
+	for msg := range ch {
+		a.Logger.Info(ctx, "Received control message", map[string]any{"type": msg.Type, "sandbox_id": msg.SandboxID})
+
+		switch msg.Type {
+		case ControlMessageKill:
+			if err := a.Runtime.Kill(ctx, msg.SandboxID); err != nil {
+				a.Logger.Error(ctx, "Failed to kill sandbox", map[string]any{"sandbox_id": msg.SandboxID, "error": err})
+			} else {
+				a.Logger.Info(ctx, "Killed sandbox", map[string]any{"sandbox_id": msg.SandboxID})
+			}
+		case ControlMessageLogs:
+			go a.streamLogs(ctx, msg.SandboxID)
+		}
+	}
+}
+
+func (a *Agent) streamLogs(ctx context.Context, id domain.SandboxID) {
+	// Create a pipe to read logs from runtime and write to Redis
+	r, w := io.Pipe()
+
+	// Goroutine to publish to Redis
+	go func() {
+		defer r.Close()
+		buf := make([]byte, 4096)
+		for {
+			n, err := r.Read(buf)
+			if n > 0 {
+				if pErr := a.Control.PublishLogs(ctx, id, buf[:n]); pErr != nil {
+					a.Logger.Error(ctx, "Failed to publish logs", map[string]any{"sandbox_id": id, "error": pErr})
+					// If we can't publish, maybe we should stop?
+					// For now, just log error and continue
+				}
+			}
+			if err != nil {
+				if err != io.EOF {
+					a.Logger.Error(ctx, "Error reading logs", map[string]any{"sandbox_id": id, "error": err})
+				}
+				return
+			}
+		}
+	}()
+
+	// Stream from Runtime to Pipe Writer
+	if err := a.Runtime.StreamLogs(ctx, id, w); err != nil {
+		a.Logger.Error(ctx, "Failed to stream logs from runtime", map[string]any{"sandbox_id": id, "error": err})
+	}
+	w.Close()
 }

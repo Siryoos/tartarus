@@ -1,0 +1,97 @@
+package hecatoncheir
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/redis/go-redis/v9"
+	"github.com/tartarus-sandbox/tartarus/pkg/domain"
+)
+
+// ControlMessageType defines the type of control message.
+type ControlMessageType string
+
+const (
+	ControlMessageKill ControlMessageType = "KILL"
+	ControlMessageLogs ControlMessageType = "LOGS"
+)
+
+// ControlMessage is a command sent to the agent.
+type ControlMessage struct {
+	Type      ControlMessageType
+	SandboxID domain.SandboxID
+}
+
+// ControlListener listens for control messages.
+type ControlListener interface {
+	// Listen returns a channel of control messages.
+	Listen(ctx context.Context) (<-chan ControlMessage, error)
+	// PublishLogs publishes log chunks to a topic.
+	PublishLogs(ctx context.Context, sandboxID domain.SandboxID, logs []byte) error
+}
+
+// RedisControlListener implements ControlListener using Redis Pub/Sub.
+type RedisControlListener struct {
+	client *redis.Client
+	nodeID domain.NodeID
+}
+
+// NewRedisControlListener creates a new RedisControlListener.
+func NewRedisControlListener(client *redis.Client, nodeID domain.NodeID) *RedisControlListener {
+	return &RedisControlListener{
+		client: client,
+		nodeID: nodeID,
+	}
+}
+
+// Listen subscribes to the node's control topic and returns a channel of messages.
+func (r *RedisControlListener) Listen(ctx context.Context) (<-chan ControlMessage, error) {
+	topic := fmt.Sprintf("tartarus:control:%s", r.nodeID)
+	pubsub := r.client.Subscribe(ctx, topic)
+
+	// Verify connection
+	if _, err := pubsub.Receive(ctx); err != nil {
+		return nil, err
+	}
+
+	ch := make(chan ControlMessage)
+
+	go func() {
+		defer close(ch)
+		defer pubsub.Close()
+
+		redisCh := pubsub.Channel()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case msg, ok := <-redisCh:
+				if !ok {
+					return
+				}
+				// Parse message: "TYPE SANDBOX_ID"
+				parts := strings.SplitN(msg.Payload, " ", 2)
+				if len(parts) != 2 {
+					continue
+				}
+
+				cmdType := ControlMessageType(parts[0])
+				sandboxID := domain.SandboxID(parts[1])
+
+				ch <- ControlMessage{
+					Type:      cmdType,
+					SandboxID: sandboxID,
+				}
+			}
+		}
+	}()
+
+	return ch, nil
+}
+
+// PublishLogs publishes log chunks to the sandbox's log topic.
+func (r *RedisControlListener) PublishLogs(ctx context.Context, sandboxID domain.SandboxID, logs []byte) error {
+	topic := fmt.Sprintf("tartarus:logs:%s", sandboxID)
+	return r.client.Publish(ctx, topic, logs).Err()
+}

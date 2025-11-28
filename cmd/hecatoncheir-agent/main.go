@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -177,6 +176,13 @@ func main() {
 	// Judges
 	judgeChain := &judges.Chain{}
 
+	// Control Listener
+	var controlListener hecatoncheir.ControlListener
+	if rdb != nil {
+		controlListener = hecatoncheir.NewRedisControlListener(rdb, nodeID)
+		logger.Info("Enabled Redis control listener")
+	}
+
 	agent := &hecatoncheir.Agent{
 		NodeID:     nodeID,
 		Runtime:    runtime,
@@ -188,6 +194,7 @@ func main() {
 		Queue:      queue,
 		Registry:   registry,
 		DeadLetter: cocytusSink,
+		Control:    controlListener,
 		Metrics:    metrics,
 		Logger:     hermesLogger,
 	}
@@ -201,11 +208,6 @@ func main() {
 			logger.Error("Agent loop failed", "error", err)
 		}
 	}()
-
-	// Start Control Loop
-	if rdb != nil {
-		go watchControl(ctx, rdb, agent.NodeID, runtime, logger)
-	}
 
 	// Heartbeat Ticker
 	go func() {
@@ -285,70 +287,4 @@ func main() {
 	<-quit
 
 	logger.Info("Shutting down agent...")
-}
-
-func watchControl(ctx context.Context, rdb *redis.Client, nodeID domain.NodeID, runtime tartarus.SandboxRuntime, logger *slog.Logger) {
-	topic := fmt.Sprintf("tartarus:control:%s", nodeID)
-	pubsub := rdb.Subscribe(ctx, topic)
-	defer pubsub.Close()
-
-	ch := pubsub.Channel()
-	logger.Info("Listening for control messages", "topic", topic)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case msg := <-ch:
-			parts := strings.Split(msg.Payload, " ")
-			if len(parts) < 2 {
-				continue
-			}
-			cmd := parts[0]
-			arg := parts[1]
-
-			switch cmd {
-			case "KILL":
-				logger.Info("Received KILL command", "id", arg)
-				if err := runtime.Kill(ctx, domain.SandboxID(arg)); err != nil {
-					logger.Error("Failed to kill sandbox", "id", arg, "error", err)
-				}
-			case "LOGS":
-				logger.Info("Received LOGS command", "id", arg)
-				go streamLogsToRedis(ctx, rdb, runtime, domain.SandboxID(arg), logger)
-			}
-		}
-	}
-}
-
-func streamLogsToRedis(ctx context.Context, rdb *redis.Client, runtime tartarus.SandboxRuntime, id domain.SandboxID, logger *slog.Logger) {
-	topic := fmt.Sprintf("tartarus:logs:%s", id)
-	writer := &redisLogWriter{
-		ctx:   ctx,
-		rdb:   rdb,
-		topic: topic,
-	}
-
-	logger.Info("Streaming logs to Redis", "topic", topic)
-	if err := runtime.StreamLogs(ctx, id, writer); err != nil {
-		logger.Error("Log streaming ended", "id", id, "error", err)
-	}
-}
-
-type redisLogWriter struct {
-	ctx   context.Context
-	rdb   *redis.Client
-	topic string
-}
-
-func (w *redisLogWriter) Write(p []byte) (n int, err error) {
-	if len(p) == 0 {
-		return 0, nil
-	}
-	// Publish to Redis
-	err = w.rdb.Publish(w.ctx, w.topic, p).Err()
-	if err != nil {
-		return 0, err
-	}
-	return len(p), nil
 }
