@@ -4,6 +4,11 @@ import (
 	"context"
 	"time"
 
+	"strings"
+
+	"github.com/shirou/gopsutil/v3/process"
+	"github.com/vishvananda/netlink"
+
 	"github.com/tartarus-sandbox/tartarus/pkg/acheron"
 	"github.com/tartarus-sandbox/tartarus/pkg/cocytus"
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
@@ -36,6 +41,12 @@ type Agent struct {
 
 func (a *Agent) Run(ctx context.Context) error {
 	a.Logger.Info(ctx, "Agent starting", nil)
+
+	if err := a.Reconcile(ctx); err != nil {
+		a.Logger.Error(ctx, "Reconciliation failed", map[string]any{"error": err})
+		// We continue even if reconciliation fails, but logging is critical
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -101,4 +112,56 @@ func (a *Agent) Run(ctx context.Context) error {
 			a.Logger.Info(ctx, "Sandbox launched", map[string]any{"run_id": run.ID})
 		}
 	}
+}
+
+// Reconcile cleans up zombie processes and network interfaces from previous runs.
+func (a *Agent) Reconcile(ctx context.Context) error {
+	a.Logger.Info(ctx, "Starting reconciliation", nil)
+
+	// 1. Network Cleanup
+	links, err := netlink.LinkList()
+	if err != nil {
+		return err
+	}
+
+	for _, link := range links {
+		name := link.Attrs().Name
+		if strings.HasPrefix(name, "tap-tartarus-") {
+			a.Logger.Info(ctx, "Cleaning up zombie interface", map[string]any{"interface": name})
+			if err := netlink.LinkDel(link); err != nil {
+				a.Logger.Error(ctx, "Failed to delete zombie interface", map[string]any{"interface": name, "error": err})
+			}
+		}
+	}
+
+	// 2. Process Cleanup
+	procs, err := process.Processes()
+	if err != nil {
+		return err
+	}
+
+	for _, p := range procs {
+		name, err := p.Name()
+		if err != nil {
+			continue
+		}
+
+		if name == "firecracker" {
+			cmdline, err := p.Cmdline()
+			if err != nil {
+				continue
+			}
+
+			if strings.Contains(cmdline, "tartarus") {
+				pid := p.Pid
+				a.Logger.Info(ctx, "Killing zombie firecracker process", map[string]any{"pid": pid})
+				if err := p.Kill(); err != nil {
+					a.Logger.Error(ctx, "Failed to kill zombie process", map[string]any{"pid": pid, "error": err})
+				}
+			}
+		}
+	}
+
+	a.Logger.Info(ctx, "Reconciliation complete", nil)
+	return nil
 }

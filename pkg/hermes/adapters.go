@@ -41,3 +41,12 @@ func NewNoopMetrics() *NoopMetrics {
 func (m *NoopMetrics) IncCounter(name string, value float64, labels ...Label)       {}
 func (m *NoopMetrics) ObserveHistogram(name string, value float64, labels ...Label) {}
 func (m *NoopMetrics) SetGauge(name string, value float64, labels ...Label)         {}
+
+type NoopLogger struct{}
+
+func NewNoopLogger() *NoopLogger {
+	return &NoopLogger{}
+}
+
+func (l *NoopLogger) Info(ctx context.Context, msg string, fields map[string]any)  {}
+func (l *NoopLogger) Error(ctx context.Context, msg string, fields map[string]any) {}

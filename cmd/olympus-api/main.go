@@ -19,6 +19,7 @@ import (
 	"github.com/tartarus-sandbox/tartarus/pkg/hades"
 	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
 	"github.com/tartarus-sandbox/tartarus/pkg/judges"
+	"github.com/tartarus-sandbox/tartarus/pkg/moirai"
 	"github.com/tartarus-sandbox/tartarus/pkg/olympus"
 	"github.com/tartarus-sandbox/tartarus/pkg/themis"
 )
@@ -89,9 +90,10 @@ func main() {
 		logger.Info("Using local store", "path", cfg.SnapshotPath)
 	}
 	_ = store // Silence unused variable error
-	scheduler := olympus.NewMemoryScheduler(logger)
+	_ = store // Silence unused variable error
 	metrics := hermes.NewNoopMetrics()
 	hermesLogger := hermes.NewSlogAdapter()
+	scheduler := moirai.NewLeastLoadedScheduler(hermesLogger)
 
 	// Policy repository
 	policyRepo := themis.NewMemoryRepo()
