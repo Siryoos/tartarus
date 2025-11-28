@@ -55,7 +55,8 @@ type NetworkPolicyRef struct {
 type SandboxRequest struct {
 	ID         SandboxID         `json:"id"`
 	Template   TemplateID        `json:"template"`
-	NodeID     NodeID            `json:"node_id,omitempty"` // Scheduled node
+	NodeID     NodeID            `json:"node_id,omitempty"`    // Scheduled node
+	HeatLevel  string            `json:"heat_level,omitempty"` // Phlegethon heat classification
 	Command    []string          `json:"command"`
 	Args       []string          `json:"args"`
 	Env        map[string]string `json:"env"`

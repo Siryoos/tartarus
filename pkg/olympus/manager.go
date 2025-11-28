@@ -13,6 +13,7 @@ import (
 	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
 	"github.com/tartarus-sandbox/tartarus/pkg/judges"
 	"github.com/tartarus-sandbox/tartarus/pkg/moirai"
+	"github.com/tartarus-sandbox/tartarus/pkg/phlegethon"
 	"github.com/tartarus-sandbox/tartarus/pkg/themis"
 )
 
@@ -22,15 +23,16 @@ var ErrSandboxNotFound = errors.New("sandbox not found")
 // Manager is Olympus: front-door for users, back-door to Hades and Acheron.
 
 type Manager struct {
-	Queue     acheron.Queue
-	Hades     hades.Registry
-	Policies  themis.Repository
-	Templates TemplateManager
-	Judges    *judges.Chain
-	Scheduler moirai.Scheduler
-	Control   ControlPlane
-	Metrics   hermes.Metrics
-	Logger    hermes.Logger
+	Queue      acheron.Queue
+	Hades      hades.Registry
+	Policies   themis.Repository
+	Templates  TemplateManager
+	Judges     *judges.Chain
+	Scheduler  moirai.Scheduler
+	Phlegethon *phlegethon.HeatClassifier
+	Control    ControlPlane
+	Metrics    hermes.Metrics
+	Logger     hermes.Logger
 }
 
 // Submit enqueues a new sandbox request after validation and policy checks.
@@ -134,7 +136,36 @@ func (m *Manager) Submit(ctx context.Context, req *domain.SandboxRequest) error 
 		return fmt.Errorf("failed to persist run state: %w", err)
 	}
 
-	// 7) Scheduling
+	// 7) Heat Classification
+	if m.Phlegethon != nil {
+		// Map domain.SandboxRequest to phlegethon.SandboxRequest
+		phlegReq := &phlegethon.SandboxRequest{
+			TemplateID:  string(req.Template),
+			MaxDuration: req.Resources.TTL,
+			CPUCores:    int(req.Resources.CPU / 1000), // Convert milliCPU to cores
+			MemoryMB:    int(req.Resources.Mem),
+		}
+
+		// Check for explicit heat hint in metadata
+		if req.Metadata != nil {
+			if heatHint := req.Metadata["heat_hint"]; heatHint != "" {
+				phlegReq.HeatHint = phlegethon.HeatLevel(heatHint)
+			}
+		}
+
+		heatLevel := m.Phlegethon.Classify(phlegReq)
+		req.HeatLevel = string(heatLevel)
+
+		m.Logger.Info(ctx, "Classified workload heat", map[string]any{
+			"sandbox_id": req.ID,
+			"heat_level": heatLevel,
+			"cpu_cores":  phlegReq.CPUCores,
+			"memory_mb":  phlegReq.MemoryMB,
+			"ttl":        phlegReq.MaxDuration,
+		})
+	}
+
+	// 8) Scheduling
 	nodes, err := m.Hades.ListNodes(ctx)
 	if err != nil {
 		m.Logger.Error(ctx, "Failed to list nodes for scheduling", map[string]any{

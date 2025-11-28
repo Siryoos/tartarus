@@ -24,6 +24,7 @@ import (
 	"github.com/tartarus-sandbox/tartarus/pkg/judges"
 	"github.com/tartarus-sandbox/tartarus/pkg/moirai"
 	"github.com/tartarus-sandbox/tartarus/pkg/olympus"
+	"github.com/tartarus-sandbox/tartarus/pkg/phlegethon"
 	"github.com/tartarus-sandbox/tartarus/pkg/themis"
 )
 
@@ -192,16 +193,22 @@ func main() {
 		Pre: []judges.PreJudge{aeacusJudge, resourceJudge, networkJudge},
 	}
 
+	// Phlegethon Heat Classifier
+	heatClassifier := phlegethon.NewHeatClassifier()
+	// Add template hints if needed (could be loaded from config in the future)
+	// heatClassifier.AddHint("gpu-training", phlegethon.HeatInferno)
+
 	manager := &olympus.Manager{
-		Queue:     queue,
-		Hades:     registry,
-		Policies:  policyRepo,
-		Templates: templateManager,
-		Judges:    judgeChain,
-		Scheduler: scheduler,
-		Control:   control,
-		Metrics:   metrics,
-		Logger:    hermesLogger,
+		Queue:      queue,
+		Hades:      registry,
+		Policies:   policyRepo,
+		Templates:  templateManager,
+		Judges:     judgeChain,
+		Scheduler:  scheduler,
+		Phlegethon: heatClassifier,
+		Control:    control,
+		Metrics:    metrics,
+		Logger:     hermesLogger,
 	}
 
 	mux := http.NewServeMux()
