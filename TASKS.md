@@ -6,7 +6,7 @@ Context: ROADMAP.md marks Phase 3 as in progress, and code review shows componen
 - [x] Phlegethon heat routing into Olympus (`pkg/olympus/manager.go`, `pkg/phlegethon`)
   - Current: Manager bypasses Phlegethon and calls `Scheduler.ChooseNode` directly.
   - DoD: Call `Phlegethon.ClassifyHeat(req)` before scheduling; pass heat level to Moirai; add tests showing heat-aware placement.
-- [ ] Quarantine enforcement (Typhon) (`pkg/olympus/manager.go`, `pkg/moirai`)
+- [x] Quarantine enforcement (Typhon) (`pkg/olympus/manager.go`, `pkg/moirai`)
   - Current: VerdictQuarantine sets `req.Metadata["quarantine"]=true` but scheduler ignores it; Typhon manager is in-memory only.
   - DoD: Scheduler must route quarantine jobs only to nodes labeled for Typhon (or reject if none); add tests for quarantine anti-affinity and fallback behavior.
 - [ ] Aeacus audit judge wiring (`cmd/olympus-api/main.go`, `pkg/judges`)

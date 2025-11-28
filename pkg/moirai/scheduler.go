@@ -10,6 +10,7 @@ import (
 )
 
 var ErrNoCapacity = errors.New("no nodes with sufficient capacity found")
+var ErrNoTyphonNodes = errors.New("no typhon nodes available for quarantine workload")
 
 // Scheduler chooses the fate of each sandbox: which node will host it.
 

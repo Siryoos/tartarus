@@ -41,3 +41,24 @@ func CheckAffinity(req *domain.SandboxRequest, node domain.NodeStatus) bool {
 
 	return true
 }
+
+// IsQuarantineRequest checks if the request requires quarantine isolation.
+// A request is considered quarantined if it has metadata["quarantine"]="true".
+func IsQuarantineRequest(req *domain.SandboxRequest) bool {
+	if req.Metadata == nil {
+		return false
+	}
+	return req.Metadata["quarantine"] == "true"
+}
+
+// FilterTyphonNodes returns only nodes suitable for quarantine workloads.
+// Quarantine nodes must have the label "quarantine=true".
+func FilterTyphonNodes(nodes []domain.NodeStatus) []domain.NodeStatus {
+	var typhonNodes []domain.NodeStatus
+	for _, node := range nodes {
+		if node.Labels != nil && node.Labels["quarantine"] == "true" {
+			typhonNodes = append(typhonNodes, node)
+		}
+	}
+	return typhonNodes
+}

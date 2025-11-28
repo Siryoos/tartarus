@@ -29,7 +29,24 @@ func (s *BinPackingScheduler) ChooseNode(ctx context.Context, req *domain.Sandbo
 
 	now := time.Now()
 
-	for _, node := range nodes {
+	// Filter for quarantine requirements first
+	nodesToConsider := nodes
+	isQuarantine := IsQuarantineRequest(req)
+	if isQuarantine {
+		nodesToConsider = FilterTyphonNodes(nodes)
+		if len(nodesToConsider) == 0 {
+			s.Logger.Error(ctx, "No Typhon nodes available for quarantine workload", map[string]any{
+				"sandbox_id": req.ID,
+			})
+			return "", ErrNoTyphonNodes
+		}
+		s.Logger.Info(ctx, "Routing quarantine workload to Typhon nodes", map[string]any{
+			"sandbox_id":        req.ID,
+			"typhon_node_count": len(nodesToConsider),
+		})
+	}
+
+	for _, node := range nodesToConsider {
 		// 1. Filter Unhealthy Nodes (Heartbeat > 10s ago)
 		if now.Sub(node.Heartbeat) > 10*time.Second {
 			continue
