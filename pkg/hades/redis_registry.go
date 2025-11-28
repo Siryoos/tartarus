@@ -81,9 +81,10 @@ func (r *RedisRegistry) GetNode(ctx context.Context, id domain.NodeID) (*domain.
 
 func (r *RedisRegistry) UpdateHeartbeat(ctx context.Context, payload HeartbeatPayload) error {
 	status := domain.NodeStatus{
-		NodeInfo:  payload.Node,
-		Allocated: payload.Load,
-		Heartbeat: payload.Time,
+		NodeInfo:        payload.Node,
+		Allocated:       payload.Load,
+		ActiveSandboxes: payload.ActiveSandboxes,
+		Heartbeat:       payload.Time,
 	}
 
 	data, err := json.Marshal(status)

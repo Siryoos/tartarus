@@ -19,7 +19,8 @@ type Registry interface {
 // HeartbeatPayload is what Hecatoncheir agents send periodically.
 
 type HeartbeatPayload struct {
-	Node domain.NodeInfo         `json:"node"`
-	Load domain.ResourceCapacity `json:"load"`
-	Time time.Time               `json:"time"`
+	Node            domain.NodeInfo         `json:"node"`
+	Load            domain.ResourceCapacity `json:"load"`
+	ActiveSandboxes []domain.SandboxRun     `json:"active_sandboxes"`
+	Time            time.Time               `json:"time"`
 }

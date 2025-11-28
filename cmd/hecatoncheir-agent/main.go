@@ -2,14 +2,17 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/netip"
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/tartarus-sandbox/tartarus/pkg/acheron"
@@ -58,6 +61,14 @@ func main() {
 	} else {
 		queue = acheron.NewMemoryQueue()
 		logger.Info("Using in-memory queue")
+	}
+
+	var rdb *redis.Client
+	if redisAddr != "" {
+		rdb = redis.NewClient(&redis.Options{
+			Addr: redisAddr,
+			// DB: redisDB, // Use same DB
+		})
 	}
 	registry := hades.NewMemoryRegistry()
 
@@ -131,6 +142,11 @@ func main() {
 		}
 	}()
 
+	// Start Control Loop
+	if rdb != nil {
+		go watchControl(ctx, rdb, agent.NodeID, runtime, logger)
+	}
+
 	// Heartbeat Ticker
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
@@ -159,6 +175,15 @@ func main() {
 				// Total CPU in milliCPU (1 core = 1000 milliCPU)
 				totalCPU := domain.MilliCPU(cpuCount * 1000)
 
+				// Get active sandboxes
+				activeSandboxes, err := runtime.List(ctx)
+				if err != nil {
+					logger.Error("Failed to list active sandboxes", "error", err)
+					// Continue with empty list or previous state?
+					// For now, just log and send empty list to avoid blocking heartbeat
+					activeSandboxes = []domain.SandboxRun{}
+				}
+
 				// Build heartbeat payload
 				payload := hades.HeartbeatPayload{
 					Node: domain.NodeInfo{
@@ -178,7 +203,8 @@ func main() {
 						Mem: 0,
 						GPU: 0,
 					},
-					Time: time.Now(),
+					ActiveSandboxes: activeSandboxes,
+					Time:            time.Now(),
 				}
 
 				// Send heartbeat to registry
@@ -233,3 +259,69 @@ func (m *mockStyx) Detach(ctx context.Context, sandboxID domain.SandboxID) error
 type mockCocytus struct{}
 
 func (m *mockCocytus) Write(ctx context.Context, rec *cocytus.Record) error { return nil }
+
+func watchControl(ctx context.Context, rdb *redis.Client, nodeID domain.NodeID, runtime tartarus.SandboxRuntime, logger *slog.Logger) {
+	topic := fmt.Sprintf("tartarus:control:%s", nodeID)
+	pubsub := rdb.Subscribe(ctx, topic)
+	defer pubsub.Close()
+
+	ch := pubsub.Channel()
+	logger.Info("Listening for control messages", "topic", topic)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg := <-ch:
+			parts := strings.Split(msg.Payload, " ")
+			if len(parts) < 2 {
+				continue
+			}
+			cmd := parts[0]
+			arg := parts[1]
+
+			switch cmd {
+			case "KILL":
+				logger.Info("Received KILL command", "id", arg)
+				if err := runtime.Kill(ctx, domain.SandboxID(arg)); err != nil {
+					logger.Error("Failed to kill sandbox", "id", arg, "error", err)
+				}
+			case "LOGS":
+				logger.Info("Received LOGS command", "id", arg)
+				go streamLogsToRedis(ctx, rdb, runtime, domain.SandboxID(arg), logger)
+			}
+		}
+	}
+}
+
+func streamLogsToRedis(ctx context.Context, rdb *redis.Client, runtime tartarus.SandboxRuntime, id domain.SandboxID, logger *slog.Logger) {
+	topic := fmt.Sprintf("tartarus:logs:%s", id)
+	writer := &redisLogWriter{
+		ctx:   ctx,
+		rdb:   rdb,
+		topic: topic,
+	}
+
+	logger.Info("Streaming logs to Redis", "topic", topic)
+	if err := runtime.StreamLogs(ctx, id, writer); err != nil {
+		logger.Error("Log streaming ended", "id", id, "error", err)
+	}
+}
+
+type redisLogWriter struct {
+	ctx   context.Context
+	rdb   *redis.Client
+	topic string
+}
+
+func (w *redisLogWriter) Write(p []byte) (n int, err error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	// Publish to Redis
+	err = w.rdb.Publish(w.ctx, w.topic, p).Err()
+	if err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}

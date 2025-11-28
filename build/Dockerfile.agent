@@ -1,0 +1,37 @@
+FROM golang:1.23-alpine AS builder
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN go build -o /bin/hecatoncheir-agent ./cmd/hecatoncheir-agent
+
+FROM alpine:latest
+
+# Install dependencies
+RUN apk add --no-cache \
+    iptables \
+    iproute2 \
+    curl \
+    ca-certificates
+
+# Install Firecracker
+ARG FC_VERSION=v1.7.0
+ARG ARCH=x86_64
+# Note: In a real multi-arch build, we'd map TARGETARCH to Firecracker's arch naming
+# For now, defaulting to x86_64. User can override with --build-arg ARCH=aarch64
+
+RUN curl -L https://github.com/firecracker-microvm/firecracker/releases/download/${FC_VERSION}/firecracker-${FC_VERSION}-${ARCH}.tgz | tar -xz && \
+    mv release-${FC_VERSION}-${ARCH}/firecracker-${FC_VERSION}-${ARCH} /usr/local/bin/firecracker && \
+    mv release-${FC_VERSION}-${ARCH}/jailer-${FC_VERSION}-${ARCH} /usr/local/bin/jailer && \
+    rm -rf release-${FC_VERSION}-${ARCH}
+
+WORKDIR /app
+COPY --from=builder /bin/hecatoncheir-agent /bin/hecatoncheir-agent
+
+# Create required directories
+RUN mkdir -p /var/lib/firecracker /run/firecracker
+
+ENTRYPOINT ["/bin/hecatoncheir-agent"]

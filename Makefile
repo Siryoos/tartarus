@@ -11,3 +11,12 @@ run-agent:
 
 test:
 	go test ./...
+
+up:
+	docker-compose up --build -d
+
+down:
+	docker-compose down
+
+cli:
+	go build -o bin/tartarus cmd/tartarus/main.go

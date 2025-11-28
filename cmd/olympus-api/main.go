@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/tartarus-sandbox/tartarus/pkg/acheron"
 	"github.com/tartarus-sandbox/tartarus/pkg/config"
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
@@ -98,6 +99,20 @@ func main() {
 	// Policy repository
 	policyRepo := themis.NewMemoryRepo()
 
+	// Control Plane
+	var control olympus.ControlPlane
+	if redisAddr != "" {
+		rdb := redis.NewClient(&redis.Options{
+			Addr: redisAddr,
+			// DB: redisDB,
+		})
+		control = olympus.NewRedisControlPlane(rdb)
+		logger.Info("Using Redis control plane")
+	} else {
+		control = &olympus.NoopControlPlane{}
+		logger.Info("Using Noop control plane")
+	}
+
 	// Judges
 	resourceJudge := judges.NewResourceJudge(policyRepo, hermesLogger)
 	networkJudge := judges.NewNetworkJudge([]netip.Prefix{}, hermesLogger)
@@ -111,6 +126,7 @@ func main() {
 		Policies:  policyRepo,
 		Judges:    judgeChain,
 		Scheduler: scheduler,
+		Control:   control,
 		Metrics:   metrics,
 		Logger:    hermesLogger,
 	}
@@ -136,6 +152,71 @@ func main() {
 
 		w.WriteHeader(http.StatusAccepted)
 		json.NewEncoder(w).Encode(map[string]string{"status": "accepted", "id": string(req.ID)})
+	})
+
+	mux.HandleFunc("/sandboxes", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		runs, err := manager.ListSandboxes(r.Context())
+		if err != nil {
+			logger.Error("Failed to list sandboxes", "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		json.NewEncoder(w).Encode(runs)
+	})
+
+	mux.HandleFunc("/sandboxes/", func(w http.ResponseWriter, r *http.Request) {
+		id := domain.SandboxID(r.URL.Path[len("/sandboxes/"):])
+		if id == "" {
+			http.Error(w, "Missing sandbox ID", http.StatusBadRequest)
+			return
+		}
+
+		if r.Method == http.MethodDelete {
+			if err := manager.KillSandbox(r.Context(), id); err != nil {
+				logger.Error("Failed to kill sandbox", "id", id, "error", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			return
+		} else if r.Method == http.MethodGet && r.URL.Query().Get("action") == "logs" {
+			// Stream logs
+			// Check if we should stream
+			// Path: /sandboxes/{id}?action=logs
+			// Or maybe /sandboxes/{id}/logs is better but mux doesn't support wildcards easily without stripping.
+			// Let's stick to query param or check suffix if I parse path manually.
+			// The handler is registered on /sandboxes/, so it matches /sandboxes/foo/logs if I parse it.
+		}
+	})
+
+	// Explicit handler for logs to make it cleaner?
+	// But /sandboxes/ overlaps.
+	// Let's use a specific prefix for logs or handle it in the generic handler.
+	// Let's try to handle /sandboxes/{id}/logs by checking suffix.
+	mux.HandleFunc("/sandboxes/logs/", func(w http.ResponseWriter, r *http.Request) {
+		// /sandboxes/logs/{id}
+		id := domain.SandboxID(r.URL.Path[len("/sandboxes/logs/"):])
+		if id == "" {
+			http.Error(w, "Missing sandbox ID", http.StatusBadRequest)
+			return
+		}
+
+		// Set headers for streaming
+		w.Header().Set("Content-Type", "text/plain")
+		w.Header().Set("Transfer-Encoding", "chunked")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+
+		if err := manager.StreamLogs(r.Context(), id, w); err != nil {
+			logger.Error("Log streaming failed", "id", id, "error", err)
+			// Cannot write error status if we already started writing?
+			// But StreamLogs writes to w.
+		}
 	})
 
 	srv := &http.Server{

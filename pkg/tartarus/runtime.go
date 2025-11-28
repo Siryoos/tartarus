@@ -13,6 +13,7 @@ import (
 type SandboxRuntime interface {
 	Launch(ctx context.Context, req *domain.SandboxRequest, cfg VMConfig) (*domain.SandboxRun, error)
 	Inspect(ctx context.Context, id domain.SandboxID) (*domain.SandboxRun, error)
+	List(ctx context.Context) ([]domain.SandboxRun, error)
 	Kill(ctx context.Context, id domain.SandboxID) error
 	StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writer) error
 }

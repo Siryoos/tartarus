@@ -2,8 +2,10 @@ package tartarus
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
@@ -11,10 +13,15 @@ import (
 
 type MockRuntime struct {
 	Logger *slog.Logger
+	runs   map[domain.SandboxID]*domain.SandboxRun
+	mu     sync.RWMutex
 }
 
 func NewMockRuntime(logger *slog.Logger) *MockRuntime {
-	return &MockRuntime{Logger: logger}
+	return &MockRuntime{
+		Logger: logger,
+		runs:   make(map[domain.SandboxID]*domain.SandboxRun),
+	}
 }
 
 func (r *MockRuntime) Launch(ctx context.Context, req *domain.SandboxRequest, cfg VMConfig) (*domain.SandboxRun, error) {
@@ -27,7 +34,7 @@ func (r *MockRuntime) Launch(ctx context.Context, req *domain.SandboxRequest, cf
 		return nil, ctx.Err()
 	}
 
-	return &domain.SandboxRun{
+	run := &domain.SandboxRun{
 		ID:        domain.SandboxID("run-" + string(req.ID)),
 		RequestID: req.ID,
 		NodeID:    "mock-node",
@@ -36,18 +43,39 @@ func (r *MockRuntime) Launch(ctx context.Context, req *domain.SandboxRequest, cf
 		StartedAt: time.Now(),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
-	}, nil
+	}
+
+	r.mu.Lock()
+	r.runs[run.ID] = run
+	r.mu.Unlock()
+
+	return run, nil
 }
 
 func (r *MockRuntime) Inspect(ctx context.Context, id domain.SandboxID) (*domain.SandboxRun, error) {
-	return &domain.SandboxRun{
-		ID:     id,
-		Status: domain.RunStatusRunning,
-	}, nil
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if run, ok := r.runs[id]; ok {
+		return run, nil
+	}
+	return nil, errors.New("sandbox not found")
+}
+
+func (r *MockRuntime) List(ctx context.Context) ([]domain.SandboxRun, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var list []domain.SandboxRun
+	for _, run := range r.runs {
+		list = append(list, *run)
+	}
+	return list, nil
 }
 
 func (r *MockRuntime) Kill(ctx context.Context, id domain.SandboxID) error {
 	r.Logger.Info("Killing sandbox", "id", id)
+	r.mu.Lock()
+	delete(r.runs, id)
+	r.mu.Unlock()
 	return nil
 }
 

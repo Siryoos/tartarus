@@ -63,9 +63,10 @@ func (r *MemoryRegistry) GetNode(ctx context.Context, id domain.NodeID) (*domain
 func (r *MemoryRegistry) UpdateHeartbeat(ctx context.Context, payload HeartbeatPayload) error {
 	// Build NodeStatus from HeartbeatPayload
 	status := domain.NodeStatus{
-		NodeInfo:  payload.Node,
-		Allocated: payload.Load,
-		Heartbeat: payload.Time,
+		NodeInfo:        payload.Node,
+		Allocated:       payload.Load,
+		ActiveSandboxes: payload.ActiveSandboxes,
+		Heartbeat:       payload.Time,
 	}
 
 	r.nodes.Store(status.ID, status)

@@ -21,6 +21,7 @@ type Manager struct {
 	Policies  themis.Repository
 	Judges    *judges.Chain
 	Scheduler moirai.Scheduler
+	Control   ControlPlane
 	Metrics   hermes.Metrics
 	Logger    hermes.Logger
 }

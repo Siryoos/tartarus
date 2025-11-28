@@ -179,6 +179,22 @@ func (r *FirecrackerRuntime) Inspect(ctx context.Context, id domain.SandboxID) (
 	}, nil
 }
 
+func (r *FirecrackerRuntime) List(ctx context.Context) ([]domain.SandboxRun, error) {
+	var list []domain.SandboxRun
+	r.vms.Range(func(key, value any) bool {
+		state := value.(*vmState)
+		list = append(list, domain.SandboxRun{
+			ID:        state.Request.ID,
+			RequestID: state.Request.ID,
+			Status:    domain.RunStatusRunning, // Simplified
+			StartedAt: state.StartedAt,
+			UpdatedAt: time.Now(),
+		})
+		return true
+	})
+	return list, nil
+}
+
 func (r *FirecrackerRuntime) Kill(ctx context.Context, id domain.SandboxID) error {
 	val, ok := r.vms.Load(id)
 	if !ok {

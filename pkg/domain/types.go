@@ -97,8 +97,9 @@ type NodeInfo struct {
 
 type NodeStatus struct {
 	NodeInfo
-	Allocated ResourceCapacity `json:"allocated"`
-	Heartbeat time.Time        `json:"heartbeat"`
+	Allocated       ResourceCapacity `json:"allocated"`
+	Heartbeat       time.Time        `json:"heartbeat"`
+	ActiveSandboxes []SandboxRun     `json:"active_sandboxes"`
 }
 
 // Template & snapshot references
