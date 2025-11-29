@@ -20,7 +20,7 @@ Context: ROADMAP.md marks Phase 3 as in progress, and code review shows componen
 - [x] Acheron Nack crash-safety and DLQ for corrupt payloads (`pkg/acheron/redis_queue.go`)
   - Current: Nack unmarshals before MULTI/EXEC; corrupt JSON can loop or be dropped.
   - DoD: Add dead-letter path for invalid payloads, ensure atomic move back to queue or DLQ, and emit metrics/tests for poison pills.
-- [ ] Agent poison-pill handling (`pkg/hecatoncheir/agent.go`, `pkg/acheron/redis_queue.go`)
+- [x] Agent poison-pill handling (`pkg/hecatoncheir/agent.go`, `pkg/acheron/redis_queue.go`)
   - DoD: On dequeue/unmarshal failure, write to Cocytus with payload snapshot, ack/drop to avoid loops, and expose metrics; add tests.
 
 ## Persistence and Durability

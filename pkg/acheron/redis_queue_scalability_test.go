@@ -17,7 +17,7 @@ func TestRedisQueue_Ack_ScalabilityRegression(t *testing.T) {
 	s := miniredis.RunT(t)
 	metrics := &noopMetrics{}
 
-	q, err := NewRedisQueue(s.Addr(), 0, "test-queue", "group1", "consumer1", false, metrics)
+	q, err := NewRedisQueue(s.Addr(), 0, "test-queue", "group1", "consumer1", false, metrics, nil)
 	if err != nil {
 		t.Fatalf("Failed to create queue: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestRedisQueue_Ack_VerifiesPELDecrement(t *testing.T) {
 	s := miniredis.RunT(t)
 	metrics := hermes.NewLogMetrics()
 
-	q, err := NewRedisQueue(s.Addr(), 0, "test-queue", "group1", "consumer1", false, metrics)
+	q, err := NewRedisQueue(s.Addr(), 0, "test-queue", "group1", "consumer1", false, metrics, nil)
 	if err != nil {
 		t.Fatalf("Failed to create queue: %v", err)
 	}
@@ -185,7 +185,7 @@ func BenchmarkRedisQueue_Ack_VariablePEL(b *testing.B) {
 			s := miniredis.RunT(b)
 			metrics := &noopMetrics{}
 
-			q, err := NewRedisQueue(s.Addr(), 0, "bench-queue", "group1", "consumer1", false, metrics)
+			q, err := NewRedisQueue(s.Addr(), 0, "bench-queue", "group1", "consumer1", false, metrics, nil)
 			if err != nil {
 				b.Fatalf("Failed to create queue: %v", err)
 			}

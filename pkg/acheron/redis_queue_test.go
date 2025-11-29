@@ -14,7 +14,7 @@ func TestRedisQueue_EnqueueDequeueAck(t *testing.T) {
 	s := miniredis.RunT(t)
 	metrics := hermes.NewLogMetrics()
 
-	q, err := NewRedisQueue(s.Addr(), 0, "test-queue", "group1", "consumer1", false, metrics)
+	q, err := NewRedisQueue(s.Addr(), 0, "test-queue", "group1", "consumer1", false, metrics, nil)
 	if err != nil {
 		t.Fatalf("Failed to create queue: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestRedisQueue_CorruptPayload(t *testing.T) {
 	s := miniredis.RunT(t)
 	metrics := hermes.NewLogMetrics()
 
-	q, err := NewRedisQueue(s.Addr(), 0, "test-queue", "group1", "consumer1", false, metrics)
+	q, err := NewRedisQueue(s.Addr(), 0, "test-queue", "group1", "consumer1", false, metrics, nil)
 	if err != nil {
 		t.Fatalf("Failed to create queue: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestRedisQueue_Nack_Atomic(t *testing.T) {
 	s := miniredis.RunT(t)
 	metrics := hermes.NewLogMetrics()
 
-	q, err := NewRedisQueue(s.Addr(), 0, "test-queue", "group1", "consumer1", false, metrics)
+	q, err := NewRedisQueue(s.Addr(), 0, "test-queue", "group1", "consumer1", false, metrics, nil)
 	if err != nil {
 		t.Fatalf("Failed to create queue: %v", err)
 	}
@@ -205,7 +205,7 @@ func BenchmarkRedisQueue_Ack(b *testing.B) {
 	s := miniredis.RunT(b)
 	metrics := &noopMetrics{}
 
-	q, err := NewRedisQueue(s.Addr(), 0, "bench-queue", "group1", "consumer1", false, metrics)
+	q, err := NewRedisQueue(s.Addr(), 0, "bench-queue", "group1", "consumer1", false, metrics, nil)
 	if err != nil {
 		b.Fatalf("Failed to create queue: %v", err)
 	}

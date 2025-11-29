@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/tartarus-sandbox/tartarus/pkg/cocytus"
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
 	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
 )
@@ -92,9 +93,10 @@ type RedisQueue struct {
 	consumerName  string
 	routing       bool
 	metrics       hermes.Metrics
+	sink          cocytus.Sink // Optional: for poison-pill audit trail
 }
 
-func NewRedisQueue(addr string, db int, streamKey string, consumerGroup string, consumerName string, routing bool, metrics hermes.Metrics) (*RedisQueue, error) {
+func NewRedisQueue(addr string, db int, streamKey string, consumerGroup string, consumerName string, routing bool, metrics hermes.Metrics, sink cocytus.Sink) (*RedisQueue, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr: addr,
 		DB:   db,
@@ -115,6 +117,7 @@ func NewRedisQueue(addr string, db int, streamKey string, consumerGroup string, 
 		consumerName:  consumerName,
 		routing:       routing,
 		metrics:       metrics,
+		sink:          sink,
 	}
 
 	// If we are a consumer (have group and name), ensure group exists
@@ -234,6 +237,34 @@ func (q *RedisQueue) Dequeue(ctx context.Context) (*domain.SandboxRequest, strin
 }
 
 func (q *RedisQueue) moveToDLQ(ctx context.Context, id string, errorReason string) {
+	// Write poison-pill to Cocytus for audit trail (best-effort)
+	if q.sink != nil {
+		// Get the raw message payload before moving to DLQ
+		range_res, err := q.client.XRange(ctx, q.streamKey, id, id).Result()
+		if err == nil && len(range_res) > 0 {
+			msg := range_res[0]
+			var payload []byte
+			if dataStr, ok := msg.Values["data"].(string); ok {
+				payload = []byte(dataStr)
+			}
+
+			rec := &cocytus.Record{
+				RequestID: domain.SandboxID(id),
+				Reason:    fmt.Sprintf("poison_pill: %s", errorReason),
+				Payload:   payload,
+				CreatedAt: time.Now(),
+			}
+
+			// Use a detached context with timeout to avoid blocking
+			cocytusCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+
+			if wErr := q.sink.Write(cocytusCtx, rec); wErr != nil {
+				q.metrics.IncCounter("queue_poison_pill_cocytus_write_errors_total", 1, hermes.Label{Key: "queue", Value: q.streamKey})
+			}
+		}
+	}
+
 	// Use Lua script to atomically move to DLQ and Ack
 	timestamp := fmt.Sprintf("%d", time.Now().Unix())
 	err := deadLetterScript.Run(ctx, q.client, []string{q.streamKey, q.dlqKey}, q.consumerGroup, id, errorReason, timestamp).Err()

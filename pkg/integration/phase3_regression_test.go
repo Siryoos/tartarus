@@ -152,7 +152,7 @@ func TestPhase3Regression(t *testing.T) {
 	// We need to consume from "tartarus:queue:node-gpu" because routing is enabled.
 	// But our manager's queue is configured with "tartarus:queue".
 	// Let's create a consumer specifically for that node's queue.
-	nodeQueue, err := acheron.NewRedisQueue(mr.Addr(), 0, "tartarus:queue:node-gpu", "group1", "consumer1", false, metrics)
+	nodeQueue, err := acheron.NewRedisQueue(mr.Addr(), 0, "tartarus:queue:node-gpu", "group1", "consumer1", false, metrics, nil)
 	require.NoError(t, err)
 
 	// Dequeue

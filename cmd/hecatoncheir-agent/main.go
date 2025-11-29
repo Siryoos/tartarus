@@ -50,31 +50,6 @@ func main() {
 	metrics := hermes.NewLogMetrics()
 	var queue acheron.Queue
 	redisAddr := os.Getenv("REDIS_ADDR")
-	if redisAddr != "" {
-		redisDB := 0
-		if dbStr := os.Getenv("REDIS_DB"); dbStr != "" {
-			if db, err := strconv.Atoi(dbStr); err == nil {
-				redisDB = db
-			}
-		}
-		redisKey := os.Getenv("REDIS_QUEUE_KEY")
-		if redisKey == "" {
-			redisKey = "tartarus:queue"
-		}
-		// Append NodeID to key for per-node queue
-		redisKey = fmt.Sprintf("%s:%s", redisKey, nodeID)
-
-		rq, err := acheron.NewRedisQueue(redisAddr, redisDB, redisKey, "acheron-workers", string(nodeID), false, metrics)
-		if err != nil {
-			logger.Error("Failed to initialize Redis queue", "error", err)
-			os.Exit(1)
-		}
-		queue = rq
-		logger.Info("Using Redis queue", "addr", redisAddr, "db", redisDB, "key", redisKey)
-	} else {
-		queue = acheron.NewMemoryQueue()
-		logger.Info("Using in-memory queue")
-	}
 
 	var rdb *redis.Client
 	if redisAddr != "" {
@@ -171,6 +146,33 @@ func main() {
 
 	// Cocytus Log Sink
 	cocytusSink := cocytus.NewLogSink(logger)
+
+	// Queue Setup (needs cocytusSink for poison-pill handling)
+	if redisAddr != "" {
+		redisDB := 0
+		if dbStr := os.Getenv("REDIS_DB"); dbStr != "" {
+			if db, err := strconv.Atoi(dbStr); err == nil {
+				redisDB = db
+			}
+		}
+		redisKey := os.Getenv("REDIS_QUEUE_KEY")
+		if redisKey == "" {
+			redisKey = "tartarus:queue"
+		}
+		// Append NodeID to key for per-node queue
+		redisKey = fmt.Sprintf("%s:%s", redisKey, nodeID)
+
+		rq, err := acheron.NewRedisQueue(redisAddr, redisDB, redisKey, "acheron-workers", string(nodeID), false, metrics, cocytusSink)
+		if err != nil {
+			logger.Error("Failed to initialize Redis queue", "error", err)
+			os.Exit(1)
+		}
+		queue = rq
+		logger.Info("Using Redis queue", "addr", redisAddr, "db", redisDB, "key", redisKey)
+	} else {
+		queue = acheron.NewMemoryQueue()
+		logger.Info("Using in-memory queue")
+	}
 
 	// Fury Watchdog
 	networkStats := erinyes.NewLinuxNetworkStatsProvider()

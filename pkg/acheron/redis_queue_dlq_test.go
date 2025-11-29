@@ -16,7 +16,7 @@ func TestRedisQueue_DLQ_Metadata(t *testing.T) {
 	s := miniredis.RunT(t)
 	metrics := hermes.NewLogMetrics()
 
-	q, err := NewRedisQueue(s.Addr(), 0, "test-queue", "group1", "consumer1", false, metrics)
+	q, err := NewRedisQueue(s.Addr(), 0, "test-queue", "group1", "consumer1", false, metrics, nil)
 	if err != nil {
 		t.Fatalf("Failed to create queue: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestRedisQueue_DLQ_InvalidType(t *testing.T) {
 	s := miniredis.RunT(t)
 	metrics := hermes.NewLogMetrics()
 
-	q, err := NewRedisQueue(s.Addr(), 0, "test-queue", "group1", "consumer1", false, metrics)
+	q, err := NewRedisQueue(s.Addr(), 0, "test-queue", "group1", "consumer1", false, metrics, nil)
 	if err != nil {
 		t.Fatalf("Failed to create queue: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestRedisQueue_DLQ_MultiplePoisons(t *testing.T) {
 	s := miniredis.RunT(t)
 	metrics := hermes.NewLogMetrics()
 
-	q, err := NewRedisQueue(s.Addr(), 0, "test-queue", "group1", "consumer1", false, metrics)
+	q, err := NewRedisQueue(s.Addr(), 0, "test-queue", "group1", "consumer1", false, metrics, nil)
 	if err != nil {
 		t.Fatalf("Failed to create queue: %v", err)
 	}
@@ -245,7 +245,7 @@ func TestRedisQueue_Nack_Metrics(t *testing.T) {
 		},
 	}
 
-	q, err := NewRedisQueue(s.Addr(), 0, "test-queue", "group1", "consumer1", false, mockMetrics)
+	q, err := NewRedisQueue(s.Addr(), 0, "test-queue", "group1", "consumer1", false, mockMetrics, nil)
 	if err != nil {
 		t.Fatalf("Failed to create queue: %v", err)
 	}
