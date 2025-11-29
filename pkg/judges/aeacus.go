@@ -12,12 +12,18 @@ import (
 // AeacusJudge is an audit judge that tags compliance/retention metadata and emits audit records.
 type AeacusJudge struct {
 	logger hermes.Logger
+	sink   AuditSink
 }
 
-// NewAeacusJudge creates a new Aeacus judge.
-func NewAeacusJudge(logger hermes.Logger) *AeacusJudge {
+// NewAeacusJudge creates a new Aeacus judge with the specified audit sink.
+// If sink is nil, a NoopAuditSink is used.
+func NewAeacusJudge(logger hermes.Logger, sink AuditSink) *AeacusJudge {
+	if sink == nil {
+		sink = NewNoopAuditSink()
+	}
 	return &AeacusJudge{
 		logger: logger,
+		sink:   sink,
 	}
 }
 
@@ -45,14 +51,25 @@ func (j *AeacusJudge) PreAdmit(ctx context.Context, req *domain.SandboxRequest) 
 	}
 
 	// 4. Emit Audit Record
-	j.logger.Info(ctx, "Aeacus: Audit Record", map[string]any{
-		"event":            "sandbox_request_audit",
-		"sandbox_id":       req.ID,
-		"audit_id":         auditID,
-		"template":         req.Template,
-		"compliance_level": req.Metadata["compliance_level"],
-		"retention_policy": req.Retention,
-	})
+	auditRecord := &AuditRecord{
+		AuditID:         auditID,
+		Timestamp:       time.Now().UTC(),
+		SandboxID:       req.ID,
+		TemplateID:      req.Template,
+		Event:           "sandbox_request_audit",
+		ComplianceLevel: req.Metadata["compliance_level"],
+		RetentionPolicy: req.Retention,
+		Metadata:        req.Metadata,
+	}
+
+	if err := j.sink.Emit(ctx, auditRecord); err != nil {
+		j.logger.Error(ctx, "Failed to emit audit record", map[string]any{
+			"sandbox_id": req.ID,
+			"audit_id":   auditID,
+			"error":      err,
+		})
+		// Continue even if audit sink fails - don't block request processing
+	}
 
 	return VerdictAccept, nil
 }

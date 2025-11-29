@@ -81,7 +81,8 @@ func TestPhase3Regression(t *testing.T) {
 		scheduler := moirai.NewScheduler("bin-packing", logger)
 
 		// Judges (Aeacus)
-		aeacus := judges.NewAeacusJudge(logger)
+		auditSink := judges.NewLogAuditSink(logger)
+		aeacus := judges.NewAeacusJudge(logger, auditSink)
 		chain := &judges.Chain{
 			Pre: []judges.PreJudge{aeacus},
 		}

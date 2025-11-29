@@ -9,15 +9,15 @@ Context: ROADMAP.md marks Phase 3 as in progress, and code review shows componen
 - [x] Quarantine enforcement (Typhon) (`pkg/olympus/manager.go`, `pkg/moirai`)
   - Current: VerdictQuarantine sets `req.Metadata["quarantine"]=true` but scheduler ignores it; Typhon manager is in-memory only.
   - DoD: Scheduler must route quarantine jobs only to nodes labeled for Typhon (or reject if none); add tests for quarantine anti-affinity and fallback behavior.
-- [ ] Aeacus audit judge wiring (`cmd/olympus-api/main.go`, `pkg/judges`)
+- [x] Aeacus audit judge wiring (`cmd/olympus-api/main.go`, `pkg/judges`)
   - Current: Audit judge presence is unverified in Olympus wiring; agent chain is empty (acceptable).
   - DoD: Ensure AeacusJudge is constructed and included in `judges.Chain` for Manager; emit audit records with sample sink; add unit/integration tests.
 
 ## Critical Technical Debt
-- [ ] Acheron RedisQueue Ack scalability (`pkg/acheron/redis_queue.go`, `pkg/acheron/queue.go`)
+- [x] Acheron RedisQueue Ack scalability (`pkg/acheron/redis_queue.go`, `pkg/acheron/queue.go`)
   - Current: Ack scans entire processing list (O(N)).
   - DoD: Refactor interface to pass a receipt/full item or change processing storage for O(1) Ack; update MemoryQueue and agent call sites; add performance/regression tests.
-- [ ] Acheron Nack crash-safety and DLQ for corrupt payloads (`pkg/acheron/redis_queue.go`)
+- [x] Acheron Nack crash-safety and DLQ for corrupt payloads (`pkg/acheron/redis_queue.go`)
   - Current: Nack unmarshals before MULTI/EXEC; corrupt JSON can loop or be dropped.
   - DoD: Add dead-letter path for invalid payloads, ensure atomic move back to queue or DLQ, and emit metrics/tests for poison pills.
 - [ ] Agent poison-pill handling (`pkg/hecatoncheir/agent.go`, `pkg/acheron/redis_queue.go`)

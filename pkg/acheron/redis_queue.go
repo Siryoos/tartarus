@@ -43,11 +43,15 @@ var nackScript = redis.NewScript(`
 // KEYS[2]: dlq key
 // ARGV[1]: consumer group
 // ARGV[2]: message ID (receipt)
+// ARGV[3]: error reason
+// ARGV[4]: timestamp
 var deadLetterScript = redis.NewScript(`
 	local stream = KEYS[1]
 	local dlq = KEYS[2]
 	local group = ARGV[1]
 	local id = ARGV[2]
+	local error_reason = ARGV[3]
+	local timestamp = ARGV[4]
 
 	-- Get the message details
 	local range = redis.call("XRANGE", stream, id, id)
@@ -58,8 +62,21 @@ var deadLetterScript = redis.NewScript(`
 	local msg = range[1]
 	local values = msg[2]
 
+	-- Add error metadata to the DLQ entry
+	local dlq_values = {}
+	for i = 1, #values, 2 do
+		table.insert(dlq_values, values[i])
+		table.insert(dlq_values, values[i+1])
+	end
+	table.insert(dlq_values, "error_reason")
+	table.insert(dlq_values, error_reason)
+	table.insert(dlq_values, "original_id")
+	table.insert(dlq_values, id)
+	table.insert(dlq_values, "dlq_timestamp")
+	table.insert(dlq_values, timestamp)
+
 	-- Add to DLQ (XADD)
-	redis.call("XADD", dlq, "*", unpack(values))
+	redis.call("XADD", dlq, "*", unpack(dlq_values))
 
 	-- Ack the old one
 	redis.call("XACK", stream, group, id)
@@ -198,14 +215,14 @@ func (q *RedisQueue) Dequeue(ctx context.Context) (*domain.SandboxRequest, strin
 		dataStr, ok := msg.Values["data"].(string)
 		if !ok {
 			// Invalid payload format (not a string in "data" field)
-			q.moveToDLQ(ctx, msg.ID)
+			q.moveToDLQ(ctx, msg.ID, "invalid_payload_format")
 			continue
 		}
 
 		var req domain.SandboxRequest
 		if err := json.Unmarshal([]byte(dataStr), &req); err != nil {
 			// Corrupt JSON payload
-			q.moveToDLQ(ctx, msg.ID)
+			q.moveToDLQ(ctx, msg.ID, "json_unmarshal_error")
 			continue
 		}
 
@@ -216,16 +233,18 @@ func (q *RedisQueue) Dequeue(ctx context.Context) (*domain.SandboxRequest, strin
 	}
 }
 
-func (q *RedisQueue) moveToDLQ(ctx context.Context, id string) {
+func (q *RedisQueue) moveToDLQ(ctx context.Context, id string, errorReason string) {
 	// Use Lua script to atomically move to DLQ and Ack
-	err := deadLetterScript.Run(ctx, q.client, []string{q.streamKey, q.dlqKey}, q.consumerGroup, id).Err()
+	timestamp := fmt.Sprintf("%d", time.Now().Unix())
+	err := deadLetterScript.Run(ctx, q.client, []string{q.streamKey, q.dlqKey}, q.consumerGroup, id, errorReason, timestamp).Err()
 	if err != nil {
 		// If script fails, we might be in trouble. Log it?
 		// We can't easily log here without a logger.
 		// But we should increment a metric.
 		q.metrics.IncCounter("queue_dlq_move_errors_total", 1, hermes.Label{Key: "queue", Value: q.streamKey})
 	} else {
-		q.metrics.IncCounter("queue_poison_pill_total", 1, hermes.Label{Key: "queue", Value: q.streamKey})
+		q.metrics.IncCounter("queue_poison_pill_total", 1, hermes.Label{Key: "queue", Value: q.streamKey}, hermes.Label{Key: "reason", Value: errorReason})
+		q.updateDLQDepth(ctx)
 	}
 }
 
@@ -235,6 +254,16 @@ func (q *RedisQueue) updateDepth(ctx context.Context) {
 	}
 }
 
+func (q *RedisQueue) updateDLQDepth(ctx context.Context) {
+	if depth, err := q.client.XLen(ctx, q.dlqKey).Result(); err == nil {
+		q.metrics.SetGauge("queue_dlq_depth", float64(depth), hermes.Label{Key: "queue", Value: q.streamKey})
+	}
+}
+
+// Ack acknowledges a message, removing it from the Pending Entry List (PEL).
+// This uses Redis XACK which performs O(1) hash-based lookup, making it scalable
+// regardless of PEL size. This is a key performance improvement over list-based
+// queue implementations which require O(N) scanning.
 func (q *RedisQueue) Ack(ctx context.Context, receipt string) error {
 	// XACK
 	// O(1)

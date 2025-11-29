@@ -11,10 +11,12 @@ import (
 
 func TestAeacusJudge_PreAdmit(t *testing.T) {
 	logger := hermes.NewNoopLogger()
-	judge := NewAeacusJudge(logger)
 	ctx := context.Background()
 
 	t.Run("AddsAuditMetadata", func(t *testing.T) {
+		mockSink := NewMockAuditSink()
+		judge := NewAeacusJudge(logger, mockSink)
+
 		req := &domain.SandboxRequest{
 			ID:       "test-sandbox",
 			Template: "test-template",
@@ -37,9 +39,34 @@ func TestAeacusJudge_PreAdmit(t *testing.T) {
 		if req.Metadata["compliance_level"] != "standard" {
 			t.Errorf("expected compliance_level 'standard', got '%s'", req.Metadata["compliance_level"])
 		}
+
+		// Verify audit record was emitted
+		if len(mockSink.Records) != 1 {
+			t.Fatalf("expected 1 audit record, got %d", len(mockSink.Records))
+		}
+
+		auditRecord := mockSink.LastRecord()
+		if auditRecord.AuditID != req.Metadata["audit_id"] {
+			t.Errorf("audit record AuditID mismatch")
+		}
+		if auditRecord.SandboxID != req.ID {
+			t.Errorf("expected SandboxID %s, got %s", req.ID, auditRecord.SandboxID)
+		}
+		if auditRecord.TemplateID != req.Template {
+			t.Errorf("expected TemplateID %s, got %s", req.Template, auditRecord.TemplateID)
+		}
+		if auditRecord.Event != "sandbox_request_audit" {
+			t.Errorf("expected Event 'sandbox_request_audit', got '%s'", auditRecord.Event)
+		}
+		if auditRecord.ComplianceLevel != "standard" {
+			t.Errorf("expected ComplianceLevel 'standard', got '%s'", auditRecord.ComplianceLevel)
+		}
 	})
 
 	t.Run("EnforcesDefaultRetention", func(t *testing.T) {
+		mockSink := NewMockAuditSink()
+		judge := NewAeacusJudge(logger, mockSink)
+
 		req := &domain.SandboxRequest{
 			ID:       "test-sandbox-retention",
 			Template: "test-template",
@@ -56,6 +83,9 @@ func TestAeacusJudge_PreAdmit(t *testing.T) {
 	})
 
 	t.Run("RespectsExistingRetention", func(t *testing.T) {
+		mockSink := NewMockAuditSink()
+		judge := NewAeacusJudge(logger, mockSink)
+
 		req := &domain.SandboxRequest{
 			ID:       "test-sandbox-existing-retention",
 			Template: "test-template",

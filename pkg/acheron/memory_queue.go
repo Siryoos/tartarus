@@ -2,19 +2,27 @@ package acheron
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
 )
 
+// MemoryQueue is an in-memory implementation of Queue for testing.
+// It maintains O(1) Ack/Nack operations using a processing map,
+// matching the performance characteristics of RedisQueue.
 type MemoryQueue struct {
-	mu    sync.Mutex
-	items []*domain.SandboxRequest
-	cond  *sync.Cond
+	mu         sync.Mutex
+	items      []*domain.SandboxRequest
+	processing map[string]*domain.SandboxRequest // O(1) lookup for Ack/Nack
+	cond       *sync.Cond
+	nextID     int // For generating receipt IDs
 }
 
 func NewMemoryQueue() *MemoryQueue {
-	q := &MemoryQueue{}
+	q := &MemoryQueue{
+		processing: make(map[string]*domain.SandboxRequest),
+	}
 	q.cond = sync.NewCond(&q.mu)
 	return q
 }
@@ -48,17 +56,46 @@ func (q *MemoryQueue) Dequeue(ctx context.Context) (*domain.SandboxRequest, stri
 
 	item := q.items[0]
 	q.items = q.items[1:]
-	// For MemoryQueue, the receipt is just the ID, or anything really.
-	// We don't strictly need it for Ack in MemoryQueue since it's just in-memory.
-	return item, string(item.ID), nil
+
+	// Generate receipt and track in processing map
+	q.nextID++
+	receipt := fmt.Sprintf("receipt-%d", q.nextID)
+	q.processing[receipt] = item
+
+	return item, receipt, nil
 }
 
+// Ack removes an item from the processing map.
+// This is O(1) hash map deletion, matching RedisQueue's XACK performance.
 func (q *MemoryQueue) Ack(ctx context.Context, receipt string) error {
-	// No-op for memory queue
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	if _, exists := q.processing[receipt]; !exists {
+		// Silent failure to match Redis behavior (XACK returns count, doesn't error)
+		return nil
+	}
+
+	delete(q.processing, receipt)
 	return nil
 }
 
+// Nack re-queues an item and removes it from processing.
+// This is O(1) for the map operation, O(1) for the append.
 func (q *MemoryQueue) Nack(ctx context.Context, receipt string, reason string) error {
-	// Simple Nack: just log it (or in a real system, maybe re-queue)
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	item, exists := q.processing[receipt]
+	if !exists {
+		// Silent failure to match Redis behavior
+		return nil
+	}
+
+	// Re-enqueue at the end
+	q.items = append(q.items, item)
+	delete(q.processing, receipt)
+	q.cond.Signal()
+
 	return nil
 }

@@ -186,7 +186,11 @@ func main() {
 	}
 
 	// Judges
-	aeacusJudge := judges.NewAeacusJudge(hermesLogger)
+	// Create audit sink for Aeacus
+	auditSink := judges.NewLogAuditSink(hermesLogger)
+	logger.Info("Initialized audit sink for Aeacus judge")
+
+	aeacusJudge := judges.NewAeacusJudge(hermesLogger, auditSink)
 	resourceJudge := judges.NewResourceJudge(policyRepo, hermesLogger)
 	networkJudge := judges.NewNetworkJudge(cfg.AllowedNetworks, []netip.Prefix{}, hermesLogger)
 	judgeChain := &judges.Chain{
