@@ -197,6 +197,24 @@ func (f *BoatFerry) Cross(ctx context.Context, req *http.Request) (*http.Respons
 		return nil, ToHTTPError(err)
 	}
 
+	// Check if status code warrants a retry
+	shouldRetry := false
+	for _, code := range f.config.Retry.RetryOn {
+		if resp.StatusCode == code {
+			shouldRetry = true
+			break
+		}
+	}
+
+	if shouldRetry {
+		breaker.RecordFailure()
+		f.healthChecker.RecordRequest(shore.ID, false)
+
+		if f.config.Retry.MaxRetries > 0 {
+			return f.retryRequest(ctx, req, shore.ID, 0)
+		}
+	}
+
 	breaker.RecordSuccess()
 	f.healthChecker.RecordRequest(shore.ID, true)
 
