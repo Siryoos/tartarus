@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/google/uuid"
@@ -245,24 +246,7 @@ func (m *Manager) Submit(ctx context.Context, req *domain.SandboxRequest) error 
 
 // ListSandboxes returns all sandboxes across all nodes.
 func (m *Manager) ListSandboxes(ctx context.Context) ([]domain.SandboxRun, error) {
-	nodes, err := m.Hades.ListNodes(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	var allRuns []domain.SandboxRun
-	for _, node := range nodes {
-		runs, err := m.Hades.ListRuns(ctx, node.ID)
-		if err != nil {
-			m.Logger.Error(ctx, "Failed to list runs for node", map[string]any{
-"node_id": node.ID,
-"error":   err,
-})
-			continue
-		}
-		allRuns = append(allRuns, runs...)
-	}
-	return allRuns, nil
+	return m.Hades.ListRuns(ctx)
 }
 
 // KillSandbox sends a kill command to the node running the sandbox.
@@ -275,17 +259,17 @@ func (m *Manager) KillSandbox(ctx context.Context, id domain.SandboxID) error {
 
 	if err := m.Control.Kill(ctx, run.NodeID, id); err != nil {
 		m.Logger.Error(ctx, "Failed to send kill command", map[string]any{
-"sandbox_id": id,
-"node_id":    run.NodeID,
-"error":      err,
-})
+			"sandbox_id": id,
+			"node_id":    run.NodeID,
+			"error":      err,
+		})
 		return err
 	}
 
 	m.Logger.Info(ctx, "Kill command sent", map[string]any{
-"sandbox_id": id,
-"node_id":    run.NodeID,
-})
+		"sandbox_id": id,
+		"node_id":    run.NodeID,
+	})
 	return nil
 }
 
@@ -300,18 +284,18 @@ func (m *Manager) HibernateSandbox(ctx context.Context, id domain.SandboxID) err
 
 	if err := m.Control.Hibernate(ctx, run.NodeID, id); err != nil {
 		m.Logger.Error(ctx, "Failed to send hibernate command", map[string]any{
-"sandbox_id": id,
-"node_id":    run.NodeID,
-"error":      err,
-})
+			"sandbox_id": id,
+			"node_id":    run.NodeID,
+			"error":      err,
+		})
 		m.Metrics.IncCounter("sandbox_hibernate_failures_total", 1, hermes.Label{Key: "reason", Value: "control_error"})
 		return err
 	}
 
 	m.Logger.Info(ctx, "Hibernate command sent", map[string]any{
-"sandbox_id": id,
-"node_id":    run.NodeID,
-})
+		"sandbox_id": id,
+		"node_id":    run.NodeID,
+	})
 	m.Metrics.IncCounter("sandbox_hibernate_requests_total", 1)
 	return nil
 }
@@ -327,18 +311,18 @@ func (m *Manager) WakeSandbox(ctx context.Context, id domain.SandboxID) error {
 
 	if err := m.Control.Wake(ctx, run.NodeID, id); err != nil {
 		m.Logger.Error(ctx, "Failed to send wake command", map[string]any{
-"sandbox_id": id,
-"node_id":    run.NodeID,
-"error":      err,
-})
+			"sandbox_id": id,
+			"node_id":    run.NodeID,
+			"error":      err,
+		})
 		m.Metrics.IncCounter("sandbox_wake_failures_total", 1, hermes.Label{Key: "reason", Value: "control_error"})
 		return err
 	}
 
 	m.Logger.Info(ctx, "Wake command sent", map[string]any{
-"sandbox_id": id,
-"node_id":    run.NodeID,
-})
+		"sandbox_id": id,
+		"node_id":    run.NodeID,
+	})
 	m.Metrics.IncCounter("sandbox_wake_requests_total", 1)
 	return nil
 }
@@ -353,10 +337,10 @@ func (m *Manager) StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writ
 
 	if err := m.Control.StreamLogs(ctx, run.NodeID, id, w); err != nil {
 		m.Logger.Error(ctx, "Failed to stream logs", map[string]any{
-"sandbox_id": id,
-"node_id":    run.NodeID,
-"error":      err,
-})
+			"sandbox_id": id,
+			"node_id":    run.NodeID,
+			"error":      err,
+		})
 		return err
 	}
 

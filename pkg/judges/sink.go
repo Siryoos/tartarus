@@ -11,14 +11,17 @@ import (
 
 // AuditRecord represents a structured audit event emitted by Aeacus.
 type AuditRecord struct {
-	AuditID         string                  `json:"audit_id"`
-	Timestamp       time.Time               `json:"timestamp"`
-	SandboxID       domain.SandboxID        `json:"sandbox_id"`
-	TemplateID      domain.TemplateID       `json:"template_id"`
-	Event           string                  `json:"event"`
-	ComplianceLevel string                  `json:"compliance_level"`
-	RetentionPolicy domain.RetentionPolicy  `json:"retention_policy"`
-	Metadata        map[string]string       `json:"metadata"`
+	AuditID         string                 `json:"audit_id"`
+	Timestamp       time.Time              `json:"timestamp"`
+	SandboxID       domain.SandboxID       `json:"sandbox_id"`
+	TemplateID      domain.TemplateID      `json:"template_id"`
+	Event           string                 `json:"event"`
+	ComplianceLevel string                 `json:"compliance_level"`
+	RetentionPolicy domain.RetentionPolicy `json:"retention_policy"`
+	Metadata        map[string]string      `json:"metadata"`
+	IdentityID      string                 `json:"identity_id,omitempty"`
+	IdentityType    string                 `json:"identity_type,omitempty"`
+	TenantID        string                 `json:"tenant_id,omitempty"`
 }
 
 // AuditSink is the interface for audit record emission.

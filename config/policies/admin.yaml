@@ -1,0 +1,5 @@
+role: admin
+permissions:
+  - actions: [read, create, update, delete]
+    resources: [sandbox, template, policy]
+    allowAll: true

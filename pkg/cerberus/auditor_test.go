@@ -6,7 +6,17 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
 )
+
+type MockMetrics struct {
+	hermes.Metrics // Embed interface to satisfy it, but we'll implement methods we need
+}
+
+func (m *MockMetrics) IncCounter(name string, value float64, labels ...hermes.Label)       {}
+func (m *MockMetrics) ObserveHistogram(name string, value float64, labels ...hermes.Label) {}
+func (m *MockMetrics) SetGauge(name string, value float64, labels ...hermes.Label)         {}
 
 func TestLogAuditor(t *testing.T) {
 	ctx := context.Background()
@@ -69,7 +79,7 @@ func TestCompositeAuditor(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	logAuditor := NewLogAuditor(logger)
-	metricsAuditor := NewMetricsAuditor()
+	metricsAuditor := NewMetricsAuditor(&MockMetrics{})
 	noopAuditor := NewNoopAuditor()
 
 	composite := NewCompositeAuditor(logAuditor, metricsAuditor, noopAuditor)
@@ -96,7 +106,7 @@ func TestCompositeAuditor(t *testing.T) {
 
 func TestMetricsAuditor(t *testing.T) {
 	ctx := context.Background()
-	auditor := NewMetricsAuditor()
+	auditor := NewMetricsAuditor(&MockMetrics{})
 
 	entry := &AuditEntry{
 		Timestamp: time.Now(),

@@ -29,6 +29,15 @@ type Config struct {
 	// Phase 4 feature flags (disabled by default for v1.0 stability)
 	EnableHypnos   bool
 	EnableThanatos bool
+
+	// Cerberus Auth Config
+	OIDCClientID   string
+	OIDCIssuerURL  string
+	RBACPolicyPath string
+	TLSCertFile    string
+	TLSKeyFile     string
+	TLSClientAuth  string // "none", "request", "require", "verify-if-given", "require-verify"
+	TLSCAFile      string
 }
 
 func Load() *Config {
@@ -55,6 +64,15 @@ func Load() *Config {
 		// Phase 4 feature flags (disabled by default for v1.0 stability)
 		EnableHypnos:   GetEnvBool("ENABLE_HYPNOS", false),
 		EnableThanatos: GetEnvBool("ENABLE_THANATOS", false),
+
+		// Cerberus Auth Config
+		OIDCClientID:   getEnv("OIDC_CLIENT_ID", ""),
+		OIDCIssuerURL:  getEnv("OIDC_ISSUER_URL", ""),
+		RBACPolicyPath: getEnv("RBAC_POLICY_PATH", ""),
+		TLSCertFile:    getEnv("TLS_CERT_FILE", ""),
+		TLSKeyFile:     getEnv("TLS_KEY_FILE", ""),
+		TLSClientAuth:  getEnv("TLS_CLIENT_AUTH", "none"),
+		TLSCAFile:      getEnv("TLS_CA_FILE", ""),
 	}
 }
 

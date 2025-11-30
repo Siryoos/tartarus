@@ -43,7 +43,7 @@ var runCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		resp, err := http.Post(host+"/submit", "application/json", bytes.NewBuffer(body))
+		resp, err := doRequest(http.MethodPost, "/submit", bytes.NewBuffer(body))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error submitting request: %v\n", err)
 			os.Exit(1)

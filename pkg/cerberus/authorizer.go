@@ -28,15 +28,15 @@ type RBACAuthorizer struct {
 
 // RBACPolicy defines permissions for a role.
 type RBACPolicy struct {
-	Role        string
-	Permissions []Permission
+	Role        string       `yaml:"role" json:"role"`
+	Permissions []Permission `yaml:"permissions" json:"permissions"`
 }
 
 // Permission defines what actions are allowed on what resources.
 type Permission struct {
-	Actions   []Action       // Allowed actions
-	Resources []ResourceType // Allowed resource types
-	AllowAll  bool           // If true, allows all actions on all resources
+	Actions   []Action       `yaml:"actions" json:"actions"`
+	Resources []ResourceType `yaml:"resources" json:"resources"`
+	AllowAll  bool           `yaml:"allowAll" json:"allow_all"`
 }
 
 // NewRBACAuthorizer creates a role-based authorizer.

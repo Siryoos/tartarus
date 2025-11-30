@@ -10,6 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.20.12
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.92.1
 	github.com/coreos/go-iptables v0.8.0
+	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/firecracker-microvm/firecracker-go-sdk v1.0.0
 	github.com/google/cel-go v0.26.1
 	github.com/google/go-containerregistry v0.20.7
@@ -21,6 +22,7 @@ require (
 	github.com/vishvananda/netlink v1.3.1
 	golang.org/x/sync v0.18.0
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -54,6 +56,7 @@ require (
 	github.com/docker/cli v29.0.3+incompatible // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.3 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/go-openapi/analysis v0.21.2 // indirect
 	github.com/go-openapi/errors v0.20.2 // indirect
@@ -96,11 +99,11 @@ require (
 	go.mongodb.org/mongo-driver v1.8.3 // indirect
 	golang.org/x/exp v0.0.0-20230515195305-f3d0a9c9a5cc // indirect
 	golang.org/x/net v0.38.0 // indirect
+	golang.org/x/oauth2 v0.33.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/text v0.23.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251124214823-79d6a2a48846 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251124214823-79d6a2a48846 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

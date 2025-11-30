@@ -1,0 +1,5 @@
+role: readonly
+permissions:
+  - actions: [read]
+    resources: [sandbox, template, policy]
+    allowAll: false

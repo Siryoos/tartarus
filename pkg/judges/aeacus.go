@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tartarus-sandbox/tartarus/pkg/cerberus"
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
 	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
 )
@@ -60,6 +61,13 @@ func (j *AeacusJudge) PreAdmit(ctx context.Context, req *domain.SandboxRequest) 
 		ComplianceLevel: req.Metadata["compliance_level"],
 		RetentionPolicy: req.Retention,
 		Metadata:        req.Metadata,
+	}
+
+	// Capture identity if available
+	if identity, ok := cerberus.GetIdentity(ctx); ok {
+		auditRecord.IdentityID = identity.ID
+		auditRecord.IdentityType = string(identity.Type)
+		auditRecord.TenantID = identity.TenantID
 	}
 
 	if err := j.sink.Emit(ctx, auditRecord); err != nil {

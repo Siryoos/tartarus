@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -472,22 +474,56 @@ func main() {
 
 	// Setup Cerberus gateway for authentication, authorization, and audit
 	apiKey := os.Getenv("TARTARUS_API_KEY")
-	var cerberusAuth cerberus.Authenticator
-	if apiKey == "" {
-		logger.Warn("Running in INSECURE mode: TARTARUS_API_KEY is not set. All requests are allowed.")
-		// Create a permissive authenticator that accepts any credentials
-		cerberusAuth = cerberus.NewSimpleAPIKeyAuthenticator("")
-	} else {
-		cerberusAuth = cerberus.NewSimpleAPIKeyAuthenticator(apiKey)
+
+	// Authenticators
+	var authenticators []cerberus.Authenticator
+
+	// 1. API Key Authenticator
+	if apiKey != "" {
+		authenticators = append(authenticators, cerberus.NewSimpleAPIKeyAuthenticator(apiKey))
 	}
 
-	// Use allow-all authorizer for now (future: RBAC with policies)
-	cerberusAuthz := cerberus.NewAllowAllAuthorizer()
+	// 2. OIDC Authenticator
+	if cfg.OIDCIssuerURL != "" && cfg.OIDCClientID != "" {
+		oidcAuth, err := cerberus.NewOIDCAuthenticator(context.Background(), cfg.OIDCIssuerURL, cfg.OIDCClientID)
+		if err != nil {
+			logger.Error("Failed to initialize OIDC authenticator", "error", err)
+			os.Exit(1)
+		}
+		authenticators = append(authenticators, oidcAuth)
+		logger.Info("Enabled OIDC authentication", "issuer", cfg.OIDCIssuerURL)
+	}
+
+	var cerberusAuth cerberus.Authenticator
+	if len(authenticators) == 0 {
+		logger.Warn("Running in INSECURE mode: No authentication configured. All requests are allowed.")
+		cerberusAuth = cerberus.NewSimpleAPIKeyAuthenticator("")
+	} else if len(authenticators) == 1 {
+		cerberusAuth = authenticators[0]
+	} else {
+		cerberusAuth = cerberus.NewMultiAuthenticator(authenticators...)
+	}
+
+	// Authorizer
+	var cerberusAuthz cerberus.Authorizer
+	if cfg.RBACPolicyPath != "" {
+		loader := cerberus.NewRBACPolicyLoader()
+		policies, err := loader.LoadPolicies(cfg.RBACPolicyPath)
+		if err != nil {
+			logger.Error("Failed to load RBAC policies", "path", cfg.RBACPolicyPath, "error", err)
+			os.Exit(1)
+		}
+		cerberusAuthz = cerberus.NewRBACAuthorizer(policies)
+		logger.Info("Enabled RBAC authorization", "policy_count", len(policies))
+	} else {
+		cerberusAuthz = cerberus.NewAllowAllAuthorizer()
+		logger.Info("Using AllowAll authorizer (no RBAC policies configured)")
+	}
 
 	// Setup composite auditor (logs + metrics)
 	cerberusAudit := cerberus.NewCompositeAuditor(
 		cerberus.NewLogAuditor(logger),
-		cerberus.NewMetricsAuditor(),
+		cerberus.NewMetricsAuditor(metrics),
 	)
 
 	// Create the three-headed gateway
@@ -502,19 +538,61 @@ func main() {
 
 	// Wrap the mux with Cerberus middleware
 	var handler http.Handler = mux
-	if apiKey != "" {
-		// Only apply Cerberus if API key is set
+	if len(authenticators) > 0 {
 		handler = cerberusMiddleware.Wrap(mux)
 	}
 
+	// TLS Configuration
+	var tlsConfig *tls.Config
+	if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" {
+		tlsConfig = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		}
+
+		if cfg.TLSClientAuth != "none" && cfg.TLSCAFile != "" {
+			caCert, err := os.ReadFile(cfg.TLSCAFile)
+			if err != nil {
+				logger.Error("Failed to read CA file", "path", cfg.TLSCAFile, "error", err)
+				os.Exit(1)
+			}
+			caCertPool := x509.NewCertPool()
+			caCertPool.AppendCertsFromPEM(caCert)
+			tlsConfig.ClientCAs = caCertPool
+
+			switch cfg.TLSClientAuth {
+			case "request":
+				tlsConfig.ClientAuth = tls.RequestClientCert
+			case "require":
+				tlsConfig.ClientAuth = tls.RequireAnyClientCert
+			case "verify-if-given":
+				tlsConfig.ClientAuth = tls.VerifyClientCertIfGiven
+			case "require-verify":
+				tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
+			default:
+				logger.Warn("Unknown TLS client auth mode, defaulting to NoClientCert", "mode", cfg.TLSClientAuth)
+				tlsConfig.ClientAuth = tls.NoClientCert
+			}
+			logger.Info("Enabled mTLS", "client_auth", cfg.TLSClientAuth)
+		}
+	}
+
 	srv := &http.Server{
-		Addr:    ":" + cfg.Port,
-		Handler: handler,
+		Addr:      ":" + cfg.Port,
+		Handler:   handler,
+		TLSConfig: tlsConfig,
 	}
 
 	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Error("Server failed", "error", err)
+		if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" {
+			logger.Info("Starting HTTPS server", "port", cfg.Port)
+			if err := srv.ListenAndServeTLS(cfg.TLSCertFile, cfg.TLSKeyFile); err != nil && err != http.ErrServerClosed {
+				logger.Error("Server failed", "error", err)
+			}
+		} else {
+			logger.Info("Starting HTTP server", "port", cfg.Port)
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				logger.Error("Server failed", "error", err)
+			}
 		}
 	}()
 

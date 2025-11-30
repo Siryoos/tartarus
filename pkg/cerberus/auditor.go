@@ -3,6 +3,8 @@ package cerberus
 import (
 	"context"
 	"log/slog"
+
+	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
 )
 
 // Auditor records access attempts for compliance and security monitoring.
@@ -66,21 +68,44 @@ func (a *LogAuditor) RecordAccess(ctx context.Context, entry *AuditEntry) error 
 // MetricsAuditor emits metrics for access attempts.
 // This integrates with the Hermes metrics system.
 type MetricsAuditor struct {
-	// In a real implementation, this would use pkg/hermes
-	// For now, we'll keep it simple
+	metrics hermes.Metrics
 }
 
 // NewMetricsAuditor creates an auditor that emits metrics.
-func NewMetricsAuditor() *MetricsAuditor {
-	return &MetricsAuditor{}
+func NewMetricsAuditor(metrics hermes.Metrics) *MetricsAuditor {
+	return &MetricsAuditor{
+		metrics: metrics,
+	}
 }
 
 // RecordAccess emits metrics for the access attempt.
 func (m *MetricsAuditor) RecordAccess(ctx context.Context, entry *AuditEntry) error {
-	// TODO: Integrate with pkg/hermes to emit:
-	// - Counter: cerberus_access_total{result, action, resource_type}
-	// - Histogram: cerberus_access_latency{action, resource_type}
-	// - Counter: cerberus_auth_failures_total{reason}
+	m.metrics.IncCounter("cerberus_access_total", 1,
+		hermes.Label{Key: "result", Value: string(entry.Result)},
+		hermes.Label{Key: "action", Value: string(entry.Action)},
+		hermes.Label{Key: "resource_type", Value: string(entry.Resource.Type)},
+	)
+
+	m.metrics.ObserveHistogram("cerberus_access_latency_seconds", entry.Latency.Seconds(),
+		hermes.Label{Key: "action", Value: string(entry.Action)},
+		hermes.Label{Key: "resource_type", Value: string(entry.Resource.Type)},
+	)
+
+	if entry.Result != AuditResultSuccess {
+		reason := "unknown"
+		if entry.ErrorMessage != "" {
+			// Simple heuristic for reason, in real world we might want structured error codes
+			if entry.Result == AuditResultDenied {
+				reason = "denied"
+			} else {
+				reason = "error"
+			}
+		}
+		m.metrics.IncCounter("cerberus_auth_failures_total", 1,
+			hermes.Label{Key: "reason", Value: reason},
+		)
+	}
+
 	return nil
 }
 

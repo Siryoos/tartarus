@@ -1,19 +1,11 @@
-{"time":"2025-11-28T14:15:50.865779-06:00","level":"INFO","msg":"Starting Olympus API","port":"8086"}
-{"time":"2025-11-28T14:15:50.870534-06:00","level":"INFO","msg":"Using in-memory queue"}
-{"time":"2025-11-28T14:15:50.870563-06:00","level":"INFO","msg":"Using in-memory registry"}
-{"time":"2025-11-28T14:15:50.871996-06:00","level":"INFO","msg":"Using S3 store","bucket":"tartarus-snapshots"}
-{"time":"2025-11-28T14:15:50.872088-06:00","level":"INFO","msg":"Using Noop control plane"}
-{"time":"2025-11-28T14:15:50.875182-06:00","level":"WARN","msg":"Running in INSECURE mode: TARTARUS_API_KEY is not set. All requests are allowed."}
-{"time":"2025-11-28T14:15:53.09648-06:00","level":"INFO","msg":"Metric","metric":"sandbox_submissions_total","value":1,"type":"counter"}
-{"time":"2025-11-28T14:15:53.096618-06:00","level":"INFO","msg":"Loaded policy for request","sandbox_id":"ce0a1ec7-ed9b-4092-af5f-c4cce21b4764","template":"hello-world","policy_id":"default-hello-world"}
-{"time":"2025-11-28T14:15:53.096737-06:00","level":"INFO","msg":"Aeacus: Enforced default retention policy","sandbox_id":"ce0a1ec7-ed9b-4092-af5f-c4cce21b4764","audit_id":"1e120fdf-a679-4797-a26b-e06db65aa93d","max_age":"1h0m0s"}
-{"time":"2025-11-28T14:15:53.09675-06:00","level":"INFO","msg":"Aeacus: Audit Record","event":"sandbox_request_audit","sandbox_id":"ce0a1ec7-ed9b-4092-af5f-c4cce21b4764","audit_id":"1e120fdf-a679-4797-a26b-e06db65aa93d","template":"hello-world","compliance_level":"standard","retention_policy":{"max_age":3600000000000,"keep_outputs":false}}
-{"time":"2025-11-28T14:15:53.09676-06:00","level":"INFO","msg":"Request passed resource validation","sandbox_id":"ce0a1ec7-ed9b-4092-af5f-c4cce21b4764","template":"hello-world","cpu":100,"mem":64}
-{"time":"2025-11-28T14:15:53.09677-06:00","level":"INFO","msg":"Request passed network validation: secure default","sandbox_id":"ce0a1ec7-ed9b-4092-af5f-c4cce21b4764","network_id":"lockdown-no-net"}
-{"time":"2025-11-28T14:15:53.096778-06:00","level":"INFO","msg":"Request passed all judges","sandbox_id":"ce0a1ec7-ed9b-4092-af5f-c4cce21b4764"}
-{"time":"2025-11-28T14:15:53.096795-06:00","level":"INFO","msg":"Scheduled sandbox","sandbox_id":"ce0a1ec7-ed9b-4092-af5f-c4cce21b4764","node_id":"test-node","free_mem_mb":8192}
-{"time":"2025-11-28T14:15:53.096802-06:00","level":"INFO","msg":"Scheduled sandbox","node_id":"test-node","sandbox_id":"ce0a1ec7-ed9b-4092-af5f-c4cce21b4764"}
-{"time":"2025-11-28T14:15:53.096808-06:00","level":"INFO","msg":"Request successfully enqueued","sandbox_id":"ce0a1ec7-ed9b-4092-af5f-c4cce21b4764"}
-{"time":"2025-11-28T14:15:53.096815-06:00","level":"INFO","msg":"Metric","metric":"sandbox_submission_duration_seconds","value":0.000639167,"type":"histogram"}
-{"time":"2025-11-28T14:15:54.18932-06:00","level":"INFO","msg":"Shutting down server..."}
-{"time":"2025-11-28T14:15:54.189855-06:00","level":"INFO","msg":"Server exited"}
+{"time":"2025-11-30T13:42:34.062021-06:00","level":"INFO","msg":"Starting Olympus API","port":"8080"}
+{"time":"2025-11-30T13:42:34.07553-06:00","level":"INFO","msg":"Using Redis queue","addr":"localhost:6379","db":0,"key":"tartarus:queue"}
+{"time":"2025-11-30T13:42:34.07556-06:00","level":"INFO","msg":"Using Redis queue","addr":"localhost:6379","db":0,"key":"tartarus:queue"}
+{"time":"2025-11-30T13:42:34.076595-06:00","level":"INFO","msg":"Using Redis registry","addr":"localhost:6379"}
+{"time":"2025-11-30T13:42:34.07683-06:00","level":"INFO","msg":"Using Redis registry","addr":"localhost:6379"}
+{"time":"2025-11-30T13:42:34.077827-06:00","level":"INFO","msg":"Using S3 store","bucket":"tartarus-snapshots"}
+{"time":"2025-11-30T13:42:34.078957-06:00","level":"INFO","msg":"Using Redis policy repo","addr":"localhost:6379"}
+{"time":"2025-11-30T13:42:34.080571-06:00","level":"INFO","msg":"Using Redis control plane"}
+{"time":"2025-11-30T13:42:34.080599-06:00","level":"INFO","msg":"Using Redis control plane"}
+{"time":"2025-11-30T13:42:34.080604-06:00","level":"INFO","msg":"Initialized audit sink for Aeacus judge"}
+{"time":"2025-11-30T13:42:34.083873-06:00","level":"ERROR","msg":"Failed to load RBAC policies","path":"/Users/mohammadrezayousefiha/tartarus/config/policies","error":"failed to load admin.yaml: failed to parse policy file: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!map into []struct { Role string \"yaml:\\\"role\\\" json:\\\"role\\\"\"; Permissions []cerberus.Permission \"yaml:\\\"permissions\\\" json:\\\"permissions\\\"\" }"}

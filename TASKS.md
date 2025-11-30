@@ -10,7 +10,7 @@ Phase 3 (v1.0) is complete. The items below capture the remaining work, organize
 - [x] **Hypnos hibernation**: Finish `SleepManager` (pause/compress/write/restore); add lifecycle hooks in agent/runtime; expose API/CLI toggles; gate with `EnableHypnos` and promote to default once stability/latency targets are met.
 
 ## Phase 5 — Ascension to Olympus (Near-Term Production)
-- [ ] **Cerberus authentication/RBAC**: Build API key + OIDC flows, mTLS for agent links, role/tenant-aware authorization, and access auditing; wire into Judges and CLI.
+- [x] **Cerberus authentication/RBAC**: Build API key + OIDC flows, mTLS for agent links, role/tenant-aware authorization, and access auditing; wire into Judges and CLI.
 - [ ] **Charon traffic ferry**: Load balancing across Olympus instances with health checks, circuit breaking, retries, and per-tenant rate limiting.
 - [ ] **CLI v2.0**: Add `tartarus init template` (Dockerfile/OCI to template), `logs --follow`, `snapshot create/list/delete`, `exec` and `inspect`, config management, and shell completions.
 - [ ] **Kubernetes integration**: Deliver CRI shim or Operator/CRDs (`SandboxJob`, `SandboxTemplate`) to schedule pods into Tartarus microVMs; validate end-to-end lifecycle and network/policy parity.
