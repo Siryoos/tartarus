@@ -24,7 +24,7 @@ Context: ROADMAP.md marks Phase 3 as in progress, and code review shows componen
   - DoD: On dequeue/unmarshal failure, write to Cocytus with payload snapshot, ack/drop to avoid loops, and expose metrics; add tests.
 
 ## Persistence and Durability
-- [ ] Olympus/Hades persistence verification (`pkg/olympus`, `pkg/hades`)
+- [x] Olympus/Hades persistence verification (`pkg/olympus`, `pkg/hades`)
   - Current: TASKS claimed done, but default wiring uses in-memory when Redis unset.
   - DoD: Default production config to Redis-backed registry/queue, verify state survives manager restart, and document required settings.
 - [ ] Themis policy durability and versioning (`pkg/themis`)

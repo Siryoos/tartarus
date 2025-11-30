@@ -36,7 +36,7 @@ func TestOlympusPersistence_RestartRecovery(t *testing.T) {
 		require.NoError(t, err)
 
 		// Queue
-		queue, err := acheron.NewRedisQueue(mr.Addr(), 0, "tartarus:queue", "", "", true, metrics)
+		queue, err := acheron.NewRedisQueue(mr.Addr(), 0, "tartarus:queue", "", "", true, metrics, nil)
 		require.NoError(t, err)
 
 		// Control Plane
