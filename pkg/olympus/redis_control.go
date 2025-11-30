@@ -24,7 +24,7 @@ func (r *RedisControlPlane) Kill(ctx context.Context, nodeID domain.NodeID, sand
 	return r.client.Publish(ctx, topic, msg).Err()
 }
 
-func (r *RedisControlPlane) StreamLogs(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID, w io.Writer) error {
+func (r *RedisControlPlane) StreamLogs(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID, w io.Writer, follow bool) error {
 	// 1. Subscribe to logs FIRST to avoid race condition
 	logsTopic := fmt.Sprintf("tartarus:logs:%s", sandboxID)
 	pubsub := r.client.Subscribe(ctx, logsTopic)
@@ -37,7 +37,7 @@ func (r *RedisControlPlane) StreamLogs(ctx context.Context, nodeID domain.NodeID
 
 	// 2. Trigger agent to start streaming
 	controlTopic := fmt.Sprintf("tartarus:control:%s", nodeID)
-	msg := fmt.Sprintf("LOGS %s", sandboxID)
+	msg := fmt.Sprintf("LOGS %s %v", sandboxID, follow)
 	if err := r.client.Publish(ctx, controlTopic, msg).Err(); err != nil {
 		return fmt.Errorf("failed to trigger log streaming: %w", err)
 	}
@@ -84,4 +84,17 @@ func (r *RedisControlPlane) Wake(ctx context.Context, nodeID domain.NodeID, sand
 	topic := fmt.Sprintf("tartarus:control:%s", nodeID)
 	msg := fmt.Sprintf("WAKE %s", sandboxID)
 	return r.client.Publish(ctx, topic, msg).Err()
+}
+
+func (r *RedisControlPlane) Snapshot(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID) error {
+	topic := fmt.Sprintf("tartarus:control:%s", nodeID)
+	msg := fmt.Sprintf("SNAPSHOT %s", sandboxID)
+	return r.client.Publish(ctx, topic, msg).Err()
+}
+
+func (r *RedisControlPlane) Exec(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID, cmd []string) error {
+	// Exec is not yet supported by the runtime, but we can stub it here.
+	// We might want to publish an EXEC message if we were to support it.
+	// For now, return "not implemented" error or just log.
+	return fmt.Errorf("exec not implemented")
 }

@@ -97,7 +97,7 @@ func (m *mockRuntime) Inspect(ctx context.Context, id domain.SandboxID) (*domain
 }
 func (m *mockRuntime) List(ctx context.Context) ([]domain.SandboxRun, error) { return nil, nil }
 func (m *mockRuntime) Kill(ctx context.Context, id domain.SandboxID) error   { return nil }
-func (m *mockRuntime) StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writer) error {
+func (m *mockRuntime) StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writer, follow bool) error {
 	return nil
 }
 func (m *mockRuntime) Allocation(ctx context.Context) (domain.ResourceCapacity, error) {

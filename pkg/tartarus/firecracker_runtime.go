@@ -363,29 +363,35 @@ func (r *FirecrackerRuntime) Kill(ctx context.Context, id domain.SandboxID) erro
 	// We keep the log/console files for debugging/streaming?
 	// If we delete them, StreamLogs might fail if called after Kill.
 	// Usually we might want to keep them for a bit or let a reaper clean them up.
-	// For now, we'll leave them.
-
+	// StreamLogs streams logs from the sandbox's log file.
 	return nil
 }
 
-func (r *FirecrackerRuntime) StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writer) error {
+// StreamLogs streams logs from the sandbox's log file.
+func (r *FirecrackerRuntime) StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writer, follow bool) error {
 	val, ok := r.vms.Load(id)
 	if !ok {
-		return fmt.Errorf("sandbox not found")
+		return fmt.Errorf("sandbox not found: %s", id)
 	}
 	state := val.(*vmState)
 
-	// Tail the console log file
-	file, err := os.Open(state.ConsolePath)
+	logPath := state.ConsolePath // Assuming consolePath is the log file
+	file, err := os.Open(logPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to open log file: %w", err)
 	}
 	defer file.Close()
 
+	if !follow {
+		_, err = io.Copy(w, file)
+		return err
+	}
+
+	// Follow mode
+	buf := make([]byte, 1024)
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
-	buf := make([]byte, 1024)
 	for {
 		select {
 		case <-ctx.Done():

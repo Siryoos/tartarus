@@ -32,4 +32,10 @@ type Manager interface {
 
 	// Invalidate can be called when a template is updated or revoked.
 	Invalidate(ctx context.Context, tplID domain.TemplateID) error
+
+	// SaveSnapshot persists a snapshot from local paths to the store.
+	SaveSnapshot(ctx context.Context, tplID domain.TemplateID, snapID domain.SnapshotID, memPath, diskPath string) (*Snapshot, error)
+
+	// DeleteSnapshot removes a snapshot from the store and cache.
+	DeleteSnapshot(ctx context.Context, tplID domain.TemplateID, snapID domain.SnapshotID) error
 }

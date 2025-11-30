@@ -57,7 +57,7 @@ func (r *FirecrackerRuntime) List(ctx context.Context) ([]domain.SandboxRun, err
 	return nil, fmt.Errorf("Firecracker runtime not supported on non-Linux platforms")
 }
 
-func (r *FirecrackerRuntime) StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writer) error {
+func (r *FirecrackerRuntime) StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writer, follow bool) error {
 	return fmt.Errorf("Firecracker runtime not supported on non-Linux platforms")
 }
 

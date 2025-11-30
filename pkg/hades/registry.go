@@ -2,9 +2,15 @@ package hades
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
+)
+
+var (
+	ErrNodeNotFound = errors.New("node not found")
+	ErrRunNotFound  = errors.New("run not found")
 )
 
 // Registry tracks the underworld of nodes.

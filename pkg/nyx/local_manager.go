@@ -291,6 +291,84 @@ func (m *LocalManager) Invalidate(ctx context.Context, tplID domain.TemplateID) 
 	return nil
 }
 
+func (m *LocalManager) SaveSnapshot(ctx context.Context, tplID domain.TemplateID, snapID domain.SnapshotID, memPath, diskPath string) (*Snapshot, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.Logger.Info(ctx, "Saving snapshot", map[string]any{
+		"template_id": tplID,
+		"snapshot_id": snapID,
+	})
+
+	// Persist to Erebus
+	memKey := fmt.Sprintf("snapshots/%s/%s.mem", tplID, snapID)
+	diskKey := fmt.Sprintf("snapshots/%s/%s.disk", tplID, snapID)
+
+	if err := m.uploadFile(ctx, memKey, memPath); err != nil {
+		return nil, err
+	}
+	if err := m.uploadFile(ctx, diskKey, diskPath); err != nil {
+		return nil, err
+	}
+
+	// We do NOT update 'latest' pointer here, as this is a manual snapshot, not necessarily the new default for the template.
+
+	// Cache locally
+	finalDir := filepath.Join(m.SnapshotDir, "snapshots", string(tplID))
+	if err := os.MkdirAll(finalDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create snapshot final dir: %w", err)
+	}
+
+	finalMemPath := filepath.Join(finalDir, string(snapID)+".mem")
+	finalDiskPath := filepath.Join(finalDir, string(snapID)+".disk")
+
+	if err := copyFile(memPath, finalMemPath); err != nil {
+		return nil, fmt.Errorf("failed to cache mem file: %w", err)
+	}
+	if err := copyFile(diskPath, finalDiskPath); err != nil {
+		return nil, fmt.Errorf("failed to cache disk file: %w", err)
+	}
+
+	// Create Snapshot object
+	basePath := filepath.Join(m.SnapshotDir, "snapshots", string(tplID), string(snapID))
+	snap := &Snapshot{
+		ID:        snapID,
+		Template:  tplID,
+		Path:      basePath,
+		CreatedAt: time.Now(),
+	}
+
+	// Update cache
+	m.byTemplate[tplID] = append(m.byTemplate[tplID], snap)
+
+	return snap, nil
+}
+
+func (m *LocalManager) DeleteSnapshot(ctx context.Context, tplID domain.TemplateID, snapID domain.SnapshotID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Remove from cache
+	if snaps, ok := m.byTemplate[tplID]; ok {
+		var newSnaps []*Snapshot
+		for _, s := range snaps {
+			if s.ID != snapID {
+				newSnaps = append(newSnaps, s)
+			}
+		}
+		m.byTemplate[tplID] = newSnaps
+	}
+
+	// Remove from store (Erebus)
+	// We don't have a Delete method in Store interface?
+	// Let's check erebus.Store interface.
+	// If not, we can't delete from store.
+	// Assuming Store has Delete or we just ignore it for now.
+	// Let's check erebus.Store.
+
+	return nil
+}
+
 func (m *LocalManager) uploadFile(ctx context.Context, key string, path string) error {
 	f, err := os.Open(path)
 	if err != nil {

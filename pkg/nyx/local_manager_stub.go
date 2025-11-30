@@ -34,3 +34,11 @@ func (m *LocalManager) ListSnapshots(ctx context.Context, tplID domain.TemplateI
 func (m *LocalManager) Invalidate(ctx context.Context, tplID domain.TemplateID) error {
 	return fmt.Errorf("Nyx LocalManager not supported on non-Linux platforms")
 }
+
+func (m *LocalManager) SaveSnapshot(ctx context.Context, tplID domain.TemplateID, snapID domain.SnapshotID, memPath, diskPath string) (*Snapshot, error) {
+	return nil, fmt.Errorf("Nyx LocalManager not supported on non-Linux platforms")
+}
+
+func (m *LocalManager) DeleteSnapshot(ctx context.Context, tplID domain.TemplateID, snapID domain.SnapshotID) error {
+	return fmt.Errorf("Nyx LocalManager not supported on non-Linux platforms")
+}

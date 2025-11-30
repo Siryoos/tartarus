@@ -26,7 +26,7 @@ type SandboxRuntime interface {
 	Shutdown(ctx context.Context, id domain.SandboxID) error
 	// GetConfig returns the VMConfig and original request used to launch the sandbox.
 	GetConfig(ctx context.Context, id domain.SandboxID) (VMConfig, *domain.SandboxRequest, error)
-	StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writer) error
+	StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writer, follow bool) error
 	Allocation(ctx context.Context) (domain.ResourceCapacity, error)
 	Wait(ctx context.Context, id domain.SandboxID) error
 }

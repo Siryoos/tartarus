@@ -48,7 +48,7 @@ func (r *MemoryRegistry) ListNodes(ctx context.Context) ([]domain.NodeStatus, er
 func (r *MemoryRegistry) GetNode(ctx context.Context, id domain.NodeID) (*domain.NodeStatus, error) {
 	val, ok := r.nodes.Load(id)
 	if !ok {
-		return nil, errors.New("node not found")
+		return nil, ErrNodeNotFound
 	}
 	status := val.(domain.NodeStatus)
 
@@ -98,7 +98,7 @@ func (r *MemoryRegistry) UpdateRun(ctx context.Context, run domain.SandboxRun) e
 func (r *MemoryRegistry) GetRun(ctx context.Context, id domain.SandboxID) (*domain.SandboxRun, error) {
 	val, ok := r.runs.Load(id)
 	if !ok {
-		return nil, errors.New("run not found")
+		return nil, ErrRunNotFound
 	}
 	run := val.(domain.SandboxRun)
 	return &run, nil

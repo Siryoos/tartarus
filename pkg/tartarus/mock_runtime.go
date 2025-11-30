@@ -104,7 +104,7 @@ func (r *MockRuntime) Kill(ctx context.Context, id domain.SandboxID) error {
 	return nil
 }
 
-func (r *MockRuntime) StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writer) error {
+func (m *MockRuntime) StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writer, follow bool) error {
 	_, err := w.Write([]byte("mock logs for " + string(id) + "\n"))
 	return err
 }

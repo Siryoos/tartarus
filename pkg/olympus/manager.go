@@ -14,6 +14,7 @@ import (
 	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
 	"github.com/tartarus-sandbox/tartarus/pkg/judges"
 	"github.com/tartarus-sandbox/tartarus/pkg/moirai"
+	"github.com/tartarus-sandbox/tartarus/pkg/nyx"
 	"github.com/tartarus-sandbox/tartarus/pkg/phlegethon"
 	"github.com/tartarus-sandbox/tartarus/pkg/themis"
 )
@@ -28,6 +29,7 @@ type Manager struct {
 	Hades      hades.Registry
 	Policies   themis.Repository
 	Templates  TemplateManager
+	Nyx        nyx.Manager
 	Judges     *judges.Chain
 	Scheduler  moirai.Scheduler
 	Phlegethon *phlegethon.HeatClassifier
@@ -328,14 +330,14 @@ func (m *Manager) WakeSandbox(ctx context.Context, id domain.SandboxID) error {
 }
 
 // StreamLogs streams logs from the sandbox on the specified node.
-func (m *Manager) StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writer) error {
+func (m *Manager) StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writer, follow bool) error {
 	// Find which node is running this sandbox
 	run, err := m.Hades.GetRun(ctx, id)
 	if err != nil {
 		return ErrSandboxNotFound
 	}
 
-	if err := m.Control.StreamLogs(ctx, run.NodeID, id, w); err != nil {
+	if err := m.Control.StreamLogs(ctx, run.NodeID, id, w, follow); err != nil {
 		m.Logger.Error(ctx, "Failed to stream logs", map[string]any{
 			"sandbox_id": id,
 			"node_id":    run.NodeID,
@@ -344,5 +346,76 @@ func (m *Manager) StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writ
 		return err
 	}
 
+	return nil
+}
+
+// CreateSnapshot triggers a snapshot creation for the sandbox.
+func (m *Manager) CreateSnapshot(ctx context.Context, id domain.SandboxID) error {
+	// Find which node is running this sandbox
+	run, err := m.Hades.GetRun(ctx, id)
+	if err != nil {
+		return ErrSandboxNotFound
+	}
+
+	if err := m.Control.Snapshot(ctx, run.NodeID, id); err != nil {
+		m.Logger.Error(ctx, "Failed to send snapshot command", map[string]any{
+			"sandbox_id": id,
+			"node_id":    run.NodeID,
+			"error":      err,
+		})
+		return err
+	}
+
+	m.Logger.Info(ctx, "Snapshot command sent", map[string]any{
+		"sandbox_id": id,
+		"node_id":    run.NodeID,
+	})
+	return nil
+}
+
+// ListSnapshots returns all snapshots for the template of the given sandbox.
+func (m *Manager) ListSnapshots(ctx context.Context, id domain.SandboxID) ([]*nyx.Snapshot, error) {
+	// Find the sandbox to get its template
+	run, err := m.Hades.GetRun(ctx, id)
+	if err != nil {
+		return nil, ErrSandboxNotFound
+	}
+
+	return m.Nyx.ListSnapshots(ctx, run.Template)
+}
+
+// DeleteSnapshot deletes a snapshot.
+func (m *Manager) DeleteSnapshot(ctx context.Context, id domain.SandboxID, snapID domain.SnapshotID) error {
+	// Find the sandbox to get its template
+	run, err := m.Hades.GetRun(ctx, id)
+	if err != nil {
+		return ErrSandboxNotFound
+	}
+
+	return m.Nyx.DeleteSnapshot(ctx, run.Template, snapID)
+}
+
+// Exec executes a command in the sandbox.
+func (m *Manager) Exec(ctx context.Context, id domain.SandboxID, cmd []string) error {
+	// Find which node is running this sandbox
+	run, err := m.Hades.GetRun(ctx, id)
+	if err != nil {
+		return ErrSandboxNotFound
+	}
+
+	if err := m.Control.Exec(ctx, run.NodeID, id, cmd); err != nil {
+		m.Logger.Error(ctx, "Failed to send exec command", map[string]any{
+			"sandbox_id": id,
+			"node_id":    run.NodeID,
+			"error":      err,
+		})
+		return err
+	}
+
+	m.Logger.Info(ctx, "Exec command sent", map[string]any{
+		"sandbox_id": id,
+		"node_id":    run.NodeID,
+		"command":    cmd,
+	})
 	return nil
 }

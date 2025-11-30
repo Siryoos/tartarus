@@ -70,18 +70,19 @@ type SandboxRequest struct {
 // SandboxRun is the lifecycle instance of a request on a node.
 
 type SandboxRun struct {
-	ID          SandboxID  `json:"id"`
-	RequestID   SandboxID  `json:"request_id"`
-	NodeID      NodeID     `json:"node_id"`
-	Template    TemplateID `json:"template"`
-	Status      RunStatus  `json:"status"`
-	ExitCode    *int       `json:"exit_code,omitempty"`
-	Error       string     `json:"error,omitempty"`
-	StartedAt   time.Time  `json:"started_at"`
-	FinishedAt  time.Time  `json:"finished_at"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-	MemoryUsage Megabytes  `json:"memory_usage,omitempty"`
+	ID          SandboxID         `json:"id"`
+	RequestID   SandboxID         `json:"request_id"`
+	NodeID      NodeID            `json:"node_id"`
+	Template    TemplateID        `json:"template"`
+	Status      RunStatus         `json:"status"`
+	ExitCode    *int              `json:"exit_code,omitempty"`
+	Error       string            `json:"error,omitempty"`
+	StartedAt   time.Time         `json:"started_at"`
+	FinishedAt  time.Time         `json:"finished_at"`
+	CreatedAt   time.Time         `json:"created_at"`
+	UpdatedAt   time.Time         `json:"updated_at"`
+	MemoryUsage Megabytes         `json:"memory_usage,omitempty"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
 // Node & capacity

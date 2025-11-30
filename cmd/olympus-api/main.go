@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
 	"github.com/tartarus-sandbox/tartarus/pkg/judges"
 	"github.com/tartarus-sandbox/tartarus/pkg/moirai"
+	"github.com/tartarus-sandbox/tartarus/pkg/nyx"
 	"github.com/tartarus-sandbox/tartarus/pkg/olympus"
 	"github.com/tartarus-sandbox/tartarus/pkg/phlegethon"
 	"github.com/tartarus-sandbox/tartarus/pkg/themis"
@@ -127,7 +129,22 @@ func main() {
 	_ = store // Silence unused variable error
 	_ = store // Silence unused variable error
 	_ = store // Silence unused variable error
+	_ = store // Silence unused variable error
 	hermesLogger := hermes.NewSlogAdapter()
+
+	// Nyx Manager
+	// We need OCIBuilder if we want to support OCI images in Nyx, but for now we can pass nil or implement it.
+	// The plan didn't explicitly say we need OCIBuilder for snapshots, but LocalManager needs it for Prepare.
+	// We can pass nil if we don't use it for now, or initialize it if we have it.
+	// We implemented OCIBuilder in a previous task?
+	// Let's assume nil for now as we are focusing on snapshots of existing VMs which use existing images.
+	// Wait, LocalManager constructor signature: NewLocalManager(store, ociBuilder, snapshotDir, logger)
+	nyxManager, err := nyx.NewLocalManager(store, nil, cfg.SnapshotPath, hermesLogger)
+	if err != nil {
+		logger.Error("Failed to initialize Nyx manager", "error", err)
+		os.Exit(1)
+	}
+
 	scheduler := moirai.NewScheduler(cfg.SchedulerStrategy, hermesLogger)
 
 	// Policy repository
@@ -281,6 +298,7 @@ func main() {
 		Hades:      registry,
 		Policies:   policyRepo,
 		Templates:  templateManager,
+		Nyx:        nyxManager,
 		Judges:     judgeChain,
 		Scheduler:  scheduler,
 		Phlegethon: heatClassifier,
@@ -334,33 +352,127 @@ func main() {
 	})
 
 	mux.HandleFunc("/sandboxes/", func(w http.ResponseWriter, r *http.Request) {
-		id := domain.SandboxID(r.URL.Path[len("/sandboxes/"):])
-		if id == "" {
+		// /sandboxes/{id}
+		// /sandboxes/{id}/snapshot
+		// /sandboxes/{id}/snapshots
+		// /sandboxes/{id}/snapshots/{snapID}
+		// /sandboxes/{id}/exec
+
+		path := r.URL.Path[len("/sandboxes/"):]
+		parts := strings.Split(path, "/")
+		if len(parts) == 0 || parts[0] == "" {
 			http.Error(w, "Missing sandbox ID", http.StatusBadRequest)
 			return
 		}
+		id := domain.SandboxID(parts[0])
 
-		if r.Method == http.MethodDelete {
-			if err := manager.KillSandbox(r.Context(), id); err != nil {
-				if errors.Is(err, olympus.ErrSandboxNotFound) {
-					logger.Warn("Sandbox not found for kill", "id", id)
-					http.Error(w, "Sandbox not found", http.StatusNotFound)
+		if len(parts) == 1 {
+			// /sandboxes/{id}
+			if r.Method == http.MethodDelete {
+				if err := manager.KillSandbox(r.Context(), id); err != nil {
+					if errors.Is(err, olympus.ErrSandboxNotFound) {
+						http.Error(w, "Sandbox not found", http.StatusNotFound)
+						return
+					}
+					logger.Error("Failed to kill sandbox", "id", id, "error", err)
+					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 					return
 				}
-				logger.Error("Failed to kill sandbox", "id", id, "error", err)
-				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(map[string]string{"status": "killed", "id": string(id)})
 				return
 			}
-			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]string{"status": "killed", "id": string(id)})
+			// GET /sandboxes/{id}
+			if r.Method == http.MethodGet {
+				run, err := manager.Hades.GetRun(r.Context(), id)
+				if err != nil {
+					if errors.Is(err, hades.ErrRunNotFound) {
+						http.Error(w, "Sandbox not found", http.StatusNotFound)
+						return
+					}
+					logger.Error("Failed to get sandbox", "id", id, "error", err)
+					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+					return
+				}
+				json.NewEncoder(w).Encode(run)
+				return
+			}
 			return
-		} else if r.Method == http.MethodGet && r.URL.Query().Get("action") == "logs" {
-			// Stream logs
-			// Check if we should stream
-			// Path: /sandboxes/{id}?action=logs
-			// Or maybe /sandboxes/{id}/logs is better but mux doesn't support wildcards easily without stripping.
-			// Let's stick to query param or check suffix if I parse path manually.
-			// The handler is registered on /sandboxes/, so it matches /sandboxes/foo/logs if I parse it.
+		}
+
+		action := parts[1]
+		switch action {
+		case "snapshot":
+			if r.Method == http.MethodPost {
+				// Create Snapshot
+				if err := manager.CreateSnapshot(r.Context(), id); err != nil {
+					logger.Error("Failed to create snapshot", "id", id, "error", err)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				w.WriteHeader(http.StatusAccepted)
+				json.NewEncoder(w).Encode(map[string]string{"status": "snapshot_requested", "id": string(id)})
+				return
+			}
+		case "snapshots":
+			if r.Method == http.MethodGet {
+				// List Snapshots
+				snaps, err := manager.ListSnapshots(r.Context(), id)
+				if err != nil {
+					logger.Error("Failed to list snapshots", "id", id, "error", err)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				json.NewEncoder(w).Encode(snaps)
+				return
+			} else if r.Method == http.MethodDelete {
+				// DELETE /sandboxes/{id}/snapshots/{snapID}
+				if len(parts) < 3 {
+					http.Error(w, "Missing snapshot ID", http.StatusBadRequest)
+					return
+				}
+				snapID := domain.SnapshotID(parts[2])
+				if err := manager.DeleteSnapshot(r.Context(), id, snapID); err != nil {
+					logger.Error("Failed to delete snapshot", "id", id, "snapID", snapID, "error", err)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+		case "exec":
+			if r.Method == http.MethodPost {
+				var req struct {
+					Cmd []string `json:"cmd"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					http.Error(w, "Invalid request body", http.StatusBadRequest)
+					return
+				}
+				if err := manager.Exec(r.Context(), id, req.Cmd); err != nil {
+					logger.Error("Failed to exec", "id", id, "error", err)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				w.WriteHeader(http.StatusAccepted)
+				return
+			}
+		case "logs":
+			// Handled by specific handler?
+			// No, specific handler was /sandboxes/logs/
+			// But /sandboxes/ prefix matches everything.
+			// I need to be careful about overlapping handlers.
+			// /sandboxes/ is a prefix match.
+			// /sandboxes/logs/ is longer, so it should take precedence for /sandboxes/logs/...
+			// But /sandboxes/{id}/logs is NOT /sandboxes/logs/...
+			// My previous log handler was:
+			// mux.HandleFunc("/sandboxes/logs/", ...) -> matches /sandboxes/logs/{id}
+			// This handler matches /sandboxes/{id}/...
+			// So if I request /sandboxes/{id}/logs, it comes here.
+			// I should handle logs here too if I want /sandboxes/{id}/logs style.
+			// But let's stick to existing style or redirect?
+			// Existing: /sandboxes/logs/{id}
+			// Let's keep existing.
 		}
 	})
 
@@ -376,17 +488,22 @@ func main() {
 			return
 		}
 
+		follow := r.URL.Query().Get("follow") == "true"
+
 		// Set headers for streaming
 		w.Header().Set("Content-Type", "text/plain")
 		w.Header().Set("Transfer-Encoding", "chunked")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 
-		if err := manager.StreamLogs(r.Context(), id, w); err != nil {
+		if err := manager.StreamLogs(r.Context(), id, w, follow); err != nil {
 			// Check if error is sandbox not found
 			if errors.Is(err, olympus.ErrSandboxNotFound) {
 				logger.Warn("Sandbox not found for log streaming", "id", id)
 				// Can only send error if we haven't started writing
 				// Since we set headers above, this will be logged but status may not change
+				// if we already wrote something? No, headers are buffered until first write.
+				// But we are using chunked encoding, so maybe.
+				// Let's try to send error.
 				http.Error(w, "Sandbox not found", http.StatusNotFound)
 				return
 			}

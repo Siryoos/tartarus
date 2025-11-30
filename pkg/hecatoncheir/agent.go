@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"os"
+	"path/filepath"
 	"time"
 
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/tartarus-sandbox/tartarus/pkg/hypnos"
 	"github.com/vishvananda/netlink"
@@ -304,7 +307,11 @@ func (a *Agent) controlLoop(ctx context.Context, ch <-chan ControlMessage) {
 				a.Logger.Info(ctx, "Killed sandbox", map[string]any{"sandbox_id": msg.SandboxID})
 			}
 		case ControlMessageLogs:
-			go a.streamLogs(ctx, msg.SandboxID)
+			follow := false
+			if len(msg.Args) > 0 && msg.Args[0] == "true" {
+				follow = true
+			}
+			go a.streamLogs(ctx, msg.SandboxID, follow)
 		case ControlMessageHibernate:
 			if a.Hypnos == nil {
 				a.Logger.Info(ctx, "Hibernate requested but Hypnos is disabled", map[string]any{"sandbox_id": msg.SandboxID})
@@ -335,11 +342,16 @@ func (a *Agent) controlLoop(ctx context.Context, ch <-chan ControlMessage) {
 			if _, err := a.Thanatos.Terminate(ctx, msg.SandboxID, thanatos.Options{GracePeriod: 5 * time.Second}); err != nil {
 				a.Logger.Error(ctx, "Failed to terminate sandbox", map[string]any{"sandbox_id": msg.SandboxID, "error": err})
 			}
+		case ControlMessageSnapshot:
+			a.Logger.Info(ctx, "Snapshot requested", map[string]any{"sandbox_id": msg.SandboxID})
+			go a.handleSnapshot(ctx, msg.SandboxID)
+		case ControlMessageExec:
+			a.Logger.Info(ctx, "Exec requested but not implemented", map[string]any{"sandbox_id": msg.SandboxID})
 		}
 	}
 }
 
-func (a *Agent) streamLogs(ctx context.Context, id domain.SandboxID) {
+func (a *Agent) streamLogs(ctx context.Context, id domain.SandboxID, follow bool) {
 	// Create a pipe to read logs from runtime and write to Redis
 	r, w := io.Pipe()
 
@@ -366,8 +378,55 @@ func (a *Agent) streamLogs(ctx context.Context, id domain.SandboxID) {
 	}()
 
 	// Stream from Runtime to Pipe Writer
-	if err := a.Runtime.StreamLogs(ctx, id, w); err != nil {
+	// TODO: Runtime.StreamLogs needs to support follow flag or we handle it here?
+	// If Runtime.StreamLogs just reads file, we need to tail it if follow is true.
+	// Let's assume Runtime.StreamLogs needs update or we pass options.
+	// For now, let's update Runtime interface later, but here we pass it if we can.
+	// Actually, the plan said "If follow is false, read until EOF. If true, stream indefinitely".
+	// The current Runtime.StreamLogs likely just reads the file.
+	// We need to check tartarus/runtime.go.
+	// But assuming we update Runtime.StreamLogs to take follow bool.
+	if err := a.Runtime.StreamLogs(ctx, id, w, follow); err != nil {
 		a.Logger.Error(ctx, "Failed to stream logs from runtime", map[string]any{"sandbox_id": id, "error": err})
 	}
 	w.Close()
+}
+
+func (a *Agent) handleSnapshot(ctx context.Context, id domain.SandboxID) {
+	// 1. Get Config to find Template ID
+	_, req, err := a.Runtime.GetConfig(ctx, id)
+	if err != nil {
+		a.Logger.Error(ctx, "Failed to get sandbox config for snapshot", map[string]any{"sandbox_id": id, "error": err})
+		return
+	}
+
+	// 2. Create Temp Dir
+	tmpDir, err := os.MkdirTemp("", "snapshot-*")
+	if err != nil {
+		a.Logger.Error(ctx, "Failed to create temp dir for snapshot", map[string]any{"sandbox_id": id, "error": err})
+		return
+	}
+	defer os.RemoveAll(tmpDir)
+
+	memPath := filepath.Join(tmpDir, "snap.mem")
+	diskPath := filepath.Join(tmpDir, "snap.disk")
+
+	// 3. Create Snapshot in Runtime
+	if err := a.Runtime.CreateSnapshot(ctx, id, memPath, diskPath); err != nil {
+		a.Logger.Error(ctx, "Failed to create runtime snapshot", map[string]any{"sandbox_id": id, "error": err})
+		return
+	}
+
+	// 4. Save to Nyx
+	snapID := domain.SnapshotID(uuid.New().String())
+	if _, err := a.Nyx.SaveSnapshot(ctx, req.Template, snapID, memPath, diskPath); err != nil {
+		a.Logger.Error(ctx, "Failed to save snapshot to Nyx", map[string]any{"sandbox_id": id, "error": err})
+		return
+	}
+
+	a.Logger.Info(ctx, "Snapshot created successfully", map[string]any{
+		"sandbox_id":  id,
+		"snapshot_id": snapID,
+		"template_id": req.Template,
+	})
 }

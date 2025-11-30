@@ -15,7 +15,11 @@ var logsCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		id := args[0]
+		follow, _ := cmd.Flags().GetBool("follow")
 		url := fmt.Sprintf("%s/sandboxes/logs/%s", host, id)
+		if follow {
+			url += "?follow=true"
+		}
 
 		resp, err := http.Get(url)
 		if err != nil {
@@ -39,5 +43,6 @@ var logsCmd = &cobra.Command{
 }
 
 func init() {
+	logsCmd.Flags().BoolP("follow", "f", false, "Follow log output")
 	rootCmd.AddCommand(logsCmd)
 }

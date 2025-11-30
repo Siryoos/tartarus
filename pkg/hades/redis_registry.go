@@ -66,7 +66,7 @@ func (r *RedisRegistry) GetNode(ctx context.Context, id domain.NodeID) (*domain.
 	val, err := r.client.Get(ctx, key).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return nil, errors.New("node not found")
+			return nil, ErrNodeNotFound
 		}
 		return nil, fmt.Errorf("failed to get node: %w", err)
 	}
@@ -115,7 +115,7 @@ func (r *RedisRegistry) MarkDraining(ctx context.Context, id domain.NodeID) erro
 		val, err := tx.Get(ctx, key).Result()
 		if err != nil {
 			if errors.Is(err, redis.Nil) {
-				return errors.New("node not found")
+				return ErrNodeNotFound
 			}
 			return err
 		}
@@ -170,7 +170,7 @@ func (r *RedisRegistry) GetRun(ctx context.Context, id domain.SandboxID) (*domai
 	val, err := r.client.Get(ctx, key).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return nil, errors.New("run not found")
+			return nil, ErrRunNotFound
 		}
 		return nil, fmt.Errorf("failed to get run: %w", err)
 	}

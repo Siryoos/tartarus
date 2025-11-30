@@ -18,12 +18,15 @@ const (
 	ControlMessageHibernate ControlMessageType = "HIBERNATE"
 	ControlMessageWake      ControlMessageType = "WAKE"
 	ControlMessageTerminate ControlMessageType = "TERMINATE"
+	ControlMessageSnapshot  ControlMessageType = "SNAPSHOT"
+	ControlMessageExec      ControlMessageType = "EXEC"
 )
 
 // ControlMessage is a command sent to the agent.
 type ControlMessage struct {
 	Type      ControlMessageType
 	SandboxID domain.SandboxID
+	Args      []string
 }
 
 // ControlListener listens for control messages.
@@ -73,18 +76,23 @@ func (r *RedisControlListener) Listen(ctx context.Context) (<-chan ControlMessag
 				if !ok {
 					return
 				}
-				// Parse message: "TYPE SANDBOX_ID"
-				parts := strings.SplitN(msg.Payload, " ", 2)
-				if len(parts) != 2 {
+				// Parse message: "TYPE SANDBOX_ID [ARGS...]"
+				parts := strings.Split(msg.Payload, " ")
+				if len(parts) < 2 {
 					continue
 				}
 
 				cmdType := ControlMessageType(parts[0])
 				sandboxID := domain.SandboxID(parts[1])
+				var args []string
+				if len(parts) > 2 {
+					args = parts[2:]
+				}
 
 				ch <- ControlMessage{
 					Type:      cmdType,
 					SandboxID: sandboxID,
+					Args:      args,
 				}
 			}
 		}

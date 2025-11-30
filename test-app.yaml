@@ -1,0 +1,13 @@
+base_image: alpine:3.14
+default_env:
+    MY_VAR: test_value
+    PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+description: Template for test-app
+id: test-app
+kernel_image: vmlinux-5.10
+name: test-app
+resources:
+    cpu_milli: 1000
+    mem_mb: 512
+    ttl: 1h
+working_dir: /app
