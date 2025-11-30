@@ -15,7 +15,7 @@ import (
 type LocalManager struct {
 }
 
-func NewLocalManager(store erebus.Store, snapshotDir string, logger hermes.Logger) (*LocalManager, error) {
+func NewLocalManager(store erebus.Store, ociBuilder *erebus.OCIBuilder, snapshotDir string, logger hermes.Logger) (*LocalManager, error) {
 	return &LocalManager{}, nil
 }
 

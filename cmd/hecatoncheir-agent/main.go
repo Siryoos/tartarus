@@ -137,8 +137,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	// OCI Builder
+	ociBuilder := erebus.NewOCIBuilder(store, hermesLogger)
+
 	// Nyx Local Manager
-	nyxManager, err := nyx.NewLocalManager(store, cfg.SnapshotPath, hermesLogger)
+	nyxManager, err := nyx.NewLocalManager(store, ociBuilder, cfg.SnapshotPath, hermesLogger)
 	if err != nil {
 		logger.Error("Failed to initialize Nyx Local Manager", "error", err)
 		os.Exit(1)

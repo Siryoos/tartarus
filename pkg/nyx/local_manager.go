@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 
 type LocalManager struct {
 	Store       erebus.Store
+	OCIBuilder  *erebus.OCIBuilder
 	SnapshotDir string
 	Logger      hermes.Logger
 
@@ -32,7 +34,7 @@ type LocalManager struct {
 
 	// vmLauncher is the function used to create a paused VM.
 	// It is exposed for testing purposes.
-	vmLauncher func(ctx context.Context, tpl *domain.TemplateSpec, socketPath string) (SnapshotMachine, error)
+	vmLauncher func(ctx context.Context, tpl *domain.TemplateSpec, rootfsPath, socketPath string) (SnapshotMachine, error)
 }
 
 // SnapshotMachine is an interface that abstracts firecracker.Machine for snapshotting.
@@ -41,13 +43,14 @@ type SnapshotMachine interface {
 	StopVMM() error
 }
 
-func NewLocalManager(store erebus.Store, snapshotDir string, logger hermes.Logger) (*LocalManager, error) {
+func NewLocalManager(store erebus.Store, ociBuilder *erebus.OCIBuilder, snapshotDir string, logger hermes.Logger) (*LocalManager, error) {
 	if err := os.MkdirAll(snapshotDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create snapshot dir: %w", err)
 	}
 
 	lm := &LocalManager{
 		Store:       store,
+		OCIBuilder:  ociBuilder,
 		SnapshotDir: snapshotDir,
 		Logger:      logger,
 		byTemplate:  make(map[domain.TemplateID][]*Snapshot),
@@ -84,8 +87,35 @@ func (m *LocalManager) Prepare(ctx context.Context, tpl *domain.TemplateSpec) (*
 	memFile := filepath.Join(socketDir, "snapshot.mem")
 	diskFile := filepath.Join(socketDir, "snapshot.disk")
 
+	// Determine rootfs path
+	rootfsPath := tpl.BaseImage
+	if strings.Contains(tpl.BaseImage, ":") || strings.Contains(tpl.BaseImage, "/") {
+		// Assume OCI ref
+		if m.OCIBuilder == nil {
+			return nil, fmt.Errorf("OCI builder not configured but base image looks like OCI ref: %s", tpl.BaseImage)
+		}
+
+		// Extract to temp dir
+		extractDir, err := os.MkdirTemp("", "oci-extract-*")
+		if err != nil {
+			return nil, fmt.Errorf("failed to create extract dir: %w", err)
+		}
+		defer os.RemoveAll(extractDir)
+
+		if err := m.OCIBuilder.Assemble(ctx, tpl.BaseImage, extractDir); err != nil {
+			return nil, fmt.Errorf("failed to assemble OCI image: %w", err)
+		}
+
+		// Build rootfs image
+		ociRootfs := filepath.Join(socketDir, "rootfs.img")
+		if err := m.OCIBuilder.BuildRootFS(ctx, extractDir, ociRootfs); err != nil {
+			return nil, fmt.Errorf("failed to build rootfs from OCI: %w", err)
+		}
+		rootfsPath = ociRootfs
+	}
+
 	// Launch VM
-	machine, err := m.vmLauncher(ctx, tpl, socketPath)
+	machine, err := m.vmLauncher(ctx, tpl, rootfsPath, socketPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create paused VM: %w", err)
 	}
@@ -298,7 +328,7 @@ func (m *LocalManager) downloadFile(ctx context.Context, key string, path string
 	return nil
 }
 
-func (m *LocalManager) createPausedVM(ctx context.Context, tpl *domain.TemplateSpec, socketPath string) (SnapshotMachine, error) {
+func (m *LocalManager) createPausedVM(ctx context.Context, tpl *domain.TemplateSpec, rootfsPath, socketPath string) (SnapshotMachine, error) {
 	memSz := int64(tpl.Resources.Mem)
 	if memSz == 0 {
 		memSz = 128
@@ -319,7 +349,7 @@ func (m *LocalManager) createPausedVM(ctx context.Context, tpl *domain.TemplateS
 		Drives: []models.Drive{
 			{
 				DriveID:      firecracker.String("rootfs"),
-				PathOnHost:   firecracker.String(tpl.BaseImage),
+				PathOnHost:   firecracker.String(rootfsPath),
 				IsRootDevice: firecracker.Bool(true),
 				IsReadOnly:   firecracker.Bool(false),
 			},
