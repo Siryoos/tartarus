@@ -153,16 +153,22 @@ func (m *Manager) Submit(ctx context.Context, req *domain.SandboxRequest) error 
 			}
 		}
 
-		heatLevel := m.Phlegethon.Classify(phlegReq)
+		heatLevel, source := m.Phlegethon.Classify(phlegReq)
 		req.HeatLevel = string(heatLevel)
 
 		m.Logger.Info(ctx, "Classified workload heat", map[string]any{
 			"sandbox_id": req.ID,
 			"heat_level": heatLevel,
+			"source":     source,
 			"cpu_cores":  phlegReq.CPUCores,
 			"memory_mb":  phlegReq.MemoryMB,
 			"ttl":        phlegReq.MaxDuration,
 		})
+
+		m.Metrics.IncCounter("phlegethon_classification_total", 1,
+			hermes.Label{Key: "heat_level", Value: string(heatLevel)},
+			hermes.Label{Key: "source", Value: source},
+		)
 	}
 
 	// 8) Scheduling

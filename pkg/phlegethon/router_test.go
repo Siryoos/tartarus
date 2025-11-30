@@ -75,7 +75,7 @@ func TestHeatClassifier_Classify(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := classifier.Classify(tt.req); got != tt.want {
+			if got, _ := classifier.Classify(tt.req); got != tt.want {
 				t.Errorf("HeatClassifier.Classify() = %v, want %v", got, tt.want)
 			}
 		})

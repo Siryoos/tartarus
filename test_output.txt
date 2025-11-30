@@ -1,0 +1,63 @@
+=== RUN   TestAuthMiddleware
+=== RUN   TestAuthMiddleware/Insecure_Mode_(No_Env_Key)
+time=2025-11-30T12:52:56.509-06:00 level=WARN msg="Running in INSECURE mode: TARTARUS_API_KEY is not set. All requests are allowed."
+=== RUN   TestAuthMiddleware/Secure_Mode_-_Valid_Key
+=== RUN   TestAuthMiddleware/Secure_Mode_-_Missing_Header
+=== RUN   TestAuthMiddleware/Secure_Mode_-_Invalid_Header_Format
+=== RUN   TestAuthMiddleware/Secure_Mode_-_Wrong_Key
+--- PASS: TestAuthMiddleware (0.00s)
+    --- PASS: TestAuthMiddleware/Insecure_Mode_(No_Env_Key) (0.00s)
+    --- PASS: TestAuthMiddleware/Secure_Mode_-_Valid_Key (0.00s)
+    --- PASS: TestAuthMiddleware/Secure_Mode_-_Missing_Header (0.00s)
+    --- PASS: TestAuthMiddleware/Secure_Mode_-_Invalid_Header_Format (0.00s)
+    --- PASS: TestAuthMiddleware/Secure_Mode_-_Wrong_Key (0.00s)
+=== RUN   TestRedisControlPlane_Kill
+--- PASS: TestRedisControlPlane_Kill (0.01s)
+=== RUN   TestRedisControlPlane_StreamLogs_Timeout
+--- PASS: TestRedisControlPlane_StreamLogs_Timeout (1.00s)
+=== RUN   TestRedisControlPlane_StreamLogs_Success
+--- PASS: TestRedisControlPlane_StreamLogs_Success (0.40s)
+=== RUN   TestRedisControlPlane_StreamLogs_NilMessages
+--- PASS: TestRedisControlPlane_StreamLogs_NilMessages (0.50s)
+=== RUN   TestManagerHeatClassification
+=== RUN   TestManagerHeatClassification/ColdWorkload
+=== RUN   TestManagerHeatClassification/WarmWorkload
+=== RUN   TestManagerHeatClassification/HotWorkload
+=== RUN   TestManagerHeatClassification/InfernoWorkload
+    manager_heat_test.go:169: unexpected error: failed to schedule sandbox: no nodes with sufficient capacity found
+=== RUN   TestManagerHeatClassification/ExplicitHeatHint
+    manager_heat_test.go:192: unexpected error: failed to schedule sandbox: no nodes with sufficient capacity found
+=== RUN   TestManagerHeatClassification/NilPhlegethonDoesNotCrash
+--- FAIL: TestManagerHeatClassification (0.00s)
+    --- PASS: TestManagerHeatClassification/ColdWorkload (0.00s)
+    --- PASS: TestManagerHeatClassification/WarmWorkload (0.00s)
+    --- PASS: TestManagerHeatClassification/HotWorkload (0.00s)
+    --- FAIL: TestManagerHeatClassification/InfernoWorkload (0.00s)
+    --- FAIL: TestManagerHeatClassification/ExplicitHeatHint (0.00s)
+    --- PASS: TestManagerHeatClassification/NilPhlegethonDoesNotCrash (0.00s)
+=== RUN   TestLeastLoadedScheduler
+time=2025-11-30T12:52:58.429-06:00 level=INFO msg="Scheduled sandbox" sandbox_id=test-sandbox node_id=node-2 free_mem_mb=12288 free_cpu_milli=2000 required_mem_mb=4096 required_cpu_milli=2000
+    memory_scheduler_test.go:87: ✓ Scheduler correctly chose node-2 with most free RAM
+--- PASS: TestLeastLoadedScheduler (0.00s)
+=== RUN   TestLeastLoadedScheduler_CPUTieBreaker
+time=2025-11-30T12:52:58.429-06:00 level=INFO msg="Scheduled sandbox" sandbox_id=test-sandbox node_id=node-2 free_mem_mb=8192 free_cpu_milli=4000 required_mem_mb=2048 required_cpu_milli=1000
+    memory_scheduler_test.go:143: ✓ Scheduler correctly used CPU as tie-breaker
+--- PASS: TestLeastLoadedScheduler_CPUTieBreaker (0.00s)
+=== RUN   TestLeastLoadedScheduler_NoViableNode
+time=2025-11-30T12:52:58.429-06:00 level=ERROR msg="No nodes can satisfy resource requirements" required_mem_mb=8192 required_cpu_milli=5000
+    memory_scheduler_test.go:182: ✓ Scheduler correctly rejects when no viable nodes: no nodes can satisfy resource requirements
+--- PASS: TestLeastLoadedScheduler_NoViableNode (0.00s)
+=== RUN   TestOlympusPersistence_RestartRecovery
+{"time":"2025-11-30T12:52:58.432548-06:00","level":"INFO","msg":"Metric","metric":"sandbox_submissions_total","value":1,"type":"counter"}
+{"time":"2025-11-30T12:52:58.432581-06:00","level":"INFO","msg":"Loaded policy for request","sandbox_id":"7bae3525-ae45-4625-a7ef-46a62a2c5d38","template":"test-template","policy_id":"default-policy"}
+{"time":"2025-11-30T12:52:58.432595-06:00","level":"INFO","msg":"Request passed all judges","sandbox_id":"7bae3525-ae45-4625-a7ef-46a62a2c5d38"}
+{"time":"2025-11-30T12:52:58.43323-06:00","level":"INFO","msg":"Scheduled sandbox","node_id":"node-1","free_mem_mb":1000,"sandbox_id":"7bae3525-ae45-4625-a7ef-46a62a2c5d38"}
+{"time":"2025-11-30T12:52:58.43341-06:00","level":"INFO","msg":"Scheduled sandbox","sandbox_id":"7bae3525-ae45-4625-a7ef-46a62a2c5d38","node_id":"node-1"}
+{"time":"2025-11-30T12:52:58.433686-06:00","level":"INFO","msg":"Metric","metric":"queue_enqueue_total","value":1,"type":"counter","queue":"tartarus:queue:node-1"}
+{"time":"2025-11-30T12:52:58.433822-06:00","level":"INFO","msg":"Metric","metric":"queue_depth","value":1,"type":"gauge","queue":"tartarus:queue:node-1"}
+{"time":"2025-11-30T12:52:58.433835-06:00","level":"INFO","msg":"Request successfully enqueued","sandbox_id":"7bae3525-ae45-4625-a7ef-46a62a2c5d38"}
+{"time":"2025-11-30T12:52:58.433843-06:00","level":"INFO","msg":"Metric","metric":"sandbox_submission_duration_seconds","value":0.001295875,"type":"histogram"}
+--- PASS: TestOlympusPersistence_RestartRecovery (0.01s)
+FAIL
+FAIL	github.com/tartarus-sandbox/tartarus/pkg/olympus	2.305s
+FAIL

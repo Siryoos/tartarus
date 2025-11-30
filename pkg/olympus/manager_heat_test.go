@@ -42,6 +42,7 @@ func TestManagerHeatClassification(t *testing.T) {
 			Capacity: domain.ResourceCapacity{
 				CPU: 8000,
 				Mem: 16384,
+				GPU: 1,
 			},
 		},
 		Load: domain.ResourceCapacity{

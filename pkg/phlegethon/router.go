@@ -144,29 +144,29 @@ func NewHeatClassifier() *HeatClassifier {
 	}
 }
 
-func (c *HeatClassifier) Classify(req *SandboxRequest) HeatLevel {
+func (c *HeatClassifier) Classify(req *SandboxRequest) (HeatLevel, string) {
 	// 1. Check explicit hint
 	if req.HeatHint != "" {
-		return req.HeatHint
+		return req.HeatHint, "explicit"
 	}
 
 	// 2. Check template-based hint
 	if hint, ok := c.templateHints[req.TemplateID]; ok {
-		return hint
+		return hint, "template_hint"
 	}
 
 	// 3. Use resource request as indicator
 	if req.MaxDuration > 10*time.Minute || req.CPUCores >= 4 {
-		return HeatInferno
+		return HeatInferno, "heuristic"
 	}
 	if req.MaxDuration > 2*time.Minute || req.CPUCores >= 2 {
-		return HeatHot
+		return HeatHot, "heuristic"
 	}
 	if req.MaxDuration > 30*time.Second {
-		return HeatWarm
+		return HeatWarm, "heuristic"
 	}
 
-	return HeatCold
+	return HeatCold, "heuristic"
 }
 
 func (c *HeatClassifier) AddHint(templateID string, level HeatLevel) {

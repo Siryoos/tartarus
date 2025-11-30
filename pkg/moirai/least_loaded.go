@@ -46,6 +46,16 @@ func (s *LeastLoadedScheduler) ChooseNode(ctx context.Context, req *domain.Sandb
 		})
 	}
 
+	// Filter for Phlegethon resource classes
+	nodesToConsider = FilterPhlegethonNodes(nodesToConsider, req.HeatLevel)
+	if len(nodesToConsider) == 0 {
+		s.Logger.Error(ctx, "No nodes available for Phlegethon resource class", map[string]any{
+			"sandbox_id": req.ID,
+			"heat_level": req.HeatLevel,
+		})
+		return "", ErrNoCapacity
+	}
+
 	for _, node := range nodesToConsider {
 		// 1. Filter Unhealthy Nodes (Heartbeat > 10s ago)
 		if now.Sub(node.Heartbeat) > 10*time.Second {
