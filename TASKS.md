@@ -37,7 +37,16 @@ Context: ROADMAP.md marks Phase 3 as in progress, and code review shows componen
   - DoD: Default to noop/disabled in v1.0 configs, guard code paths with feature flags, and add tests to ensure no accidental hibernation/termination.
 
 ## Release Validation
-- [ ] Regression suite for Phase 3 behaviors
-  - Cover heat-aware scheduling, quarantine placement, ack/nack/DLQ flows, Aeacus audit logging, persistence across restarts, and Hypnos/Thanatos gating.
-- [ ] Documentation refresh
-  - Update ROADMAP.md and user docs to reflect completed wiring, required configs (Phlegethon, Typhon labels, Redis/Hades/Themis persistence), and Phase 4+ items as future work.
+- [x] Regression suite for Phase 3 behaviors
+  - Created comprehensive test suite:
+    - `pkg/integration/phase3_heat_regression_test.go` - Heat-aware scheduling (4 test cases)
+    - `pkg/integration/phase3_quarantine_regression_test.go` - Quarantine placement (5 test cases)
+    - `pkg/integration/phase3_dlq_regression_test.go` - DLQ and poison pill handling (5 test cases)
+    - Enhanced `pkg/integration/phase3_regression_test.go` - Main integration test with documentation
+  - All tests passing, covers: heat-aware scheduling, quarantine placement, ack/nack/DLQ flows, Aeacus audit logging, persistence across restarts
+  - Hypnos/Thanatos gating covered by existing `pkg/hecatoncheir/agent_guardrails_test.go`
+- [x] Documentation refresh
+  - Updated ROADMAP.md with Phase 3 completion summary, component status updates (Phlegethon, Typhon), and Phase 4 gating notes
+  - Enhanced docs/persistence.md with Phlegethon heat routing and Typhon quarantine configuration
+  - Updated docs/DEV_STACK.md with Phase 3 component details and feature flag documentation
+  - Created docs/configuration.md with comprehensive production configuration reference

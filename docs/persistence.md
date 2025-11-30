@@ -64,6 +64,58 @@ Themis uses the same Redis instance as Olympus.
 2. **Retrieval**: Policies are read from Redis with a local in-memory cache for performance.
 3. **Enforcement**: Rhadamanthus uses the cached policies for admission control.
 
+## Phlegethon Heat-Aware Routing
+
+Phlegethon classifies workloads by "heat level" and routes them to appropriate node pools for optimal performance.
+
+### Heat Levels
+
+| Heat Level | Description | Target Nodes |
+|------------|-------------|--------------|
+| **cold** | Quick, lightweight tasks | Standard nodes |
+| **warm** | Standard workloads | Standard nodes |
+| **hot** | CPU-intensive workloads | High-compute nodes |
+| **inferno** | Long-running or GPU workloads | Specialized nodes |
+
+### Node Configuration
+
+Label high-compute nodes for hot workload routing:
+
+```bash
+# Label a node for Phlegethon (high-compute pool)
+HADES_LABEL="tartarus.io/phlegethon=true"
+```
+
+In production, configure at least one node pool with the `tartarus.io/phlegethon` label to handle hot workloads. If no labeled nodes are available, hot workloads will fall back to standard nodes.
+
+## Typhon Quarantine Configuration
+
+Typhon provides isolation for suspicious or untrusted workloads by routing them to dedicated quarantine nodes.
+
+### Quarantine Node Setup
+
+Label dedicated nodes for quarantine:
+
+```bash
+# Label a node as quarantine-capable
+HADES_LABEL="tartarus.io/typhon=true"
+```
+
+### Quarantine Triggers
+
+Workloads are quarantined when:
+- A judge returns `VerdictQuarantine` during admission control
+- Policy violations are detected (via Rhadamanthus)
+- Manual quarantine flag is set in request metadata
+
+### Behavior
+
+- **With quarantine nodes**: Jobs are routed exclusively to `tartarus.io/typhon=true` labeled nodes
+- **Without quarantine nodes**: Jobs are **rejected** to prevent security risks
+
+> [!WARNING]
+> In production, you **must** configure at least one quarantine node or disable quarantine verdicts. Failure to do so will cause quarantine requests to be rejected.
+
 ## Verifying Persistence
 
 To verify that persistence is working correctly:

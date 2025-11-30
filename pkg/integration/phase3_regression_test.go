@@ -22,6 +22,35 @@ import (
 	"github.com/tartarus-sandbox/tartarus/pkg/themis"
 )
 
+// Phase 3 Regression Test Suite
+//
+// This test suite provides comprehensive coverage of all Phase 3 behaviors:
+//
+// 1. Heat-aware scheduling (Phlegethon integration)
+//    - See: phase3_heat_regression_test.go for focused tests
+//
+// 2. Quarantine placement (Typhon node routing)
+//    - See: phase3_quarantine_regression_test.go for focused tests
+//
+// 3. Ack/Nack/DLQ flows (Acheron + Cocytus)
+//    - This test: Queue ack/nack/redelivery (lines 150-180)
+//    - See: phase3_dlq_regression_test.go for poison pill handling
+//
+// 4. Aeacus audit logging
+//    - This test: Audit metadata tagging (lines 125-165)
+//    - See: pkg/judges/aeacus_integration_test.go for detailed audit tests
+//
+// 5. Persistence across restarts
+//    - This test: Manager restart recovery (lines 229-238)
+//    - See: pkg/olympus/persistence_test.go for detailed persistence tests
+//
+// 6. Hypnos/Thanatos gating
+//    - See: pkg/hecatoncheir/agent_guardrails_test.go for detailed gating tests
+//
+// This test (TestPhase3Regression) provides an end-to-end integration scenario
+// combining affinity scheduling, audit metadata, queue operations, network enforcement,
+// and persistence verification.
+
 // MockNetworkStatsProvider for testing
 type MockNetworkStatsProvider struct {
 	RxBytes   int64
@@ -55,7 +84,7 @@ func TestPhase3Regression(t *testing.T) {
 		require.NoError(t, err)
 
 		// Queue
-		queue, err := acheron.NewRedisQueue(mr.Addr(), 0, "tartarus:queue", "group1", "consumer1", true, metrics)
+		queue, err := acheron.NewRedisQueue(mr.Addr(), 0, "tartarus:queue", "group1", "consumer1", true, metrics, nil)
 		require.NoError(t, err)
 
 		// Policies

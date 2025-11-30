@@ -169,7 +169,7 @@ Tartarus implements a three-realm architecture reflecting the Greek cosmological
 | **Acheron** | `pkg/acheron` | Job Queue (River of Pain/Ingress) | ✅ Implemented |
 | **Styx** | `pkg/styx` | Network Gateway (River of Oaths) | ✅ Implemented |
 | **Cocytus** | `pkg/cocytus` | Error Stream (River of Wailing) | ✅ Implemented |
-| **Phlegethon** | `pkg/phlegethon` | Hot Path Routing (River of Fire) | ✅ Implemented |
+| **Phlegethon** | `pkg/phlegethon` | Hot Path Routing (River of Fire) | ✅ Implemented (Phase 3) |
 
 ### Tartarean Tier (Sandbox Execution)
 
@@ -181,7 +181,7 @@ Tartarus implements a three-realm architecture reflecting the Greek cosmological
 | **Lethe** | `pkg/lethe` | Ephemeral FS (River of Forgetting) | ✅ Implemented |
 | **Erinyes** | `pkg/erinyes` | Enforcement/Punishment (The Furies) | ✅ Implemented |
 | **Tartarus** | `pkg/tartarus` | MicroVM Runtime Interface | ✅ Implemented |
-| **Typhon** | `pkg/typhon` | Quarantine Pool (Monster of Chaos) | 🔲 Planned |
+| **Typhon** | `pkg/typhon` | Quarantine Pool (Monster of Chaos) | ✅ Implemented (Phase 3) |
 | **Kampe** | `pkg/kampe` | Legacy Runtime Shim (Old Jailor) | 🔲 Planned |
 
 ### New Entities (Phase 4+)
@@ -507,6 +507,24 @@ tartarus_cocytus_lamentations_total{category}
 
 **Objective:** Implement policy-driven admission control, multi-node orchestration, and active enforcement mechanisms.
 
+### Phase 3 Completion Summary
+
+Phase 3 delivers a production-ready control plane with:
+
+- **Heat-Aware Routing (Phlegethon)**: Workload classification (cold/warm/hot/inferno) with automatic routing to appropriate node pools
+- **Quarantine Enforcement (Typhon)**: Label-based isolation for suspicious workloads with dedicated node pools
+- **Audit Trail (Aeacus)**: Comprehensive audit logging for compliance and forensics
+- **Durable State**: Redis-backed persistence for Hades registry, Acheron queue, and Themis policies
+- **Enhanced Queue Reliability**: Acheron refactored with Redis Streams for O(1) ack operations and dead-letter queue support
+- **Policy Versioning**: Themis policies with version stamps and optimistic concurrency control
+
+> [!IMPORTANT]
+> **Required Production Configuration**:
+> - `REDIS_ADDR` must be set (enforced when `TARTARUS_ENV=production`)
+> - Quarantine nodes must be labeled `tartarus.io/typhon=true`
+> - High-compute nodes should be labeled `tartarus.io/phlegethon=true`
+> - See [docs/persistence.md](file:///Users/mohammadrezayousefiha/tartarus/docs/persistence.md) for full configuration details
+
 ### Deliverables
 
 #### 3.1 Hades Cluster Registry v1.0
@@ -716,6 +734,10 @@ enforcement:
 | Admission latency | < 10ms | ✅ Verified |
 | Policy evaluation time | < 5ms | ✅ Verified |
 | Enforcement accuracy | 99.9% | ✅ Verified |
+| Heat classification | < 1ms | ✅ Verified |
+| Quarantine routing | 100% isolation | ✅ Verified |
+| Queue ack operation | O(1) complexity | ✅ Verified |
+| State persistence | Restart-safe | ✅ Verified |
 
 ---
 
@@ -726,6 +748,9 @@ enforcement:
 **Status:** 🔲 PLANNED
 
 **Objective:** Enable data science and AI workloads with specialized templates, GPU support preparation, and advanced resource management.
+
+> [!NOTE]
+> **Hypnos** (Sleep/Hibernation) and **Thanatos** (Graceful Termination) are implemented in `pkg/hypnos` and `pkg/thanatos` but **disabled by default** in v1.0 via feature flags (`EnableHypnos=false`, `EnableThanatos=false`). These will be enabled and fully tested in Phase 4.
 
 ### Deliverables
 

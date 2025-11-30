@@ -27,10 +27,33 @@ This guide explains how to run the Tartarus stack locally for development.
 
 The dev stack consists of:
 
-*   **Redis**: Backing store for Hades (Registry) and Acheron (Queue).
+*   **Redis**: Backing store for Hades (Registry), Acheron (Queue), and Themis (Policies).
 *   **MinIO**: S3-compatible object storage for snapshots.
-*   **Olympus API**: The control plane API.
+*   **Olympus API**: The control plane API with:
+    *   Phlegethon heat-aware routing
+    *   Typhon quarantine enforcement (requires labeled nodes)
+    *   Judges chain (Minos, Rhadamanthus, Aeacus)
 *   **Hecatoncheir Agent**: The node agent that runs Firecracker microVMs.
+
+### Phase 3 Components
+
+- **Phlegethon**: Classifies workload heat (cold/warm/hot/inferno) and routes to appropriate node pools
+- **Typhon**: Enforces quarantine isolation for suspicious workloads (requires `tartarus.io/typhon` labeled nodes)
+- **Aeacus**: Audit logging for compliance and forensics
+
+### Phase 4 Components (Disabled by Default)
+
+> [!NOTE]
+> The following components are implemented but **disabled** in v1.0 via feature flags:
+
+- **Hypnos**: VM hibernation/sleep (requires `EnableHypnos=true`)
+- **Thanatos**: Graceful termination handling (requires `EnableThanatos=true`)
+
+To enable in development, set environment variables:
+```bash
+export ENABLE_HYPNOS=true
+export ENABLE_THANATOS=true
+```
 
 ## Troubleshooting
 
