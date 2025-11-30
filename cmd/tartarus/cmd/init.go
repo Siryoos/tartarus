@@ -69,7 +69,7 @@ var initTemplateCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		fmt.Printf("Template scaffolded to %s\n", filename)
+		fmt.Fprintf(cmd.OutOrStdout(), "Template scaffolded to %s\n", filename)
 	},
 }
 
@@ -108,22 +108,14 @@ func inspectImage(ref string, template map[string]interface{}) error {
 
 	// Extract WorkingDir
 	if configFile.Config.WorkingDir != "" {
-		// We don't have a direct field for WorkingDir in TemplateSpec yet,
-		// but we can add it to metadata or env if needed.
-		// For now, let's just log it or maybe add it to env PWD?
-		// Or assume the runtime handles it if we add it to the spec later.
-		// Let's add it to metadata for now if we had it, but map[string]interface{} is flexible.
-		// Let's add it as a custom field, maybe the user will use it.
+		// WorkingDir is not currently in TemplateSpec, but we include it
+		// in the generated YAML as a custom field for future compatibility.
 		template["working_dir"] = configFile.Config.WorkingDir
 	}
 
 	// Extract Entrypoint/Cmd
-	// This is tricky as Tartarus templates usually have a specific init,
-	// but maybe we can use it for the default command?
-	// The TemplateSpec doesn't seem to have a default command field in the struct we saw earlier
-	// (it had WarmupCommand).
-	// But let's check domain.TemplateSpec again.
-	// We'll skip for now.
+	// We don't map these to WarmupCommand automatically as they serve different purposes.
+	// We leave them out for now, or could add them as custom fields if needed.
 
 	return nil
 }

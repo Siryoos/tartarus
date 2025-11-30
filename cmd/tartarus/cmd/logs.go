@@ -35,7 +35,7 @@ var logsCmd = &cobra.Command{
 		}
 
 		// Stream to stdout
-		if _, err := io.Copy(os.Stdout, resp.Body); err != nil {
+		if _, err := io.Copy(cmd.OutOrStdout(), resp.Body); err != nil {
 			fmt.Fprintf(os.Stderr, "Error streaming logs: %v\n", err)
 			os.Exit(1)
 		}

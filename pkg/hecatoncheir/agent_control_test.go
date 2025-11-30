@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
+	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
 	"github.com/tartarus-sandbox/tartarus/pkg/tartarus"
 )
 
@@ -47,28 +48,49 @@ func (m *MockRuntime) Shutdown(ctx context.Context, id domain.SandboxID) error {
 func (m *MockRuntime) GetConfig(ctx context.Context, id domain.SandboxID) (tartarus.VMConfig, *domain.SandboxRequest, error) {
 	return tartarus.VMConfig{}, nil, nil
 }
-func (m *MockRuntime) StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writer) error {
+func (m *MockRuntime) StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writer, follow bool) error {
 	return nil
 }
 func (m *MockRuntime) Allocation(ctx context.Context) (domain.ResourceCapacity, error) {
 	return domain.ResourceCapacity{}, nil
 }
 func (m *MockRuntime) Wait(ctx context.Context, id domain.SandboxID) error { return nil }
+func (m *MockRuntime) Exec(ctx context.Context, id domain.SandboxID, cmd []string) error {
+	args := m.Called(ctx, id, cmd)
+	return args.Error(0)
+}
 
-func TestAgent_ControlLoop(t *testing.T) {
-	// This test is tricky because we need to inject the mock listener and runtime.
-	// And we need to start the control loop.
-	// But controlLoop is private.
-	// However, Agent.Run starts it.
-	// But Agent.Run does a lot of other things (Queue.Dequeue).
-	// We can mock Queue to block or return error to keep the loop spinning or just test controlLoop if we export it or use reflection?
-	// Or we can just test that Run starts it.
+func TestAgent_ControlLoop_Exec(t *testing.T) {
+	// Setup
+	mockRuntime := new(MockRuntime)
+	mockListener := new(MockControlListener)
+	agent := &Agent{
+		Runtime: mockRuntime,
+		Control: mockListener,
+		Logger:  hermes.NewSlogAdapter(),
+	}
 
-	// Actually, I can just create an Agent and call controlLoop directly if I export it or use a test helper.
-	// Since I can't change visibility easily without modifying code again.
-	// I'll modify Agent to make controlLoop public or add a StartControlLoop method?
-	// No, I'll just rely on the fact that I added it.
-	// I'll skip this test for now as it requires more refactoring to be testable in isolation.
-	// Instead, I'll rely on the integration test plan (manual verification via code review and existing tests).
-	t.Skip("Skipping agent control loop test due to private method and complex setup")
+	// Expectation
+	ctx := context.Background()
+	sandboxID := domain.SandboxID("test-sandbox")
+	cmd := []string{"ls", "-la"}
+
+	mockRuntime.On("Exec", mock.Anything, sandboxID, cmd).Return(nil)
+
+	// Create channel and send message
+	ch := make(chan ControlMessage)
+	go func() {
+		ch <- ControlMessage{
+			Type:      ControlMessageExec,
+			SandboxID: sandboxID,
+			Args:      cmd,
+		}
+		close(ch)
+	}()
+
+	// Run control loop
+	agent.controlLoop(ctx, ch)
+
+	// Verify
+	mockRuntime.AssertExpectations(t)
 }

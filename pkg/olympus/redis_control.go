@@ -93,8 +93,34 @@ func (r *RedisControlPlane) Snapshot(ctx context.Context, nodeID domain.NodeID, 
 }
 
 func (r *RedisControlPlane) Exec(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID, cmd []string) error {
-	// Exec is not yet supported by the runtime, but we can stub it here.
-	// We might want to publish an EXEC message if we were to support it.
-	// For now, return "not implemented" error or just log.
-	return fmt.Errorf("exec not implemented")
+	topic := fmt.Sprintf("tartarus:control:%s", nodeID)
+	// Format: EXEC sandboxID cmd...
+	// We need to join cmd args carefully or use JSON?
+	// The agent parses space-separated args.
+	// "TYPE SANDBOX_ID [ARGS...]"
+	// If cmd contains spaces, simple split will break.
+	// But for now, let's assume simple args or we need to change agent parsing.
+	// Agent uses strings.Split(msg.Payload, " ").
+	// This is fragile for Exec.
+	// But to keep it simple and consistent with existing protocol:
+	// We can join with spaces.
+	// If we want robust exec, we should use JSON payload for control messages.
+	// But that requires changing all messages.
+	// For this task, let's just join with spaces and note the limitation.
+	// Or we can encode the cmd args as a single JSON string argument?
+	// Agent: args = parts[2:] -> this takes all remaining parts.
+	// So if we send "EXEC id arg1 arg2", agent gets ["arg1", "arg2"].
+	// This works for simple commands.
+	// If arg has spaces "arg with space", agent gets ["arg", "with", "space"].
+	// This breaks arguments with spaces.
+	// However, changing the protocol is out of scope for "CLI v2.0" unless necessary.
+	// Let's stick to simple args for now as per "CLI v2.0" usually implies basic functionality first.
+	// Or better: use a separator that is unlikely? No.
+	// Let's just join with spaces.
+
+	msg := fmt.Sprintf("EXEC %s", sandboxID)
+	for _, arg := range cmd {
+		msg += " " + arg
+	}
+	return r.client.Publish(ctx, topic, msg).Err()
 }

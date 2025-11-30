@@ -346,7 +346,10 @@ func (a *Agent) controlLoop(ctx context.Context, ch <-chan ControlMessage) {
 			a.Logger.Info(ctx, "Snapshot requested", map[string]any{"sandbox_id": msg.SandboxID})
 			go a.handleSnapshot(ctx, msg.SandboxID)
 		case ControlMessageExec:
-			a.Logger.Info(ctx, "Exec requested but not implemented", map[string]any{"sandbox_id": msg.SandboxID})
+			a.Logger.Info(ctx, "Exec requested", map[string]any{"sandbox_id": msg.SandboxID, "cmd": msg.Args})
+			if err := a.Runtime.Exec(ctx, msg.SandboxID, msg.Args); err != nil {
+				a.Logger.Error(ctx, "Failed to exec command", map[string]any{"sandbox_id": msg.SandboxID, "error": err})
+			}
 		}
 	}
 }

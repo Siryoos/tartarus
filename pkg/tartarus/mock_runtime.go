@@ -144,6 +144,23 @@ func (r *MockRuntime) Wait(ctx context.Context, id domain.SandboxID) error {
 	}
 }
 
+func (r *MockRuntime) Exec(ctx context.Context, id domain.SandboxID, cmd []string) error {
+	r.mu.RLock()
+	_, ok := r.runs[id]
+	r.mu.RUnlock()
+	if !ok {
+		return errors.New("sandbox not found")
+	}
+	r.Logger.Info("Executing command in sandbox", "id", id, "cmd", cmd)
+	// Simulate some execution, maybe a delay
+	select {
+	case <-time.After(100 * time.Millisecond):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func (r *MockRuntime) Pause(ctx context.Context, id domain.SandboxID) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -37,7 +37,7 @@ var inspectCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 3, ' ', 0)
 		fmt.Fprintf(w, "ID:\t%s\n", run.ID)
 		fmt.Fprintf(w, "Template:\t%s\n", run.Template)
 		fmt.Fprintf(w, "Status:\t%s\n", run.Status)

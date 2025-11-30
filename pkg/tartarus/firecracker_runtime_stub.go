@@ -68,3 +68,7 @@ func (r *FirecrackerRuntime) Allocation(ctx context.Context) (domain.ResourceCap
 func (r *FirecrackerRuntime) Wait(ctx context.Context, id domain.SandboxID) error {
 	return fmt.Errorf("Firecracker runtime not supported on non-Linux platforms")
 }
+
+func (r *FirecrackerRuntime) Exec(ctx context.Context, id domain.SandboxID, cmd []string) error {
+	return fmt.Errorf("Firecracker runtime not supported on non-Linux platforms")
+}

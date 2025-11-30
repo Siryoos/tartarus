@@ -37,7 +37,7 @@ var snapshotCreateCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		fmt.Println("Snapshot creation requested")
+		fmt.Fprintln(cmd.OutOrStdout(), "Snapshot creation requested")
 	},
 }
 
@@ -66,7 +66,7 @@ var snapshotListCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 3, ' ', 0)
 		fmt.Fprintln(w, "ID\tTEMPLATE\tCREATED\tPATH")
 		for _, s := range snaps {
 			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", s.ID, s.Template, s.CreatedAt.Format(time.RFC3339), s.Path)
@@ -95,7 +95,7 @@ var snapshotDeleteCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		fmt.Println("Snapshot deleted")
+		fmt.Fprintln(cmd.OutOrStdout(), "Snapshot deleted")
 	},
 }
 

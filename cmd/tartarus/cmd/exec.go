@@ -43,7 +43,7 @@ var execCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		fmt.Println("Exec command requested")
+		fmt.Fprintln(cmd.OutOrStdout(), "Exec command requested")
 	},
 }
 
