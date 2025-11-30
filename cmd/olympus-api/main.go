@@ -36,7 +36,7 @@ func main() {
 	// Adapters
 	metrics := hermes.NewLogMetrics()
 	var queue acheron.Queue
-	redisAddr := os.Getenv("REDIS_ADDR")
+	redisAddr := cfg.RedisAddress
 	if redisAddr != "" {
 		redisDB := 0
 		if dbStr := os.Getenv("REDIS_DB"); dbStr != "" {
@@ -129,7 +129,23 @@ func main() {
 	scheduler := moirai.NewScheduler(cfg.SchedulerStrategy, hermesLogger)
 
 	// Policy repository
-	policyRepo := themis.NewMemoryRepo()
+	var policyRepo themis.Repository
+	if cfg.RedisAddress != "" {
+		rr, err := themis.NewRedisRepo(cfg.RedisAddress, cfg.RedisDB, cfg.RedisPass)
+		if err != nil {
+			logger.Error("Failed to initialize Redis policy repo", "error", err)
+			os.Exit(1)
+		}
+		policyRepo = rr
+		logger.Info("Using Redis policy repo", "addr", cfg.RedisAddress)
+	} else {
+		if os.Getenv("TARTARUS_ENV") == "production" {
+			logger.Error("Redis policy repo is required in production mode (TARTARUS_ENV=production)")
+			os.Exit(1)
+		}
+		policyRepo = themis.NewMemoryRepo()
+		logger.Info("Using in-memory policy repo")
+	}
 
 	// Template Manager
 	templateManager := olympus.NewMemoryTemplateManager()

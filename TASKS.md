@@ -27,7 +27,7 @@ Context: ROADMAP.md marks Phase 3 as in progress, and code review shows componen
 - [x] Olympus/Hades persistence verification (`pkg/olympus`, `pkg/hades`)
   - Current: TASKS claimed done, but default wiring uses in-memory when Redis unset.
   - DoD: Default production config to Redis-backed registry/queue, verify state survives manager restart, and document required settings.
-- [ ] Themis policy durability and versioning (`pkg/themis`)
+- [x] Themis policy durability and versioning (`pkg/themis`)
   - Current: MemoryRepo only.
   - DoD: Provide Redis/SQL/file-backed repo with version stamps and optimistic updates; load policies on startup; add persistence tests.
 

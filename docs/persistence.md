@@ -24,7 +24,7 @@ When running in production mode (`TARTARUS_ENV=production`), Olympus enforces th
 | Variable | Description | Required in Production | Default |
 |----------|-------------|------------------------|------------|
 | `TARTARUS_ENV` | Environment mode (`development` or `production`) | No | `development` |
-| `REDIS_ADDR` | Redis server address (e.g., `localhost:6379`) | **Yes** (if env is prod) | - |
+| `REDIS_ADDR` | Redis server address (e.g., `localhost:6379`) | **Yes** (if env is prod) | `localhost:6379` |
 | `REDIS_DB` | Redis database number | No | `0` |
 | `REDIS_QUEUE_KEY` | Redis key for the work queue | No | `tartarus:queue` |
 | `REDIS_PASSWORD` | Redis password (optional) | No | - |
@@ -32,8 +32,8 @@ When running in production mode (`TARTARUS_ENV=production`), Olympus enforces th
 ### Behavior
 
 - **Development (`TARTARUS_ENV=development` or unset)**:
-  - If `REDIS_ADDR` is set, Redis is used.
-  - If `REDIS_ADDR` is unset, in-memory storage is used. **State will be lost on restart.**
+  - Defaults to `localhost:6379` if `REDIS_ADDR` is unset.
+  - To use in-memory storage (non-persistent), explicitly set `REDIS_ADDR=""`.
 
 - **Production (`TARTARUS_ENV=production`)**:
   - `REDIS_ADDR` **MUST** be set.
@@ -73,7 +73,7 @@ To verify that persistence is working correctly:
 3. Restart Olympus
 4. List sandboxes - your previous request should still be visible
 
-Automated test: `go test -v ./pkg/olympus -run TestOlympusPersistence_RestartRecovery`
+Automated test: `go test -v ./tests/integration -run TestOlympusPersistence`
 
 ## Troubleshooting
 

@@ -36,7 +36,7 @@ func Load() *Config {
 
 		SchedulerStrategy: getEnv("SCHEDULER_STRATEGY", "least-loaded"),
 
-		RedisAddress: getEnv("REDIS_ADDR", ""),
+		RedisAddress: getEnv("REDIS_ADDR", "localhost:6379"),
 		RedisDB:      GetEnvInt("REDIS_DB", 0),
 		RedisPass:    getEnv("REDIS_PASSWORD", ""),
 
