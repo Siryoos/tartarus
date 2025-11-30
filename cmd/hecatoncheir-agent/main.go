@@ -181,11 +181,23 @@ func main() {
 	// Judges
 	judgeChain := &judges.Chain{}
 
-	// Hypnos (Sleep Manager)
-	hypnosManager := hypnos.NewManager(runtime, store, os.TempDir())
+	// Hypnos (Sleep Manager) - Phase 4, disabled by default for v1.0 stability
+	var hypnosManager *hypnos.Manager
+	if cfg.EnableHypnos {
+		hypnosManager = hypnos.NewManager(runtime, store, os.TempDir())
+		logger.Info("Hypnos hibernation enabled")
+	} else {
+		logger.Info("Hypnos hibernation disabled (set ENABLE_HYPNOS=true to enable)")
+	}
 
-	// Thanatos (Termination Handler)
-	thanatosHandler := thanatos.NewHandler(runtime, hypnosManager)
+	// Thanatos (Termination Handler) - Phase 4, disabled by default for v1.0 stability
+	var thanatosHandler *thanatos.Handler
+	if cfg.EnableThanatos {
+		thanatosHandler = thanatos.NewHandler(runtime, hypnosManager)
+		logger.Info("Thanatos termination enabled")
+	} else {
+		logger.Info("Thanatos termination disabled (set ENABLE_THANATOS=true to enable)")
+	}
 
 	// Control Listener
 	var controlListener hecatoncheir.ControlListener

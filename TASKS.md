@@ -32,7 +32,7 @@ Context: ROADMAP.md marks Phase 3 as in progress, and code review shows componen
   - DoD: Provide Redis/SQL/file-backed repo with version stamps and optimistic updates; load policies on startup; add persistence tests.
 
 ## Stability Guardrails
-- [ ] Hypnos/Thanatos gating (`pkg/hecatoncheir/agent.go`, config)
+- [x] Hypnos/Thanatos gating (`pkg/hecatoncheir/agent.go`, config)
   - Current: Phase 4 components imported/initialized in agent.
   - DoD: Default to noop/disabled in v1.0 configs, guard code paths with feature flags, and add tests to ensure no accidental hibernation/termination.
 

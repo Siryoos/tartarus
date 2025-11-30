@@ -25,6 +25,10 @@ type Config struct {
 	S3SecretKey string
 
 	AllowedNetworks []string
+
+	// Phase 4 feature flags (disabled by default for v1.0 stability)
+	EnableHypnos   bool
+	EnableThanatos bool
 }
 
 func Load() *Config {
@@ -47,6 +51,10 @@ func Load() *Config {
 		S3SecretKey: getEnv("AWS_SECRET_ACCESS_KEY", ""),
 
 		AllowedNetworks: strings.Split(getEnv("ALLOWED_NETWORKS", "no-net,lockdown"), ","),
+
+		// Phase 4 feature flags (disabled by default for v1.0 stability)
+		EnableHypnos:   GetEnvBool("ENABLE_HYPNOS", false),
+		EnableThanatos: GetEnvBool("ENABLE_THANATOS", false),
 	}
 }
 
@@ -62,6 +70,14 @@ func GetEnvInt(key string, fallback int) int {
 		if i, err := strconv.Atoi(value); err == nil {
 			return i
 		}
+	}
+	return fallback
+}
+
+func GetEnvBool(key string, fallback bool) bool {
+	if value, ok := os.LookupEnv(key); ok {
+		lowerValue := strings.ToLower(value)
+		return lowerValue == "true" || lowerValue == "1" || lowerValue == "yes"
 	}
 	return fallback
 }
