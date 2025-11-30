@@ -242,3 +242,123 @@ func (m *Manager) Submit(ctx context.Context, req *domain.SandboxRequest) error 
 	})
 	return nil
 }
+
+// ListSandboxes returns all sandboxes across all nodes.
+func (m *Manager) ListSandboxes(ctx context.Context) ([]domain.SandboxRun, error) {
+	nodes, err := m.Hades.ListNodes(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var allRuns []domain.SandboxRun
+	for _, node := range nodes {
+		runs, err := m.Hades.ListRuns(ctx, node.ID)
+		if err != nil {
+			m.Logger.Error(ctx, "Failed to list runs for node", map[string]any{
+"node_id": node.ID,
+"error":   err,
+})
+			continue
+		}
+		allRuns = append(allRuns, runs...)
+	}
+	return allRuns, nil
+}
+
+// KillSandbox sends a kill command to the node running the sandbox.
+func (m *Manager) KillSandbox(ctx context.Context, id domain.SandboxID) error {
+	// Find which node is running this sandbox
+	run, err := m.Hades.GetRun(ctx, id)
+	if err != nil {
+		return ErrSandboxNotFound
+	}
+
+	if err := m.Control.Kill(ctx, run.NodeID, id); err != nil {
+		m.Logger.Error(ctx, "Failed to send kill command", map[string]any{
+"sandbox_id": id,
+"node_id":    run.NodeID,
+"error":      err,
+})
+		return err
+	}
+
+	m.Logger.Info(ctx, "Kill command sent", map[string]any{
+"sandbox_id": id,
+"node_id":    run.NodeID,
+})
+	return nil
+}
+
+// HibernateSandbox sends a hibernate command to the node running the sandbox.
+func (m *Manager) HibernateSandbox(ctx context.Context, id domain.SandboxID) error {
+	// Find which node is running this sandbox
+	run, err := m.Hades.GetRun(ctx, id)
+	if err != nil {
+		m.Metrics.IncCounter("sandbox_hibernate_failures_total", 1, hermes.Label{Key: "reason", Value: "not_found"})
+		return ErrSandboxNotFound
+	}
+
+	if err := m.Control.Hibernate(ctx, run.NodeID, id); err != nil {
+		m.Logger.Error(ctx, "Failed to send hibernate command", map[string]any{
+"sandbox_id": id,
+"node_id":    run.NodeID,
+"error":      err,
+})
+		m.Metrics.IncCounter("sandbox_hibernate_failures_total", 1, hermes.Label{Key: "reason", Value: "control_error"})
+		return err
+	}
+
+	m.Logger.Info(ctx, "Hibernate command sent", map[string]any{
+"sandbox_id": id,
+"node_id":    run.NodeID,
+})
+	m.Metrics.IncCounter("sandbox_hibernate_requests_total", 1)
+	return nil
+}
+
+// WakeSandbox sends a wake command to the node that hibernated the sandbox.
+func (m *Manager) WakeSandbox(ctx context.Context, id domain.SandboxID) error {
+	// Find which node has the hibernated sandbox
+	run, err := m.Hades.GetRun(ctx, id)
+	if err != nil {
+		m.Metrics.IncCounter("sandbox_wake_failures_total", 1, hermes.Label{Key: "reason", Value: "not_found"})
+		return ErrSandboxNotFound
+	}
+
+	if err := m.Control.Wake(ctx, run.NodeID, id); err != nil {
+		m.Logger.Error(ctx, "Failed to send wake command", map[string]any{
+"sandbox_id": id,
+"node_id":    run.NodeID,
+"error":      err,
+})
+		m.Metrics.IncCounter("sandbox_wake_failures_total", 1, hermes.Label{Key: "reason", Value: "control_error"})
+		return err
+	}
+
+	m.Logger.Info(ctx, "Wake command sent", map[string]any{
+"sandbox_id": id,
+"node_id":    run.NodeID,
+})
+	m.Metrics.IncCounter("sandbox_wake_requests_total", 1)
+	return nil
+}
+
+// StreamLogs streams logs from the sandbox on the specified node.
+func (m *Manager) StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writer) error {
+	// Find which node is running this sandbox
+	run, err := m.Hades.GetRun(ctx, id)
+	if err != nil {
+		return ErrSandboxNotFound
+	}
+
+	if err := m.Control.StreamLogs(ctx, run.NodeID, id, w); err != nil {
+		m.Logger.Error(ctx, "Failed to stream logs", map[string]any{
+"sandbox_id": id,
+"node_id":    run.NodeID,
+"error":      err,
+})
+		return err
+	}
+
+	return nil
+}

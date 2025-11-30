@@ -188,6 +188,7 @@ func main() {
 	var hypnosManager *hypnos.Manager
 	if cfg.EnableHypnos {
 		hypnosManager = hypnos.NewManager(runtime, store, os.TempDir())
+		hypnosManager.Metrics = metrics
 		logger.Info("Hypnos hibernation enabled")
 	} else {
 		logger.Info("Hypnos hibernation disabled (set ENABLE_HYPNOS=true to enable)")

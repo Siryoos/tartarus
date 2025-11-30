@@ -47,7 +47,7 @@ func TestSleepAndWake(t *testing.T) {
 	require.True(t, manager.IsSleeping(req.ID))
 
 	// Snapshot files should exist in the store.
-	_, err = os.Stat(filepath.Join(storeDir, record.SnapshotKey+".mem"))
+	_, err = os.Stat(filepath.Join(storeDir, record.SnapshotKey+".mem.gz"))
 	require.NoError(t, err)
 	_, err = os.Stat(filepath.Join(storeDir, record.SnapshotKey+".disk"))
 	require.NoError(t, err)

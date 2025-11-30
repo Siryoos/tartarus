@@ -16,6 +16,7 @@ const (
 	ControlMessageKill      ControlMessageType = "KILL"
 	ControlMessageLogs      ControlMessageType = "LOGS"
 	ControlMessageHibernate ControlMessageType = "HIBERNATE"
+	ControlMessageWake      ControlMessageType = "WAKE"
 	ControlMessageTerminate ControlMessageType = "TERMINATE"
 )
 

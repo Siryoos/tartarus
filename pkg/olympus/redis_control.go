@@ -73,3 +73,15 @@ func (r *RedisControlPlane) StreamLogs(ctx context.Context, nodeID domain.NodeID
 		}
 	}
 }
+
+func (r *RedisControlPlane) Hibernate(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID) error {
+	topic := fmt.Sprintf("tartarus:control:%s", nodeID)
+	msg := fmt.Sprintf("HIBERNATE %s", sandboxID)
+	return r.client.Publish(ctx, topic, msg).Err()
+}
+
+func (r *RedisControlPlane) Wake(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID) error {
+	topic := fmt.Sprintf("tartarus:control:%s", nodeID)
+	msg := fmt.Sprintf("WAKE %s", sandboxID)
+	return r.client.Publish(ctx, topic, msg).Err()
+}

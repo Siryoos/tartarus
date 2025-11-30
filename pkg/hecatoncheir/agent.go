@@ -315,6 +315,16 @@ func (a *Agent) controlLoop(ctx context.Context, ch <-chan ControlMessage) {
 			if _, err := a.Hypnos.Sleep(ctx, msg.SandboxID, nil); err != nil {
 				a.Logger.Error(ctx, "Failed to hibernate sandbox", map[string]any{"sandbox_id": msg.SandboxID, "error": err})
 			}
+		case ControlMessageWake:
+			if a.Hypnos == nil {
+				a.Logger.Info(ctx, "Wake requested but Hypnos is disabled", map[string]any{"sandbox_id": msg.SandboxID})
+				a.Metrics.IncCounter("agent_hypnos_disabled_total", 1)
+				continue
+			}
+			a.Logger.Info(ctx, "Waking sandbox", map[string]any{"sandbox_id": msg.SandboxID})
+			if _, err := a.Hypnos.Wake(ctx, msg.SandboxID); err != nil {
+				a.Logger.Error(ctx, "Failed to wake sandbox", map[string]any{"sandbox_id": msg.SandboxID, "error": err})
+			}
 		case ControlMessageTerminate:
 			if a.Thanatos == nil {
 				a.Logger.Info(ctx, "Terminate requested but Thanatos is disabled", map[string]any{"sandbox_id": msg.SandboxID})

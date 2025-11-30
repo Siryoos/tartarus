@@ -394,6 +394,56 @@ func main() {
 		}
 	})
 
+	mux.HandleFunc("/sandboxes/hibernate/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		id := domain.SandboxID(r.URL.Path[len("/sandboxes/hibernate/"):])
+		if id == "" {
+			http.Error(w, "Missing sandbox ID", http.StatusBadRequest)
+			return
+		}
+
+		if err := manager.HibernateSandbox(r.Context(), id); err != nil {
+			if errors.Is(err, olympus.ErrSandboxNotFound) {
+				http.Error(w, "Sandbox not found", http.StatusNotFound)
+				return
+			}
+			logger.Error("Failed to hibernate sandbox", "id", id, "error", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(map[string]string{"status": "hibernating", "id": string(id)})
+	})
+
+	mux.HandleFunc("/sandboxes/wake/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		id := domain.SandboxID(r.URL.Path[len("/sandboxes/wake/"):])
+		if id == "" {
+			http.Error(w, "Missing sandbox ID", http.StatusBadRequest)
+			return
+		}
+
+		if err := manager.WakeSandbox(r.Context(), id); err != nil {
+			if errors.Is(err, olympus.ErrSandboxNotFound) {
+				http.Error(w, "Sandbox not found", http.StatusNotFound)
+				return
+			}
+			logger.Error("Failed to wake sandbox", "id", id, "error", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(map[string]string{"status": "waking", "id": string(id)})
+	})
+
 	mux.HandleFunc("/templates", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

@@ -7,7 +7,7 @@ Phase 3 (v1.0) is complete. The items below capture the remaining work, organize
 - [x] **Nyx data-science snapshots**: Ship warmed templates (`python-ds`, `pytorch-ml`, `r-analytics`, `julia-sci`) that preload heavy libs before snapshotting; automate warming after base image updates; enforce <200ms cold starts and publish benchmark results.
 - [x] **Phlegethon resource classes**: Define resource classes (ember/flame/blaze/inferno) including GPU-aware `ClassInferno`; create dedicated node pools and scheduler hooks; expose metrics for routing decisions and hit rates.
 - [x] **Typhon quarantine hardening**: Provide isolated storage backend, stricter seccomp profiles, and default-no-network posture for quarantine; add auto-classification hooks and manual override paths; create e2e tests proving isolation.
-- [ ] **Hypnos hibernation**: Finish `SleepManager` (pause/compress/write/restore); add lifecycle hooks in agent/runtime; expose API/CLI toggles; gate with `EnableHypnos` and promote to default once stability/latency targets are met.
+- [x] **Hypnos hibernation**: Finish `SleepManager` (pause/compress/write/restore); add lifecycle hooks in agent/runtime; expose API/CLI toggles; gate with `EnableHypnos` and promote to default once stability/latency targets are met.
 
 ## Phase 5 — Ascension to Olympus (Near-Term Production)
 - [ ] **Cerberus authentication/RBAC**: Build API key + OIDC flows, mTLS for agent links, role/tenant-aware authorization, and access auditing; wire into Judges and CLI.
