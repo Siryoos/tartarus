@@ -122,6 +122,23 @@ type ReleaseApproval struct {
 	Reason     string
 	Conditions []string // Conditions for release
 	ExpiresAt  *time.Time
+
+	// Manual overrides for security relaxations
+	NetworkOverride  *NetworkOverride
+	SecurityOverride *SecurityOverride
+}
+
+// NetworkOverride allows manual network access for quarantined sandboxes
+type NetworkOverride struct {
+	NetworkMode   NetworkMode
+	AllowedEgress []string
+	Justification string
+}
+
+// SecurityOverride allows relaxation of security profiles
+type SecurityOverride struct {
+	SeccompProfile string // Override seccomp profile
+	Justification  string
 }
 
 type QuarantinePolicy struct {
@@ -133,6 +150,9 @@ type QuarantinePolicy struct {
 
 	// Enhanced isolation settings
 	Isolation QuarantineIsolation
+
+	// Default network mode for quarantine (defaults to NetworkModeNone)
+	DefaultNetworkMode NetworkMode
 
 	// Retention period
 	MaxQuarantineDuration time.Duration
@@ -154,11 +174,24 @@ type QuarantineIsolation struct {
 
 	// Separate storage backend
 	StorageBackend string
+	StorageConfig  *QuarantineStorageConfig
 
 	// Additional monitoring
 	EnableStrace  bool
 	EnableAuditd  bool
 	RecordNetwork bool
+}
+
+// QuarantineStorageConfig defines isolated storage for quarantined workloads
+type QuarantineStorageConfig struct {
+	// IsolatedDir is the dedicated directory for quarantine storage
+	IsolatedDir string
+
+	// UseSnapshotIsolation separates quarantine snapshots from regular ones
+	UseSnapshotIsolation bool
+
+	// SnapshotPrefix is prepended to all quarantine snapshot keys
+	SnapshotPrefix string
 }
 
 type NetworkMode string
