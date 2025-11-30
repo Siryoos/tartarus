@@ -163,6 +163,62 @@ func main() {
 	}
 	templateManager.RegisterTemplate(context.Background(), defaultTpl)
 
+	// Data Science Templates
+	dsTemplates := []*domain.TemplateSpec{
+		{
+			ID:          "python-ds",
+			Name:        "Python Data Science",
+			Description: "Python environment with NumPy, Pandas, Scikit-learn preloaded",
+			BaseImage:   "/var/lib/tartarus/images/python-ds.ext4",
+			KernelImage: "/var/lib/tartarus/kernels/vmlinux",
+			Resources: domain.ResourceSpec{
+				CPU: 2000,
+				Mem: 2048,
+			},
+			WarmupCommand: []string{"python3", "-c", "import numpy; import pandas; import sklearn"},
+		},
+		{
+			ID:          "pytorch-ml",
+			Name:        "PyTorch ML",
+			Description: "PyTorch environment preloaded",
+			BaseImage:   "/var/lib/tartarus/images/pytorch-ml.ext4",
+			KernelImage: "/var/lib/tartarus/kernels/vmlinux",
+			Resources: domain.ResourceSpec{
+				CPU: 4000,
+				Mem: 8192,
+				GPU: domain.GPURequest{Count: 1, Type: "nvidia"},
+			},
+			WarmupCommand: []string{"python3", "-c", "import torch; import torchvision"},
+		},
+		{
+			ID:          "r-analytics",
+			Name:        "R Analytics",
+			Description: "R environment with Tidyverse preloaded",
+			BaseImage:   "/var/lib/tartarus/images/r-analytics.ext4",
+			KernelImage: "/var/lib/tartarus/kernels/vmlinux",
+			Resources: domain.ResourceSpec{
+				CPU: 2000,
+				Mem: 4096,
+			},
+			WarmupCommand: []string{"R", "-e", "library(dplyr); library(ggplot2)"},
+		},
+		{
+			ID:          "julia-sci",
+			Name:        "Julia Science",
+			Description: "Julia environment preloaded",
+			BaseImage:   "/var/lib/tartarus/images/julia-sci.ext4",
+			KernelImage: "/var/lib/tartarus/kernels/vmlinux",
+			Resources: domain.ResourceSpec{
+				CPU: 2000,
+				Mem: 4096,
+			},
+			WarmupCommand: []string{"julia", "-e", "using DataFrames"},
+		},
+	}
+	for _, tpl := range dsTemplates {
+		templateManager.RegisterTemplate(context.Background(), tpl)
+	}
+
 	// Add default policy for hello-world
 	defaultPolicy := &domain.SandboxPolicy{
 		ID:         "default-hello-world",

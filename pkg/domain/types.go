@@ -109,13 +109,14 @@ type NodeStatus struct {
 // Template & snapshot references
 
 type TemplateSpec struct {
-	ID          TemplateID        `json:"id"`
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	BaseImage   string            `json:"base_image"` // OCI ref or disk image ID
-	KernelImage string            `json:"kernel_image"`
-	Resources   ResourceSpec      `json:"resources"`
-	DefaultEnv  map[string]string `json:"default_env"`
+	ID            TemplateID        `json:"id"`
+	Name          string            `json:"name"`
+	Description   string            `json:"description"`
+	BaseImage     string            `json:"base_image"` // OCI ref or disk image ID
+	KernelImage   string            `json:"kernel_image"`
+	Resources     ResourceSpec      `json:"resources"`
+	DefaultEnv    map[string]string `json:"default_env"`
+	WarmupCommand []string          `json:"warmup_command,omitempty"`
 }
 
 type SnapshotRef struct {

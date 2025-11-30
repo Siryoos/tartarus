@@ -3,6 +3,7 @@
 package nyx
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -360,6 +361,21 @@ func (m *LocalManager) createPausedVM(ctx context.Context, tpl *domain.TemplateS
 		WithSocketPath(socketPath).
 		Build(ctx)
 
+	var stdoutReader *io.PipeReader
+	if len(tpl.WarmupCommand) > 0 {
+		r, w := io.Pipe()
+		cmd.Stdout = w
+		stdoutReader = r
+
+		// Construct kernel args for warmup
+		cmdStr := strings.Join(tpl.WarmupCommand, " ")
+		// We use single quotes for the sh -c argument to avoid shell expansion issues,
+		// but we need to handle single quotes in the command itself if any.
+		// For now, assuming simple commands.
+		initCmd := fmt.Sprintf("/bin/sh -c '%s && echo TARTARUS_READY && sleep 3600'", cmdStr)
+		fcCfg.KernelArgs = fmt.Sprintf("console=ttyS0 reboot=k panic=1 pci=off init=%s", initCmd)
+	}
+
 	machine, err := firecracker.NewMachine(ctx, fcCfg, firecracker.WithProcessRunner(cmd))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create machine: %w", err)
@@ -367,6 +383,44 @@ func (m *LocalManager) createPausedVM(ctx context.Context, tpl *domain.TemplateS
 
 	if err := machine.Start(ctx); err != nil {
 		return nil, fmt.Errorf("failed to start machine: %w", err)
+	}
+
+	if stdoutReader != nil {
+		// Wait for readiness signal
+		scanner := bufio.NewScanner(stdoutReader)
+		ready := false
+
+		doneCh := make(chan error, 1)
+		go func() {
+			for scanner.Scan() {
+				line := scanner.Text()
+				if strings.Contains(line, "TARTARUS_READY") {
+					ready = true
+					break
+				}
+			}
+			if err := scanner.Err(); err != nil {
+				doneCh <- err
+			} else {
+				doneCh <- nil
+			}
+		}()
+
+		select {
+		case <-ctx.Done():
+			machine.StopVMM()
+			return nil, fmt.Errorf("context cancelled during warmup: %w", ctx.Err())
+		case err := <-doneCh:
+			if err != nil {
+				machine.StopVMM()
+				return nil, fmt.Errorf("error reading warmup output: %w", err)
+			}
+		}
+
+		if !ready {
+			machine.StopVMM()
+			return nil, fmt.Errorf("VM did not signal readiness during warmup")
+		}
 	}
 
 	if err := machine.PauseVM(ctx); err != nil {
