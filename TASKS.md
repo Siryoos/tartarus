@@ -14,7 +14,7 @@ Phase 3 (v1.0) is complete. The items below capture the remaining work, organize
 - [x] **Charon traffic ferry**: Load balancing across Olympus instances with health checks, circuit breaking, retries, and per-tenant rate limiting.
 - [x] **CLI v2.0**: Add `tartarus init template` (Dockerfile/OCI to template), `logs --follow`, `snapshot create/list/delete`, `exec` and `inspect`, config management, and shell completions.
 - [x] **Kubernetes integration**: Deliver CRI shim or Operator/CRDs (`SandboxJob`, `SandboxTemplate`) to schedule pods into Tartarus microVMs; validate end-to-end lifecycle and network/policy parity.
-- [ ] **Observability dashboard**: Grafana-ready dashboards for control-plane health, routing, enforcement, and template performance; live sandbox views and capacity heatmaps.
+- [x] **Observability dashboard**: Grafana-ready dashboards for control-plane health, routing, enforcement, and template performance; live sandbox views and capacity heatmaps.
 - [ ] **Security hardening**: Harden guest kernel options, generate seccomp profiles per class, automate template vulnerability scans, and integrate secrets delivery (Vault/KMS).
 
 ## Phase 6 — The Golden Age (Future)

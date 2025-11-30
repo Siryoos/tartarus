@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"github.com/tartarus-sandbox/tartarus/pkg/acheron"
 	"github.com/tartarus-sandbox/tartarus/pkg/cerberus"
@@ -38,7 +39,7 @@ func main() {
 	logger.Info("Starting Olympus API", "port", cfg.Port)
 
 	// Adapters
-	metrics := hermes.NewLogMetrics()
+	metrics := hermes.NewPrometheusMetrics()
 	var queue acheron.Queue
 	redisAddr := cfg.RedisAddress
 	if redisAddr != "" {
@@ -308,6 +309,8 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+
 	mux.HandleFunc("/submit", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
