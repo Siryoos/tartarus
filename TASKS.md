@@ -20,6 +20,6 @@ Phase 3 (v1.0) is complete. The items below capture the remaining work, organize
 ## Phase 6 — The Golden Age (Future)
 - [x] **Persephone predictive scaling**: Learn usage seasonality, prewarm/hibernate node pools, and apply scheduled scale rules with feedback from Hermes metrics.
 - [x] **Thanatos graceful termination**: Enable checkpoint/save-on-signal flows, grace-period enforcement, and automatic handoff to Hypnos where applicable; remove `EnableThanatos` guard after validation.
-- [ ] **Kampe legacy compatibility**: Provide Docker/containerd/gVisor adapters and migration tooling to move container workloads into microVMs under the same scheduler.
+- [x] **Kampe legacy compatibility**: Provide Docker/containerd/gVisor adapters and migration tooling to move container workloads into microVMs under the same scheduler.
 - [ ] **Unified runtime + WASM**: Add WASM runtime option with automatic isolation selection and shared interface across microVM/WASM/gVisor.
 - [ ] **Ecosystem & docs**: Publish full documentation site, tutorials, template marketplace, Terraform provider, GitHub Actions, and VS Code extension to support community adoption.

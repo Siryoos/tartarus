@@ -183,10 +183,9 @@ func (d *DockerAdapter) MigrateToMicroVM(ctx context.Context, containerID string
 
 func (d *DockerAdapter) ExportState(ctx context.Context, containerID string) (*ContainerState, error) {
 	return &ContainerState{
-		ID: containerID,
-		Config: ContainerConfig{
-			Image: "ubuntu:latest",
-		},
+		ID:     containerID,
+		Image:  "ubuntu:latest",
+		Config: ContainerConfig{},
 	}, nil
 }
 
@@ -271,10 +270,9 @@ func (c *ContainerdAdapter) MigrateToMicroVM(ctx context.Context, containerID st
 
 func (c *ContainerdAdapter) ExportState(ctx context.Context, containerID string) (*ContainerState, error) {
 	return &ContainerState{
-		ID: containerID,
-		Config: ContainerConfig{
-			Image: "alpine:latest",
-		},
+		ID:     containerID,
+		Image:  "alpine:latest",
+		Config: ContainerConfig{},
 	}, nil
 }
 
@@ -363,9 +361,8 @@ func (g *GVisorAdapter) MigrateToMicroVM(ctx context.Context, containerID string
 
 func (g *GVisorAdapter) ExportState(ctx context.Context, containerID string) (*ContainerState, error) {
 	return &ContainerState{
-		ID: containerID,
-		Config: ContainerConfig{
-			Image: "gcr.io/distroless/static",
-		},
+		ID:     containerID,
+		Image:  "gcr.io/distroless/static",
+		Config: ContainerConfig{},
 	}, nil
 }
