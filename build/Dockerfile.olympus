@@ -8,7 +8,31 @@ RUN go mod download
 COPY . .
 RUN go build -o /bin/olympus-api ./cmd/olympus-api
 
-FROM alpine:latest
+FROM alpine:3.20
+
+# Install dependencies needed for building rootfs images and running Firecracker
+RUN apk add --no-cache \
+    iptables \
+    iproute2 \
+    curl \
+    ca-certificates \
+    genext2fs
+
+# Prepare filesystem locations
+RUN mkdir -p /var/lib/firecracker /run/firecracker
+
+# Download Kernel
+RUN curl -L -o /var/lib/firecracker/vmlinux https://s3.amazonaws.com/spec.ccfc.min/img/quickstart_guide/x86_64/kernels/vmlinux.bin
+
+# Install Firecracker
+ARG FC_VERSION=v1.7.0
+ARG ARCH=x86_64
+RUN curl -L -o firecracker.tgz https://github.com/firecracker-microvm/firecracker/releases/download/${FC_VERSION}/firecracker-${FC_VERSION}-${ARCH}.tgz && \
+    tar -xzf firecracker.tgz && \
+    mv release-${FC_VERSION}-${ARCH}/firecracker-${FC_VERSION}-${ARCH} /usr/local/bin/firecracker && \
+    mv release-${FC_VERSION}-${ARCH}/jailer-${FC_VERSION}-${ARCH} /usr/local/bin/jailer && \
+    rm firecracker.tgz && \
+    rm -rf release-${FC_VERSION}-${ARCH}
 
 WORKDIR /app
 COPY --from=builder /bin/olympus-api /bin/olympus-api

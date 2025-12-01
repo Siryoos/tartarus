@@ -128,20 +128,11 @@ func main() {
 		store = localStore
 		logger.Info("Using local store", "path", cfg.SnapshotPath)
 	}
-	_ = store // Silence unused variable error
-	_ = store // Silence unused variable error
-	_ = store // Silence unused variable error
-	_ = store // Silence unused variable error
 	hermesLogger := hermes.NewSlogAdapter()
+	ociBuilder := erebus.NewOCIBuilder(store, hermesLogger)
 
 	// Nyx Manager
-	// We need OCIBuilder if we want to support OCI images in Nyx, but for now we can pass nil or implement it.
-	// The plan didn't explicitly say we need OCIBuilder for snapshots, but LocalManager needs it for Prepare.
-	// We can pass nil if we don't use it for now, or initialize it if we have it.
-	// We implemented OCIBuilder in a previous task?
-	// Let's assume nil for now as we are focusing on snapshots of existing VMs which use existing images.
-	// Wait, LocalManager constructor signature: NewLocalManager(store, ociBuilder, snapshotDir, logger)
-	nyxManager, err := nyx.NewLocalManager(store, nil, cfg.SnapshotPath, hermesLogger)
+	nyxManager, err := nyx.NewLocalManager(store, ociBuilder, cfg.SnapshotPath, hermesLogger)
 	if err != nil {
 		logger.Error("Failed to initialize Nyx manager", "error", err)
 		os.Exit(1)
