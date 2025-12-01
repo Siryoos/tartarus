@@ -97,6 +97,11 @@ func TestOCIBuilder_Assemble(t *testing.T) {
 	logger.On("Error", mock.Anything, mock.Anything, mock.Anything).Return()
 
 	builder := NewOCIBuilder(store, logger)
+	// Use mock scanner to avoid external dependency
+	scanner := new(TestMockScanner)
+	scanner.On("Scan", mock.Anything, mock.Anything).Return(nil)
+	builder.Scanner = scanner
+
 	builder.Fetcher = func(ctx context.Context, ref string) (v1.Image, error) {
 		return img, nil
 	}
@@ -159,6 +164,11 @@ func TestOCIBuilder_Assemble_CacheHit(t *testing.T) {
 	logger.On("Info", mock.Anything, mock.Anything, mock.Anything).Return()
 
 	builder := NewOCIBuilder(store, logger)
+	// Use mock scanner to avoid external dependency
+	scanner := new(TestMockScanner)
+	scanner.On("Scan", mock.Anything, mock.Anything).Return(nil)
+	builder.Scanner = scanner
+
 	builder.Fetcher = func(ctx context.Context, ref string) (v1.Image, error) {
 		return img, nil
 	}

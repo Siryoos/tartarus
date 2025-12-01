@@ -59,14 +59,14 @@ func TestLocalManager_Prepare(t *testing.T) {
 
 	logger := hermes.NewSlogAdapter() // Uses stdout, which is fine for tests
 
-	mgr, err := NewLocalManager(store, snapDir, logger)
+	mgr, err := NewLocalManager(store, nil, snapDir, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Mock VM Launcher
 	vmCreated := false
-	mgr.vmLauncher = func(ctx context.Context, tpl *domain.TemplateSpec, socketPath string) (SnapshotMachine, error) {
+	mgr.vmLauncher = func(ctx context.Context, tpl *domain.TemplateSpec, rootfsPath, socketPath string) (SnapshotMachine, error) {
 		vmCreated = true
 		return &MockSnapshotMachine{}, nil
 	}
@@ -141,10 +141,10 @@ func TestLocalManager_GetSnapshot(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	store, _ := erebus.NewLocalStore(filepath.Join(tmpDir, "store"))
-	mgr, _ := NewLocalManager(store, filepath.Join(tmpDir, "snapshots"), hermes.NewSlogAdapter())
+	mgr, _ := NewLocalManager(store, nil, filepath.Join(tmpDir, "snapshots"), hermes.NewSlogAdapter())
 
 	// Mock VM Launcher
-	mgr.vmLauncher = func(ctx context.Context, tpl *domain.TemplateSpec, socketPath string) (SnapshotMachine, error) {
+	mgr.vmLauncher = func(ctx context.Context, tpl *domain.TemplateSpec, rootfsPath, socketPath string) (SnapshotMachine, error) {
 		return &MockSnapshotMachine{}, nil
 	}
 
@@ -182,9 +182,9 @@ func TestLocalManager_ListSnapshots(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	store, _ := erebus.NewLocalStore(filepath.Join(tmpDir, "store"))
-	mgr, _ := NewLocalManager(store, filepath.Join(tmpDir, "snapshots"), hermes.NewSlogAdapter())
+	mgr, _ := NewLocalManager(store, nil, filepath.Join(tmpDir, "snapshots"), hermes.NewSlogAdapter())
 
-	mgr.vmLauncher = func(ctx context.Context, tpl *domain.TemplateSpec, socketPath string) (SnapshotMachine, error) {
+	mgr.vmLauncher = func(ctx context.Context, tpl *domain.TemplateSpec, rootfsPath, socketPath string) (SnapshotMachine, error) {
 		return &MockSnapshotMachine{}, nil
 	}
 
@@ -225,9 +225,9 @@ func TestLocalManager_Invalidate(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	store, _ := erebus.NewLocalStore(filepath.Join(tmpDir, "store"))
-	mgr, _ := NewLocalManager(store, filepath.Join(tmpDir, "snapshots"), hermes.NewSlogAdapter())
+	mgr, _ := NewLocalManager(store, nil, filepath.Join(tmpDir, "snapshots"), hermes.NewSlogAdapter())
 
-	mgr.vmLauncher = func(ctx context.Context, tpl *domain.TemplateSpec, socketPath string) (SnapshotMachine, error) {
+	mgr.vmLauncher = func(ctx context.Context, tpl *domain.TemplateSpec, rootfsPath, socketPath string) (SnapshotMachine, error) {
 		return &MockSnapshotMachine{}, nil
 	}
 
@@ -273,11 +273,11 @@ func TestLocalManager_GetSnapshot_ReadThrough(t *testing.T) {
 	logger := hermes.NewSlogAdapter()
 
 	// Manager 1: Prepares the snapshot
-	mgr1, err := NewLocalManager(store, snapDir1, logger)
+	mgr1, err := NewLocalManager(store, nil, snapDir1, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mgr1.vmLauncher = func(ctx context.Context, tpl *domain.TemplateSpec, socketPath string) (SnapshotMachine, error) {
+	mgr1.vmLauncher = func(ctx context.Context, tpl *domain.TemplateSpec, rootfsPath, socketPath string) (SnapshotMachine, error) {
 		return &MockSnapshotMachine{}, nil
 	}
 
@@ -291,12 +291,12 @@ func TestLocalManager_GetSnapshot_ReadThrough(t *testing.T) {
 	}
 
 	// Manager 2: Should fetch from store
-	mgr2, err := NewLocalManager(store, snapDir2, logger)
+	mgr2, err := NewLocalManager(store, nil, snapDir2, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// No VM launcher needed for read-through, but set it just in case logic drifts
-	mgr2.vmLauncher = func(ctx context.Context, tpl *domain.TemplateSpec, socketPath string) (SnapshotMachine, error) {
+	mgr2.vmLauncher = func(ctx context.Context, tpl *domain.TemplateSpec, rootfsPath, socketPath string) (SnapshotMachine, error) {
 		return nil, os.ErrInvalid // Should not be called
 	}
 

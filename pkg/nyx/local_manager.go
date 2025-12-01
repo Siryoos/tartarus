@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -144,6 +145,44 @@ func (m *LocalManager) Prepare(ctx context.Context, tpl *domain.TemplateSpec) (*
 	if err := m.uploadFile(ctx, diskKey, diskFile); err != nil {
 		return nil, err
 	}
+
+	memSz := int64(tpl.Resources.Mem)
+	if memSz == 0 {
+		memSz = 128
+	}
+	cpuCount := int64(tpl.Resources.CPU) / 1000
+	if cpuCount < 1 {
+		cpuCount = 1
+	}
+
+	// Create Snapshot object
+	// Path convention: snapshots/<templateID>/<snapshotID>
+	// The runtime will append .mem and .disk
+	basePath := filepath.Join(m.SnapshotDir, "snapshots", string(tpl.ID), string(snapID))
+
+	snap := &Snapshot{
+		ID:        snapID,
+		Template:  tpl.ID,
+		Path:      basePath,
+		CreatedAt: time.Now(),
+		Metadata: map[string]string{
+			"source_image": tpl.BaseImage,
+			"kernel_image": tpl.KernelImage,
+			"cpu_count":    fmt.Sprintf("%d", cpuCount),
+			"mem_size_mb":  fmt.Sprintf("%d", memSz),
+		},
+	}
+
+	// Persist Metadata to Erebus
+	jsonKey := fmt.Sprintf("snapshots/%s/%s.json", tpl.ID, snapID)
+	jsonBytes, err := json.Marshal(snap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal snapshot metadata: %w", err)
+	}
+
+	if err := m.Store.Put(ctx, jsonKey, bytes.NewReader(jsonBytes)); err != nil {
+		return nil, fmt.Errorf("failed to upload snapshot metadata: %w", err)
+	}
 	// Update 'latest' pointer
 	if err := m.Store.Put(ctx, latestKey, bytes.NewReader([]byte(snapID))); err != nil {
 		return nil, fmt.Errorf("failed to update latest pointer: %w", err)
@@ -169,16 +208,10 @@ func (m *LocalManager) Prepare(ctx context.Context, tpl *domain.TemplateSpec) (*
 		return nil, fmt.Errorf("failed to cache disk file: %w", err)
 	}
 
-	// Create Snapshot object
-	// Path convention: snapshots/<templateID>/<snapshotID>
-	// The runtime will append .mem and .disk
-	basePath := filepath.Join(m.SnapshotDir, "snapshots", string(tpl.ID), string(snapID))
-
-	snap := &Snapshot{
-		ID:        snapID,
-		Template:  tpl.ID,
-		Path:      basePath,
-		CreatedAt: time.Now(),
+	// Cache JSON locally
+	finalJsonPath := filepath.Join(finalDir, string(snapID)+".json")
+	if err := os.WriteFile(finalJsonPath, jsonBytes, 0644); err != nil {
+		return nil, fmt.Errorf("failed to cache json file: %w", err)
 	}
 
 	// Update cache
@@ -230,12 +263,30 @@ func (m *LocalManager) GetSnapshot(ctx context.Context, tplID domain.TemplateID)
 		// If files exist, just load into memory
 		if _, err := os.Stat(finalMemPath); err == nil {
 			if _, err := os.Stat(finalDiskPath); err == nil {
-				snap := &Snapshot{
-					ID:        snapID,
-					Template:  tplID,
-					Path:      basePath,
-					CreatedAt: time.Now(), // We don't know the real time, but that's okay
+				// Try to load metadata from JSON
+				finalJsonPath := filepath.Join(finalDir, string(snapID)+".json")
+				snap := &Snapshot{}
+				if jsonBytes, err := os.ReadFile(finalJsonPath); err == nil {
+					if err := json.Unmarshal(jsonBytes, snap); err != nil {
+						// Fallback if corrupt
+						snap = &Snapshot{
+							ID:        snapID,
+							Template:  tplID,
+							Path:      basePath,
+							CreatedAt: time.Now(),
+						}
+					}
+				} else {
+					// Fallback if missing
+					snap = &Snapshot{
+						ID:        snapID,
+						Template:  tplID,
+						Path:      basePath,
+						CreatedAt: time.Now(), // We don't know the real time, but that's okay
+					}
 				}
+				// Ensure path is correct (local path)
+				snap.Path = basePath
 				m.mu.Lock()
 				m.byTemplate[tplID] = append(m.byTemplate[tplID], snap)
 				m.mu.Unlock()
@@ -258,12 +309,32 @@ func (m *LocalManager) GetSnapshot(ctx context.Context, tplID domain.TemplateID)
 			return nil, err
 		}
 
-		snap := &Snapshot{
-			ID:        snapID,
-			Template:  tplID,
-			Path:      basePath,
-			CreatedAt: time.Now(),
+		jsonKey := fmt.Sprintf("snapshots/%s/%s.json", tplID, snapID)
+		finalJsonPath := filepath.Join(finalDir, string(snapID)+".json")
+
+		// Try to download JSON
+		snap := &Snapshot{}
+		if err := m.downloadFile(ctx, jsonKey, finalJsonPath); err == nil {
+			// Load it
+			if jsonBytes, err := os.ReadFile(finalJsonPath); err == nil {
+				if err := json.Unmarshal(jsonBytes, snap); err != nil {
+					// Corrupt
+					snap = nil
+				}
+			}
 		}
+
+		if snap == nil {
+			// Fallback
+			snap = &Snapshot{
+				ID:        snapID,
+				Template:  tplID,
+				Path:      basePath,
+				CreatedAt: time.Now(),
+			}
+		}
+		// Ensure path is correct
+		snap.Path = basePath
 
 		m.mu.Lock()
 		m.byTemplate[tplID] = append(m.byTemplate[tplID], snap)
@@ -342,6 +413,26 @@ func (m *LocalManager) SaveSnapshot(ctx context.Context, tplID domain.TemplateID
 		Template:  tplID,
 		Path:      basePath,
 		CreatedAt: time.Now(),
+		Metadata: map[string]string{
+			"type": "manual",
+		},
+	}
+
+	// Persist Metadata to Erebus
+	jsonKey := fmt.Sprintf("snapshots/%s/%s.json", tplID, snapID)
+	jsonBytes, err := json.Marshal(snap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal snapshot metadata: %w", err)
+	}
+
+	if err := m.Store.Put(ctx, jsonKey, bytes.NewReader(jsonBytes)); err != nil {
+		return nil, fmt.Errorf("failed to upload snapshot metadata: %w", err)
+	}
+
+	// Cache JSON locally
+	finalJsonPath := filepath.Join(finalDir, string(snapID)+".json")
+	if err := os.WriteFile(finalJsonPath, jsonBytes, 0644); err != nil {
+		return nil, fmt.Errorf("failed to cache json file: %w", err)
 	}
 
 	// Update cache

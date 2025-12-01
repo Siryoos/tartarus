@@ -4,9 +4,11 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/google/go-containerregistry/pkg/authn"
@@ -18,6 +20,9 @@ import (
 
 // ImageFetcher is a function that fetches an image.
 type ImageFetcher func(ctx context.Context, ref string) (v1.Image, error)
+
+// ErrToolNotFound is returned when a required external tool is missing.
+var ErrToolNotFound = errors.New("tool not found")
 
 // OCIBuilder handles pulling and extracting OCI images.
 type OCIBuilder struct {
@@ -151,6 +156,13 @@ func (b *OCIBuilder) Assemble(ctx context.Context, ref string, outputDir string)
 		}
 	}
 
+	// Scan the extracted directory
+	if b.Scanner != nil {
+		if err := b.Scanner.Scan(ctx, outputDir); err != nil {
+			return fmt.Errorf("scanning extracted image: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -164,33 +176,50 @@ func (w *readCloserWrapper) Close() error {
 }
 
 // BuildRootFS converts a directory to a rootfs disk image.
-// This currently requires external tools like genext2fs or virt-make-fs.
+// This currently requires external tools like genext2fs.
 func (b *OCIBuilder) BuildRootFS(ctx context.Context, srcDir, dstFile string) error {
 	if b.Logger != nil {
 		b.Logger.Info(ctx, "Building rootfs image", map[string]any{"src": srcDir, "dst": dstFile})
 	}
 
-	// TODO: Implement actual disk creation.
-	// For now, we just create a dummy file to satisfy the interface if we are in a test/dev environment without tools.
-	// In production, this should use a tool to create an ext4 image.
-
 	// Check for genext2fs
-	// cmd := exec.CommandContext(ctx, "genext2fs", "-b", "1024", "-d", srcDir, dstFile)
-	// ...
-
-	// Fallback: create a dummy file
-	f, err := os.Create(dstFile)
+	genext2fsPath, err := exec.LookPath("genext2fs")
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: genext2fs", ErrToolNotFound)
 	}
-	defer f.Close()
 
-	// Write some bytes
-	if _, err := f.WriteString("dummy-rootfs"); err != nil {
-		return err
+	// Calculate directory size to determine image size
+	// We'll add some overhead (e.g. 10%) + fixed buffer (e.g. 10MB) to be safe
+	dirSize, err := calculateDirSize(srcDir)
+	if err != nil {
+		return fmt.Errorf("calculating directory size: %w", err)
+	}
+
+	// Convert to KB for genext2fs -b
+	// Size = dirSize * 1.1 + 10MB
+	sizeKB := (dirSize*11/10)/1024 + 10240
+
+	// genext2fs -b <blocks_in_kb> -d <src> <dst>
+	cmd := exec.CommandContext(ctx, genext2fsPath, "-b", fmt.Sprintf("%d", sizeKB), "-d", srcDir, dstFile)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("genext2fs failed: %w, output: %s", err, string(output))
 	}
 
 	return nil
+}
+
+func calculateDirSize(path string) (int64, error) {
+	var size int64
+	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			size += info.Size()
+		}
+		return nil
+	})
+	return size, err
 }
 
 // untar extracts a tar stream to a destination directory.
