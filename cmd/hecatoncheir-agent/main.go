@@ -96,6 +96,15 @@ func main() {
 	hermesLogger := hermes.NewSlogAdapter()
 	var runtime tartarus.SandboxRuntime
 
+	// Initialize runtime based on configuration
+	logger.Info("Initializing runtime", "type", cfg.RuntimeType, "auto_select", cfg.RuntimeAutoSelect)
+
+	// Initialize available runtimes based on configuration
+	var firecrackerRuntime tartarus.SandboxRuntime
+	var wasmRuntime tartarus.SandboxRuntime
+	var gvisorRuntime tartarus.SandboxRuntime
+
+	// Firecracker Runtime
 	fcKernel := os.Getenv("FC_KERNEL_IMAGE")
 	fcRootFS := os.Getenv("FC_ROOTFS_BASE")
 	fcSocketDir := os.Getenv("FC_SOCKET_DIR")
@@ -105,10 +114,70 @@ func main() {
 
 	if fcKernel != "" && fcRootFS != "" {
 		logger.Info("Initializing Firecracker Runtime", "kernel", fcKernel, "rootfs", fcRootFS)
-		runtime = tartarus.NewFirecrackerRuntime(logger, fcSocketDir, fcKernel, fcRootFS)
+		firecrackerRuntime = tartarus.NewFirecrackerRuntime(logger, fcSocketDir, fcKernel, fcRootFS)
 	} else {
-		logger.Info("Initializing Mock Runtime (Firecracker config missing)")
-		runtime = tartarus.NewMockRuntime(logger)
+		logger.Warn("Firecracker config missing, using Mock Runtime for microVM")
+		firecrackerRuntime = tartarus.NewMockRuntime(logger)
+	}
+
+	// WASM Runtime
+	if cfg.RuntimeType == "wasm" || cfg.RuntimeAutoSelect {
+		wasmWorkDir := os.Getenv("WASM_WORK_DIR")
+		if wasmWorkDir == "" {
+			wasmWorkDir = "/var/run/tartarus/wasm"
+		}
+		logger.Info("Initializing WASM Runtime", "engine", cfg.WasmEngine, "workdir", wasmWorkDir)
+		wasmRuntime = tartarus.NewWasmRuntime(logger, wasmWorkDir)
+	}
+
+	// gVisor Runtime
+	if cfg.RuntimeType == "gvisor" || cfg.RuntimeAutoSelect {
+		gvisorRootDir := os.Getenv("GVISOR_ROOT_DIR")
+		if gvisorRootDir == "" {
+			gvisorRootDir = "/var/run/gvisor"
+		}
+		logger.Info("Initializing gVisor Runtime", "runsc", cfg.GVisorRunscPath, "rootdir", gvisorRootDir)
+		gvisorRuntime = tartarus.NewGVisorRuntime(logger, cfg.GVisorRunscPath, gvisorRootDir)
+	}
+
+	// Select runtime based on configuration
+	if cfg.RuntimeType == "auto" || cfg.RuntimeAutoSelect {
+		// Use unified runtime with auto-selection
+		logger.Info("Using unified runtime with automatic selection")
+		defaultRT := tartarus.IsolationMicroVM // Default to microVM
+		runtime = tartarus.NewUnifiedRuntime(tartarus.UnifiedRuntimeConfig{
+			MicroVMRuntime: firecrackerRuntime,
+			WasmRuntime:    wasmRuntime,
+			GVisorRuntime:  gvisorRuntime,
+			DefaultRuntime: defaultRT,
+			AutoSelect:     true,
+			Logger:         logger,
+		})
+	} else {
+		// Use specific runtime
+		switch cfg.RuntimeType {
+		case "wasm":
+			if wasmRuntime != nil {
+				logger.Info("Using WASM runtime exclusively")
+				runtime = wasmRuntime
+			} else {
+				logger.Error("WASM runtime not initialized")
+				os.Exit(1)
+			}
+		case "gvisor":
+			if gvisorRuntime != nil {
+				logger.Info("Using gVisor runtime exclusively")
+				runtime = gvisorRuntime
+			} else {
+				logger.Error("gVisor runtime not initialized")
+				os.Exit(1)
+			}
+		case "firecracker":
+			fallthrough
+		default:
+			logger.Info("Using Firecracker runtime (default)")
+			runtime = firecrackerRuntime
+		}
 	}
 
 	// Styx Host Gateway

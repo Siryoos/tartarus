@@ -38,6 +38,12 @@ type Config struct {
 	TLSKeyFile     string
 	TLSClientAuth  string // "none", "request", "require", "verify-if-given", "require-verify"
 	TLSCAFile      string
+
+	// Runtime Configuration (Phase 6: Unified Runtime + WASM)
+	RuntimeType       string // "firecracker", "wasm", "gvisor", "auto"
+	RuntimeAutoSelect bool   // Enable automatic runtime selection
+	WasmEngine        string // "wazero" (future: "wasmtime", "wasmer")
+	GVisorRunscPath   string // Path to runsc binary
 }
 
 func Load() *Config {
@@ -73,6 +79,12 @@ func Load() *Config {
 		TLSKeyFile:     getEnv("TLS_KEY_FILE", ""),
 		TLSClientAuth:  getEnv("TLS_CLIENT_AUTH", "none"),
 		TLSCAFile:      getEnv("TLS_CA_FILE", ""),
+
+		// Runtime Configuration (Phase 6: Unified Runtime + WASM)
+		RuntimeType:       getEnv("RUNTIME_TYPE", "firecracker"),
+		RuntimeAutoSelect: GetEnvBool("RUNTIME_AUTO_SELECT", false),
+		WasmEngine:        getEnv("WASM_ENGINE", "wazero"),
+		GVisorRunscPath:   getEnv("GVISOR_RUNSC_PATH", "/usr/local/bin/runsc"),
 	}
 }
 

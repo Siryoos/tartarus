@@ -25,6 +25,16 @@ const (
 	RunStatusCanceled  RunStatus = "CANCELED"
 )
 
+// IsolationType defines the type of isolation/runtime to use for sandboxes.
+type IsolationType string
+
+const (
+	IsolationMicroVM IsolationType = "microvm"
+	IsolationWASM    IsolationType = "wasm"
+	IsolationGVisor  IsolationType = "gvisor"
+	IsolationAuto    IsolationType = "auto"
+)
+
 // Resources & instance profiles
 
 type ResourceSpec struct {
