@@ -745,7 +745,7 @@ enforcement:
 
 **Theme:** *"Deep within Tartarus, the Titans stir—ancient powers of chaos and creation, bound yet never truly defeated. Their fire still burns beneath the earth."*
 
-**Status:** 🔲 PLANNED
+**Status:** ✅ COMPLETE
 
 **Objective:** Enable data science and AI workloads with specialized templates, GPU support preparation, and advanced resource management.
 
@@ -755,10 +755,10 @@ enforcement:
 ### Deliverables
 
 #### 4.1 OCI Image Pipeline (Erebus v2.0)
-- [ ] OCI image pulling and layer extraction
-- [ ] Rootfs construction from container images
-- [ ] Layer caching and deduplication
-- [ ] Integration with container registries (Docker Hub, GCR, ECR)
+- [x] OCI image pulling and layer extraction
+- [x] Rootfs construction from container images
+- [x] Layer caching and deduplication
+- [x] Integration with container registries (Docker Hub, GCR, ECR)
 
 ```go
 // pkg/erebus/oci_builder.go
@@ -779,11 +779,11 @@ func (b *LocalOCIBuilder) BuildRootFS(ctx context.Context, ref string, output st
 ```
 
 #### 4.2 Nyx Data Science Snapshots
-- [ ] Pre-built Python DS template (NumPy, Pandas, SciPy, Matplotlib)
-- [ ] Pre-built ML template (PyTorch, TensorFlow, scikit-learn)
-- [ ] Pre-built R Analytics template
-- [ ] Julia Scientific Computing template
-- [ ] Snapshot warming automation
+- [x] Pre-built Python DS template (NumPy, Pandas, SciPy, Matplotlib)
+- [x] Pre-built ML template (PyTorch, TensorFlow, scikit-learn)
+- [x] Pre-built R Analytics template
+- [x] Julia Scientific Computing template
+- [x] Snapshot warming automation
 
 ```yaml
 # templates/python-ds.yaml
@@ -804,10 +804,10 @@ resources:
 ```
 
 #### 4.3 Phlegethon Hot Path Router
-- [ ] Workload classification (light/medium/heavy)
-- [ ] Dedicated node pools for heavy workloads
-- [ ] Resource class definitions
-- [ ] Automatic routing based on request characteristics
+- [x] Workload classification (light/medium/heavy)
+- [x] Dedicated node pools for heavy workloads
+- [x] Resource class definitions
+- [x] Automatic routing based on request characteristics
 
 ```go
 // pkg/phlegethon/router.go
@@ -844,11 +844,11 @@ var (
 ```
 
 #### 4.4 Typhon Quarantine Pool
-- [ ] Dedicated high-isolation node pool
-- [ ] Enhanced seccomp profiles
-- [ ] No network access by default
-- [ ] Separate storage backend
-- [ ] Automatic classification of suspicious workloads
+- [x] Dedicated high-isolation node pool
+- [x] Enhanced seccomp profiles
+- [x] No network access by default
+- [x] Separate storage backend
+- [x] Automatic classification of suspicious workloads
 
 ```go
 // pkg/typhon/quarantine.go
@@ -881,10 +881,10 @@ const (
 ```
 
 #### 4.5 Hypnos Sleep Manager (NEW)
-- [ ] VM hibernation to disk
-- [ ] Memory compression before sleep
-- [ ] Quick wake-up from hibernation
-- [ ] Cost optimization through sleep cycles
+- [x] VM hibernation to disk
+- [x] Memory compression before sleep
+- [x] Quick wake-up from hibernation
+- [x] Cost optimization through sleep cycles
 
 ```go
 // pkg/hypnos/sleep.go
