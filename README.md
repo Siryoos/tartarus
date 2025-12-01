@@ -6,6 +6,17 @@
 
 Built on Firecracker and heavily inspired by Greek mythology, Tartarus provides a strict, policy-driven environment where every process is judged, every resource is accounted for, and every error is mourned.
 
+## ❓ Why Tartarus?
+
+### The Crisis of Agency & Infrastructure Debt
+While hyperscalers like AWS have solved secure microVM orchestration (e.g., Lambda, Fargate), the open-source community has been left behind with "infrastructure debt." Developers are forced to choose between the insecurity of containers and the heaviness of full VMs. Tartarus restores agency by providing a cloud-native, open-source platform for secure, multi-tenant code execution.
+
+### The Python Conundrum
+WebAssembly (WASM) promises isolation but fails for data science. The Python ecosystem (NumPy, Pandas, PyTorch) relies heavily on C-extensions that cannot be easily compiled to WASM. Tartarus solves this by running standard OCI container images in microVMs, offering **native performance** for data science workloads without rewriting the world.
+
+### Legacy Compatibility
+Tartarus isn't just for new workloads. With **Kampe** (the Old Jailor), you can migrate existing Docker containers to microVMs with minimal friction, bridging the gap between legacy infrastructure and the future of isolation.
+
 ## ⚡ Quick Start
 
 To descend into the underworld and start your first sandbox:

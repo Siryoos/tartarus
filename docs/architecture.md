@@ -39,7 +39,9 @@ The **Moirai** (Scheduler) watch the Acheron queue:
 
 The assigned **Hecatoncheir** (Agent) on the worker node picks up the task:
 
-1. **Nyx** prepares the root filesystem. She clones a snapshot (COW) from the base template.
+1. **Nyx** prepares the root filesystem.
+   - **Copy-on-Write (COW) Magic**: Nyx doesn't just copy files. It uses `mmap` to share read-only memory pages from the base snapshot across all microVMs.
+   - This allows thousands of sandboxes to share the same physical RAM for common libraries (e.g., Python runtime, glibc), enabling **<50ms cold starts** and massive density.
 2. **Styx** sets up the networking. A TAP device is created, and iptables rules are applied to enforce the `NetworkContract`.
 3. **Tartarus** launches the Firecracker process, attaching the drive and network.
 4. **Lethe** mounts the ephemeral overlay filesystem.

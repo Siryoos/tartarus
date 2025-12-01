@@ -747,7 +747,7 @@ enforcement:
 
 **Status:** ✅ COMPLETE
 
-**Objective:** Enable data science and AI workloads with specialized templates, GPU support preparation, and advanced resource management.
+**Objective:** Enable data science and AI workloads with specialized templates, GPU support preparation, and advanced resource management. **Targeting parity with AWS SnapStart performance (<200ms cold starts for Java/Python).**
 
 > [!NOTE]
 > **Hypnos** (Sleep/Hibernation) and **Thanatos** (Graceful Termination) are implemented in `pkg/hypnos` and `pkg/thanatos` but **disabled by default** in v1.0 via feature flags (`EnableHypnos=false`, `EnableThanatos=false`). These will be enabled and fully tested in Phase 4.

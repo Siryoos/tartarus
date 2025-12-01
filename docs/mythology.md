@@ -26,8 +26,13 @@ Olympus is the API and management layer. It is where "souls" (requests) originat
 Hades is the infrastructure layer—the cluster of physical nodes and the networks that connect them. It is the domain of resource management and routing.
 
 - **Hades (`pkg/hades`)**: The god of the dead and king of the underworld. He represents the Node Registry, maintaining the authoritative view of all physical resources.
+
+### The Expanded Pantheon (Phase 2+)
+*As the cosmos grew, new deities emerged to manage the complexity.*
+
 - **Cerberus (`pkg/cerberus`)**: The three-headed hound guarding the gates. The Authentication Gateway ensuring only authorized entities can enter.
 - **Charon (`pkg/charon`)**: The ferryman. The Load Balancer carrying requests across the river to their destination.
+- **Persephone (`pkg/persephone`)**: Queen of the Underworld. She brings the seasons, managing **Predictive Scaling** and resource cycles.
 
 ### 3. Tartarus (The Execution Plane)
 *The deep abyss where the Titans are imprisoned.*
