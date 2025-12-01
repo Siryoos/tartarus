@@ -14,10 +14,10 @@ Context: The architecture is present but key subsystems are stubbed or missing, 
   - Context: Agent runtime requires system binaries: `firecracker`, `iptables`/`iproute2`, and the new rootfs builder dependency (`genext2fs` or chosen tool). `Dockerfile.agent` does not install them.
   - DoD: `Dockerfile.agent` installs and pins required binaries; image build succeeds from clean checkout; agent starts without missing-binary errors in containerized deploy.
 
-- **Olympus startup reconciliation**
+- **Olympus startup reconciliation** [COMPLETED]
   - Context: `pkg/olympus/manager.go` does not rebuild state on restart. If Olympus crashes while agents run sandboxes, state is lost.
   - DoD: `Reconcile()` queries Hades for nodes, asks each agent for running sandboxes, and repopulates in-memory state on startup; safe to call repeatedly; unit test or controlled integration test demonstrates state is restored after a manager restart.
 
-- **Typhon seccomp profiles present**
+- **Typhon seccomp profiles present** [COMPLETED]
   - Context: `firecracker_runtime` loads profiles via `typhon.GetProfileForClass(class)` but may lack concrete JSON definitions (ember/flame).
   - DoD: Seccomp JSON for required classes lives in `pkg/typhon`; `Launch` succeeds when profiles are present; failing lookup yields clear errors; minimal test validates profiles load.

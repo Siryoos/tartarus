@@ -1,0 +1,14 @@
+{
+    "default_action": "SCMP_ACT_ALLOW",
+    "syscalls": [
+        {
+            "names": [
+                "reboot",
+                "init_module",
+                "finit_module",
+                "delete_module"
+            ],
+            "action": "SCMP_ACT_ERRNO"
+        }
+    ]
+}

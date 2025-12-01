@@ -8,7 +8,8 @@ import (
 )
 
 func TestGetQuarantineProfile(t *testing.T) {
-	profile := GetQuarantineProfile()
+	profile, err := GetQuarantineProfile()
+	require.NoError(t, err)
 
 	assert.Equal(t, "SCMP_ACT_ALLOW", profile.DefaultAction)
 	assert.NotEmpty(t, profile.Syscalls)
@@ -27,7 +28,8 @@ func TestGetQuarantineProfile(t *testing.T) {
 }
 
 func TestGetQuarantineStrictProfile(t *testing.T) {
-	profile := GetQuarantineStrictProfile()
+	profile, err := GetQuarantineStrictProfile()
+	require.NoError(t, err)
 
 	assert.Equal(t, "SCMP_ACT_ALLOW", profile.DefaultAction)
 	assert.NotEmpty(t, profile.Syscalls)
@@ -60,7 +62,8 @@ func TestGetQuarantineStrictProfile(t *testing.T) {
 }
 
 func TestGetDefaultProfile(t *testing.T) {
-	profile := GetDefaultProfile()
+	profile, err := GetDefaultProfile()
+	require.NoError(t, err)
 
 	assert.Equal(t, "SCMP_ACT_ALLOW", profile.DefaultAction)
 	assert.NotEmpty(t, profile.Syscalls)
@@ -79,7 +82,8 @@ func TestGetDefaultProfile(t *testing.T) {
 }
 
 func TestSeccompProfileToJSON(t *testing.T) {
-	profile := GetQuarantineProfile()
+	profile, err := GetQuarantineProfile()
+	require.NoError(t, err)
 
 	jsonStr, err := profile.ToJSON()
 	require.NoError(t, err)
@@ -102,7 +106,8 @@ func TestGetProfileByName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			profile := GetProfileByName(tt.name)
+			profile, err := GetProfileByName(tt.name)
+			require.NoError(t, err)
 			assert.NotNil(t, profile)
 			assert.Equal(t, tt.expectedAction, profile.DefaultAction)
 		})
@@ -110,9 +115,12 @@ func TestGetProfileByName(t *testing.T) {
 }
 
 func TestSeccompProfileGradation(t *testing.T) {
-	defaultProfile := GetDefaultProfile()
-	quarantineProfile := GetQuarantineProfile()
-	strictProfile := GetQuarantineStrictProfile()
+	defaultProfile, err := GetDefaultProfile()
+	require.NoError(t, err)
+	quarantineProfile, err := GetQuarantineProfile()
+	require.NoError(t, err)
+	strictProfile, err := GetQuarantineStrictProfile()
+	require.NoError(t, err)
 
 	// Strict should have more syscall rules than quarantine, which should have more than default
 	assert.Less(t, len(defaultProfile.Syscalls), len(quarantineProfile.Syscalls),
@@ -122,25 +130,38 @@ func TestSeccompProfileGradation(t *testing.T) {
 }
 
 func TestGetProfileForClass(t *testing.T) {
+	// Pre-load expected profiles for comparison
+	strict, _ := GetQuarantineStrictProfile()
+	quarantine, _ := GetQuarantineProfile()
+	def, _ := GetDefaultProfile()
+
 	tests := []struct {
 		class           string
 		expectedProfile *SeccompProfile
 		desc            string
 	}{
-		{"ember", GetQuarantineStrictProfile(), "Ember should get quarantine-strict profile"},
-		{"flame", GetQuarantineProfile(), "Flame should get quarantine profile"},
-		{"blaze", GetDefaultProfile(), "Blaze should get default profile"},
-		{"inferno", GetDefaultProfile(), "Inferno should get default profile"},
-		{"unknown", GetQuarantineProfile(), "Unknown class should default to quarantine for safety"},
+		{"ember", strict, "Ember should get quarantine-strict profile"},
+		{"flame", quarantine, "Flame should get quarantine profile"},
+		{"blaze", def, "Blaze should get default profile"},
+		{"inferno", def, "Inferno should get default profile"},
+		{"unknown", quarantine, "Unknown class should default to quarantine for safety"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.class, func(t *testing.T) {
-			profile := GetProfileForClass(tt.class)
+			profile, err := GetProfileForClass(tt.class)
+			require.NoError(t, err)
 			// We can't compare pointers directly as they are new structs
 			// Compare content by JSON or key fields
 			assert.Equal(t, len(tt.expectedProfile.Syscalls), len(profile.Syscalls), tt.desc)
 			assert.Equal(t, tt.expectedProfile.DefaultAction, profile.DefaultAction, tt.desc)
 		})
 	}
+}
+
+func TestLoadProfileMissing(t *testing.T) {
+	// Try to load a non-existent profile
+	profile, err := loadProfile("non_existent_profile")
+	assert.Error(t, err)
+	assert.Nil(t, profile)
 }

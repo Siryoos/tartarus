@@ -1,0 +1,91 @@
+{
+    "default_action": "SCMP_ACT_ALLOW",
+    "syscalls": [
+        {
+            "names": [
+                "socket",
+                "bind",
+                "connect",
+                "listen",
+                "accept",
+                "accept4",
+                "sendto",
+                "sendmsg",
+                "recvfrom",
+                "recvmsg"
+            ],
+            "action": "SCMP_ACT_ERRNO"
+        },
+        {
+            "names": [
+                "ptrace",
+                "process_vm_readv",
+                "process_vm_writev"
+            ],
+            "action": "SCMP_ACT_ERRNO"
+        },
+        {
+            "names": [
+                "init_module",
+                "finit_module",
+                "delete_module"
+            ],
+            "action": "SCMP_ACT_ERRNO"
+        },
+        {
+            "names": [
+                "reboot",
+                "swapon",
+                "swapoff",
+                "mount",
+                "umount",
+                "umount2",
+                "pivot_root",
+                "chroot"
+            ],
+            "action": "SCMP_ACT_ERRNO"
+        },
+        {
+            "names": [
+                "chmod",
+                "fchmod",
+                "fchmodat",
+                "chown",
+                "fchown",
+                "lchown",
+                "fchownat"
+            ],
+            "action": "SCMP_ACT_ERRNO"
+        },
+        {
+            "names": [
+                "msgget",
+                "msgsnd",
+                "msgrcv",
+                "msgctl",
+                "semget",
+                "semop",
+                "semctl",
+                "shmget",
+                "shmat",
+                "shmdt",
+                "shmctl"
+            ],
+            "action": "SCMP_ACT_ERRNO"
+        },
+        {
+            "names": [
+                "capset",
+                "setuid",
+                "setgid",
+                "setreuid",
+                "setregid",
+                "setresuid",
+                "setresgid",
+                "setfsuid",
+                "setfsgid"
+            ],
+            "action": "SCMP_ACT_ERRNO"
+        }
+    ]
+}

@@ -309,6 +309,19 @@ func main() {
 		Logger:     hermesLogger,
 	}
 
+	// Reconcile state on startup
+	logger.Info("Reconciling state from agents...")
+	if err := manager.Reconcile(context.Background()); err != nil {
+		// Log error but continue startup? Or fail?
+		// If we fail, we might be in a crash loop if one agent is bad.
+		// Reconcile already handles individual node errors by logging and continuing.
+		// So if it returns error, it's likely a global failure (e.g. listing nodes failed).
+		// Let's log error and continue, so API is at least available.
+		logger.Error("Reconciliation failed", "error", err)
+	} else {
+		logger.Info("Reconciliation complete")
+	}
+
 	// Persephone Seasonal Scaler
 	seasonalScaler := persephone.NewBasicSeasonalScaler()
 	// Define default seasons

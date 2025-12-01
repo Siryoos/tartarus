@@ -31,7 +31,8 @@ func TestSecurityHardening(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.class, func(t *testing.T) {
-				profile := typhon.GetProfileForClass(tt.class)
+				profile, err := typhon.GetProfileForClass(tt.class)
+				require.NoError(t, err)
 				require.NotNil(t, profile)
 				assert.Equal(t, "SCMP_ACT_ALLOW", profile.DefaultAction)
 

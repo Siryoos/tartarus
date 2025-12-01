@@ -308,8 +308,10 @@ func TestTyphonE2E_IsolationEnforcement(t *testing.T) {
 		assert.Equal(t, typhon.SeccompQuarantineStrict, config.SeccompProfile)
 
 		// Verify strict profile has more restrictions
-		strictProfile := typhon.GetProfileByName(typhon.SeccompQuarantineStrict)
-		quarantineProfile := typhon.GetProfileByName(typhon.SeccompQuarantine)
+		strictProfile, err := typhon.GetProfileByName(typhon.SeccompQuarantineStrict)
+		require.NoError(t, err)
+		quarantineProfile, err := typhon.GetProfileByName(typhon.SeccompQuarantine)
+		require.NoError(t, err)
 		assert.Greater(t, len(strictProfile.Syscalls), len(quarantineProfile.Syscalls),
 			"Strict profile should have more syscall restrictions")
 	})

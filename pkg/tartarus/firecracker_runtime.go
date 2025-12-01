@@ -212,7 +212,10 @@ func (r *FirecrackerRuntime) Launch(ctx context.Context, req *domain.SandboxRequ
 	}
 
 	// Use Typhon to get the profile
-	profile := typhon.GetProfileForClass(class)
+	profile, err := typhon.GetProfileForClass(class)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load seccomp profile for class %s: %w", class, err)
+	}
 	seccompJSON, err := profile.ToJSON()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate seccomp json: %w", err)
