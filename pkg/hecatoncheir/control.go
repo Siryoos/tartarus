@@ -2,6 +2,7 @@ package hecatoncheir
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -13,13 +14,14 @@ import (
 type ControlMessageType string
 
 const (
-	ControlMessageKill      ControlMessageType = "KILL"
-	ControlMessageLogs      ControlMessageType = "LOGS"
-	ControlMessageHibernate ControlMessageType = "HIBERNATE"
-	ControlMessageWake      ControlMessageType = "WAKE"
-	ControlMessageTerminate ControlMessageType = "TERMINATE"
-	ControlMessageSnapshot  ControlMessageType = "SNAPSHOT"
-	ControlMessageExec      ControlMessageType = "EXEC"
+	ControlMessageKill          ControlMessageType = "KILL"
+	ControlMessageLogs          ControlMessageType = "LOGS"
+	ControlMessageHibernate     ControlMessageType = "HIBERNATE"
+	ControlMessageWake          ControlMessageType = "WAKE"
+	ControlMessageTerminate     ControlMessageType = "TERMINATE"
+	ControlMessageSnapshot      ControlMessageType = "SNAPSHOT"
+	ControlMessageExec          ControlMessageType = "EXEC"
+	ControlMessageListSandboxes ControlMessageType = "LIST_SANDBOXES"
 )
 
 // ControlMessage is a command sent to the agent.
@@ -35,6 +37,8 @@ type ControlListener interface {
 	Listen(ctx context.Context) (<-chan ControlMessage, error)
 	// PublishLogs publishes log chunks to a topic.
 	PublishLogs(ctx context.Context, sandboxID domain.SandboxID, logs []byte) error
+	// PublishSandboxes publishes the list of sandboxes to a response topic.
+	PublishSandboxes(ctx context.Context, requestID string, sandboxes []domain.SandboxRun) error
 }
 
 // RedisControlListener implements ControlListener using Redis Pub/Sub.
@@ -105,4 +109,14 @@ func (r *RedisControlListener) Listen(ctx context.Context) (<-chan ControlMessag
 func (r *RedisControlListener) PublishLogs(ctx context.Context, sandboxID domain.SandboxID, logs []byte) error {
 	topic := fmt.Sprintf("tartarus:logs:%s", sandboxID)
 	return r.client.Publish(ctx, topic, logs).Err()
+}
+
+// PublishSandboxes publishes the list of sandboxes to a response topic.
+func (r *RedisControlListener) PublishSandboxes(ctx context.Context, requestID string, sandboxes []domain.SandboxRun) error {
+	topic := fmt.Sprintf("tartarus:response:%s", requestID)
+	payload, err := json.Marshal(sandboxes)
+	if err != nil {
+		return err
+	}
+	return r.client.Publish(ctx, topic, payload).Err()
 }

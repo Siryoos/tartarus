@@ -15,6 +15,7 @@ type ControlPlane interface {
 	Wake(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID) error
 	Snapshot(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID) error
 	Exec(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID, cmd []string) error
+	ListSandboxes(ctx context.Context, nodeID domain.NodeID) ([]domain.SandboxRun, error)
 }
 
 // NoopControlPlane for when Redis is not available
@@ -42,4 +43,8 @@ func (n *NoopControlPlane) Snapshot(ctx context.Context, nodeID domain.NodeID, s
 
 func (n *NoopControlPlane) Exec(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID, cmd []string) error {
 	return nil
+}
+
+func (n *NoopControlPlane) ListSandboxes(ctx context.Context, nodeID domain.NodeID) ([]domain.SandboxRun, error) {
+	return nil, nil
 }

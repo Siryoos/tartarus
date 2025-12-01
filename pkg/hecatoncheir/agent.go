@@ -388,6 +388,24 @@ func (a *Agent) controlLoop(ctx context.Context, ch <-chan ControlMessage) {
 			if err := a.Runtime.Exec(ctx, msg.SandboxID, msg.Args); err != nil {
 				a.Logger.Error(ctx, "Failed to exec command", map[string]any{"sandbox_id": msg.SandboxID, "error": err})
 			}
+		case ControlMessageListSandboxes:
+			// Args[0] is requestID
+			if len(msg.Args) < 1 {
+				a.Logger.Error(ctx, "ListSandboxes requested without requestID", nil)
+				continue
+			}
+			requestID := msg.Args[0]
+			a.Logger.Info(ctx, "ListSandboxes requested", map[string]any{"request_id": requestID})
+
+			sandboxes, err := a.Runtime.List(ctx)
+			if err != nil {
+				a.Logger.Error(ctx, "Failed to list sandboxes from runtime", map[string]any{"error": err})
+				continue
+			}
+
+			if err := a.Control.PublishSandboxes(ctx, requestID, sandboxes); err != nil {
+				a.Logger.Error(ctx, "Failed to publish sandboxes", map[string]any{"request_id": requestID, "error": err})
+			}
 		}
 	}
 }

@@ -2,10 +2,12 @@ package olympus
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
 )
@@ -123,4 +125,41 @@ func (r *RedisControlPlane) Exec(ctx context.Context, nodeID domain.NodeID, sand
 		msg += " " + arg
 	}
 	return r.client.Publish(ctx, topic, msg).Err()
+}
+
+func (r *RedisControlPlane) ListSandboxes(ctx context.Context, nodeID domain.NodeID) ([]domain.SandboxRun, error) {
+	requestID := uuid.New().String()
+	responseTopic := fmt.Sprintf("tartarus:response:%s", requestID)
+
+	// 1. Subscribe to response topic
+	pubsub := r.client.Subscribe(ctx, responseTopic)
+	defer pubsub.Close()
+
+	// Verify subscription
+	if _, err := pubsub.Receive(ctx); err != nil {
+		return nil, fmt.Errorf("failed to subscribe to response topic: %w", err)
+	}
+
+	// 2. Send request
+	controlTopic := fmt.Sprintf("tartarus:control:%s", nodeID)
+	msg := fmt.Sprintf("LIST_SANDBOXES %s", requestID)
+	if err := r.client.Publish(ctx, controlTopic, msg).Err(); err != nil {
+		return nil, fmt.Errorf("failed to send list request: %w", err)
+	}
+
+	// 3. Wait for response with timeout
+	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	ch := pubsub.Channel()
+	select {
+	case <-timeoutCtx.Done():
+		return nil, fmt.Errorf("timeout waiting for agent response")
+	case msg := <-ch:
+		var runs []domain.SandboxRun
+		if err := json.Unmarshal([]byte(msg.Payload), &runs); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+		}
+		return runs, nil
+	}
 }

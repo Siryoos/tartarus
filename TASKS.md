@@ -10,7 +10,7 @@ Context: The architecture is present but key subsystems are stubbed or missing, 
   - Context: `Nyx.Prepare` is unimplemented. Hecatoncheir calls `Nyx.GetSnapshot`, but no VM is actually started/paused/snapshotted to enable sub-second cold starts.
   - DoD: `Prepare` orchestrates runtime `Start -> Pause -> CreateSnapshot` for a template workload; snapshot metadata is stored/retrievable; a smoke test proves `GetSnapshot` returns a usable artifact for a new launch.
 
-- **Agent dependencies in image**
+- **Agent dependencies in image** [COMPLETED]
   - Context: Agent runtime requires system binaries: `firecracker`, `iptables`/`iproute2`, and the new rootfs builder dependency (`genext2fs` or chosen tool). `Dockerfile.agent` does not install them.
   - DoD: `Dockerfile.agent` installs and pins required binaries; image build succeeds from clean checkout; agent starts without missing-binary errors in containerized deploy.
 

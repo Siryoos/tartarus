@@ -419,3 +419,48 @@ func (m *Manager) Exec(ctx context.Context, id domain.SandboxID, cmd []string) e
 	})
 	return nil
 }
+
+// Reconcile rebuilds in-memory state by querying all nodes for running sandboxes.
+func (m *Manager) Reconcile(ctx context.Context) error {
+	m.Logger.Info(ctx, "Starting reconciliation", nil)
+
+	// 1. List all nodes
+	nodes, err := m.Hades.ListNodes(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list nodes: %w", err)
+	}
+
+	for _, node := range nodes {
+		// 2. Query each node for sandboxes
+		runs, err := m.Control.ListSandboxes(ctx, node.ID)
+		if err != nil {
+			m.Logger.Error(ctx, "Failed to list sandboxes from node", map[string]any{
+				"node_id": node.ID,
+				"error":   err,
+			})
+			// Continue to next node, don't fail entire reconciliation
+			continue
+		}
+
+		// 3. Update Hades
+		for _, run := range runs {
+			// Ensure node ID is set correctly (agent might not know its own ID in run struct?)
+			// Agent returns SandboxRun, which has NodeID.
+			// But let's enforce it matches the node we queried.
+			run.NodeID = node.ID
+			// Status should be RUNNING if it's in the list?
+			// Runtime.List returns current state.
+
+			if err := m.Hades.UpdateRun(ctx, run); err != nil {
+				m.Logger.Error(ctx, "Failed to update run during reconciliation", map[string]any{
+					"run_id":  run.ID,
+					"node_id": node.ID,
+					"error":   err,
+				})
+			}
+		}
+	}
+
+	m.Logger.Info(ctx, "Reconciliation complete", nil)
+	return nil
+}
