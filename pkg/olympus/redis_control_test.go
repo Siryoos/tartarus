@@ -84,7 +84,7 @@ func TestRedisControlPlane_StreamLogs_Timeout(t *testing.T) {
 	testCtx, cancel := context.WithTimeout(ctx, 1*time.Second)
 	defer cancel()
 
-	err := control.StreamLogs(testCtx, nodeID, sandboxID, &buf)
+	err := control.StreamLogs(testCtx, nodeID, sandboxID, &buf, false)
 
 	// Should get context deadline exceeded or our timeout message
 	assert.Error(t, err)
@@ -118,7 +118,7 @@ func TestRedisControlPlane_StreamLogs_Success(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- control.StreamLogs(streamCtx, nodeID, sandboxID, &buf)
+		errCh <- control.StreamLogs(streamCtx, nodeID, sandboxID, &buf, false)
 	}()
 
 	// Give it time to subscribe
@@ -177,7 +177,7 @@ func TestRedisControlPlane_StreamLogs_NilMessages(t *testing.T) {
 	defer cancel()
 
 	// Start streaming - it will timeout after 500ms
-	err := control.StreamLogs(streamCtx, nodeID, sandboxID, &buf)
+	err := control.StreamLogs(streamCtx, nodeID, sandboxID, &buf, false)
 
 	// Should timeout without crashing
 	assert.Error(t, err)

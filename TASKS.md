@@ -18,7 +18,7 @@ Phase 3 (v1.0) is complete. The items below capture the remaining work, organize
 - [x] **Security hardening**: Harden guest kernel options, generate seccomp profiles per class, automate template vulnerability scans, and integrate secrets delivery (Vault/KMS).
 
 ## Phase 6 — The Golden Age (Future)
-- [ ] **Persephone predictive scaling**: Learn usage seasonality, prewarm/hibernate node pools, and apply scheduled scale rules with feedback from Hermes metrics.
+- [x] **Persephone predictive scaling**: Learn usage seasonality, prewarm/hibernate node pools, and apply scheduled scale rules with feedback from Hermes metrics.
 - [ ] **Thanatos graceful termination**: Enable checkpoint/save-on-signal flows, grace-period enforcement, and automatic handoff to Hypnos where applicable; remove `EnableThanatos` guard after validation.
 - [ ] **Kampe legacy compatibility**: Provide Docker/containerd/gVisor adapters and migration tooling to move container workloads into microVMs under the same scheduler.
 - [ ] **Unified runtime + WASM**: Add WASM runtime option with automatic isolation selection and shared interface across microVM/WASM/gVisor.

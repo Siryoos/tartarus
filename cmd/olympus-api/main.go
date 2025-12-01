@@ -29,6 +29,7 @@ import (
 	"github.com/tartarus-sandbox/tartarus/pkg/moirai"
 	"github.com/tartarus-sandbox/tartarus/pkg/nyx"
 	"github.com/tartarus-sandbox/tartarus/pkg/olympus"
+	"github.com/tartarus-sandbox/tartarus/pkg/persephone"
 	"github.com/tartarus-sandbox/tartarus/pkg/phlegethon"
 	"github.com/tartarus-sandbox/tartarus/pkg/themis"
 )
@@ -307,6 +308,30 @@ func main() {
 		Metrics:    metrics,
 		Logger:     hermesLogger,
 	}
+
+	// Persephone Seasonal Scaler
+	seasonalScaler := persephone.NewBasicSeasonalScaler()
+	// Define default seasons
+	seasonalScaler.DefineSeason(context.Background(), persephone.SeasonSpring)
+	seasonalScaler.DefineSeason(context.Background(), persephone.SeasonSummer)
+	seasonalScaler.DefineSeason(context.Background(), persephone.SeasonAutumn)
+	seasonalScaler.DefineSeason(context.Background(), persephone.SeasonWinter)
+	// Apply Spring as default for now
+	seasonalScaler.ApplySeason(context.Background(), "spring")
+
+	// Olympus Scaler
+	scaler := olympus.NewScaler(seasonalScaler, registry, manager, hermesLogger, metrics)
+
+	// Register seasons for automatic activation
+	scaler.RegisterSeason(persephone.SeasonSpring)
+	scaler.RegisterSeason(persephone.SeasonSummer)
+	scaler.RegisterSeason(persephone.SeasonAutumn)
+	scaler.RegisterSeason(persephone.SeasonWinter)
+
+	go scaler.Run(context.Background())
+
+	// Persephone API handlers
+	persephoneHandlers := olympus.NewPersephoneHandlers(scaler)
 
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
@@ -591,6 +616,19 @@ func main() {
 		}
 		json.NewEncoder(w).Encode(pols)
 	})
+
+	// Persephone endpoints
+	mux.HandleFunc("/persephone/seasons", persephoneHandlers.HandleCreateSeason)
+	mux.HandleFunc("/persephone/seasons/", func(w http.ResponseWriter, r *http.Request) {
+		// Route to activate if path ends with /activate
+		if strings.HasSuffix(r.URL.Path, "/activate") {
+			persephoneHandlers.HandleActivateSeason(w, r)
+		} else {
+			persephoneHandlers.HandleListSeasons(w, r)
+		}
+	})
+	mux.HandleFunc("/persephone/forecast", persephoneHandlers.HandleGetForecast)
+	mux.HandleFunc("/persephone/recommendations", persephoneHandlers.HandleGetRecommendations)
 
 	// Setup Cerberus gateway for authentication, authorization, and audit
 	apiKey := os.Getenv("TARTARUS_API_KEY")
