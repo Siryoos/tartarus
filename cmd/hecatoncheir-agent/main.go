@@ -194,14 +194,10 @@ func main() {
 		logger.Info("Hypnos hibernation disabled (set ENABLE_HYPNOS=true to enable)")
 	}
 
-	// Thanatos (Termination Handler) - Phase 4, disabled by default for v1.0 stability
-	var thanatosHandler *thanatos.Handler
-	if cfg.EnableThanatos {
-		thanatosHandler = thanatos.NewHandler(runtime, hypnosManager)
-		logger.Info("Thanatos termination enabled")
-	} else {
-		logger.Info("Thanatos termination disabled (set ENABLE_THANATOS=true to enable)")
-	}
+	// Thanatos (Termination Handler) - Always enabled
+	thanatosHandler := thanatos.NewHandler(runtime, hypnosManager)
+	thanatosHandler.Metrics = metrics
+	logger.Info("Thanatos graceful termination enabled")
 
 	// Control Listener
 	var controlListener hecatoncheir.ControlListener
@@ -316,4 +312,27 @@ func main() {
 	<-quit
 
 	logger.Info("Shutting down agent...")
+
+	// Gracefully terminate all running sandboxes
+	activeSandboxes, err := runtime.List(context.Background())
+	if err == nil && len(activeSandboxes) > 0 {
+		logger.Info("Gracefully terminating running sandboxes", "count", len(activeSandboxes))
+		for _, sandbox := range activeSandboxes {
+			go func(id domain.SandboxID) {
+				_, err := thanatosHandler.Terminate(context.Background(), id, thanatos.Options{
+					GracePeriod: 10 * time.Second,
+					Reason:      "agent_shutdown",
+				})
+				if err != nil {
+					logger.Error("Failed to gracefully terminate sandbox", "sandbox_id", id, "error", err)
+				} else {
+					logger.Info("Sandbox terminated gracefully", "sandbox_id", id)
+				}
+			}(sandbox.ID)
+		}
+		// Give sandboxes time to terminate gracefully
+		time.Sleep(12 * time.Second)
+	}
+
+	logger.Info("Agent shutdown complete")
 }

@@ -27,8 +27,8 @@ type Config struct {
 	AllowedNetworks []string
 
 	// Phase 4 feature flags (disabled by default for v1.0 stability)
-	EnableHypnos   bool
-	EnableThanatos bool
+	EnableHypnos bool
+	// Thanatos (Graceful Termination) is always enabled
 
 	// Cerberus Auth Config
 	OIDCClientID   string
@@ -62,8 +62,8 @@ func Load() *Config {
 		AllowedNetworks: strings.Split(getEnv("ALLOWED_NETWORKS", "no-net,lockdown"), ","),
 
 		// Phase 4 feature flags (disabled by default for v1.0 stability)
-		EnableHypnos:   GetEnvBool("ENABLE_HYPNOS", false),
-		EnableThanatos: GetEnvBool("ENABLE_THANATOS", false),
+		EnableHypnos: GetEnvBool("ENABLE_HYPNOS", false),
+		// Thanatos is now always enabled - no feature flag needed
 
 		// Cerberus Auth Config
 		OIDCClientID:   getEnv("OIDC_CLIENT_ID", ""),
@@ -98,4 +98,9 @@ func GetEnvBool(key string, fallback bool) bool {
 		return lowerValue == "true" || lowerValue == "1" || lowerValue == "yes"
 	}
 	return fallback
+}
+
+// GetEnv returns an environment variable or a fallback value (exported for external use).
+func GetEnv(key, fallback string) string {
+	return getEnv(key, fallback)
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
+	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
 	"github.com/tartarus-sandbox/tartarus/pkg/hypnos"
 	"github.com/tartarus-sandbox/tartarus/pkg/tartarus"
 )
@@ -45,6 +46,7 @@ type Result struct {
 type Handler struct {
 	Runtime tartarus.SandboxRuntime
 	Hypnos  *hypnos.Manager
+	Metrics hermes.Metrics
 	now     func() time.Time
 }
 
@@ -59,10 +61,16 @@ func NewHandler(runtime tartarus.SandboxRuntime, sleeper *hypnos.Manager) *Handl
 
 // Terminate attempts a graceful shutdown, optionally checkpointing first.
 func (h *Handler) Terminate(ctx context.Context, id domain.SandboxID, opts Options) (*Result, error) {
+	start := h.now()
 	res := &Result{
 		SandboxID: id,
 		Phase:     PhaseInitiated,
 		Reason:    opts.Reason,
+	}
+
+	// Emit metric for termination initiation
+	if h.Metrics != nil {
+		h.Metrics.IncCounter("thanatos_terminate_total", 1, hermes.Label{Key: "reason", Value: opts.Reason})
 	}
 
 	grace := opts.GracePeriod
@@ -70,26 +78,44 @@ func (h *Handler) Terminate(ctx context.Context, id domain.SandboxID, opts Optio
 		grace = defaultGracePeriod
 	}
 
+	// Checkpoint flow: hand off to Hypnos to snapshot, then terminate
 	if opts.CreateCheckpoint && h.Hypnos != nil {
 		rec, err := h.Hypnos.Sleep(ctx, id, &hypnos.SleepOptions{GracefulShutdown: true})
 		if err != nil {
 			res.Phase = PhaseFailed
 			res.ErrorMessage = err.Error()
+			if h.Metrics != nil {
+				h.Metrics.IncCounter("thanatos_checkpoint_failed_total", 1)
+				h.Metrics.ObserveHistogram("thanatos_phase_duration_seconds", time.Since(start).Seconds(),
+					hermes.Label{Key: "phase", Value: string(PhaseFailed)})
+			}
 			return res, err
 		}
 		res.Phase = PhaseCheckpointed
 		res.Checkpoint = rec.SnapshotKey
 		res.CompletedAt = h.now()
+		if h.Metrics != nil {
+			h.Metrics.IncCounter("thanatos_checkpoint_success_total", 1)
+			h.Metrics.ObserveHistogram("thanatos_phase_duration_seconds", time.Since(start).Seconds(),
+				hermes.Label{Key: "phase", Value: string(PhaseCheckpointed)})
+		}
 		return res, nil
 	}
 
+	// Graceful shutdown flow
 	if err := h.Runtime.Shutdown(ctx, id); err != nil {
 		res.Phase = PhaseFailed
 		res.ErrorMessage = err.Error()
+		if h.Metrics != nil {
+			h.Metrics.IncCounter("thanatos_shutdown_failed_total", 1)
+			h.Metrics.ObserveHistogram("thanatos_phase_duration_seconds", time.Since(start).Seconds(),
+				hermes.Label{Key: "phase", Value: string(PhaseFailed)})
+		}
 		return res, err
 	}
 	res.Phase = PhaseGraceful
 
+	// Wait with grace period
 	waitCtx, cancel := context.WithTimeout(ctx, grace)
 	defer cancel()
 
@@ -98,18 +124,35 @@ func (h *Handler) Terminate(ctx context.Context, id domain.SandboxID, opts Optio
 			_ = h.Runtime.Kill(context.Background(), id)
 			res.Phase = PhaseKilled
 			res.ErrorMessage = "grace period exceeded; sandbox killed"
+			if h.Metrics != nil {
+				h.Metrics.IncCounter("thanatos_grace_timeout_total", 1)
+				h.Metrics.ObserveHistogram("thanatos_phase_duration_seconds", time.Since(start).Seconds(),
+					hermes.Label{Key: "phase", Value: string(PhaseKilled)})
+			}
 			return res, errors.New(res.ErrorMessage)
 		}
 		res.Phase = PhaseFailed
 		res.ErrorMessage = err.Error()
+		if h.Metrics != nil {
+			h.Metrics.IncCounter("thanatos_wait_failed_total", 1)
+			h.Metrics.ObserveHistogram("thanatos_phase_duration_seconds", time.Since(start).Seconds(),
+				hermes.Label{Key: "phase", Value: string(PhaseFailed)})
+		}
 		return res, err
 	}
 
+	// Graceful shutdown succeeded
 	if run, err := h.Runtime.Inspect(ctx, id); err == nil {
 		res.ExitCode = run.ExitCode
 	}
 	res.Phase = PhaseCompleted
 	res.CompletedAt = h.now()
+
+	if h.Metrics != nil {
+		h.Metrics.IncCounter("thanatos_graceful_success_total", 1)
+		h.Metrics.ObserveHistogram("thanatos_phase_duration_seconds", time.Since(start).Seconds(),
+			hermes.Label{Key: "phase", Value: string(PhaseCompleted)})
+	}
 
 	return res, nil
 }

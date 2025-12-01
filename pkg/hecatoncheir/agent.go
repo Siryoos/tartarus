@@ -356,13 +356,28 @@ func (a *Agent) controlLoop(ctx context.Context, ch <-chan ControlMessage) {
 				a.Logger.Error(ctx, "Failed to wake sandbox", map[string]any{"sandbox_id": msg.SandboxID, "error": err})
 			}
 		case ControlMessageTerminate:
-			if a.Thanatos == nil {
-				a.Logger.Info(ctx, "Terminate requested but Thanatos is disabled", map[string]any{"sandbox_id": msg.SandboxID})
-				a.Metrics.IncCounter("agent_thanatos_disabled_total", 1)
-				continue
+			// Parse termination options from args
+			// Format: TERMINATE <sandbox_id> [grace_seconds] [create_checkpoint]
+			opts := thanatos.Options{
+				GracePeriod: 5 * time.Second,
+				Reason:      "user_request",
 			}
-			a.Logger.Info(ctx, "Terminating sandbox", map[string]any{"sandbox_id": msg.SandboxID})
-			if _, err := a.Thanatos.Terminate(ctx, msg.SandboxID, thanatos.Options{GracePeriod: 5 * time.Second}); err != nil {
+
+			if len(msg.Args) > 0 {
+				if graceSecs, err := time.ParseDuration(msg.Args[0]); err == nil {
+					opts.GracePeriod = graceSecs
+				}
+			}
+			if len(msg.Args) > 1 && msg.Args[1] == "true" {
+				opts.CreateCheckpoint = true
+			}
+
+			a.Logger.Info(ctx, "Terminating sandbox", map[string]any{
+				"sandbox_id":        msg.SandboxID,
+				"grace_period":      opts.GracePeriod,
+				"create_checkpoint": opts.CreateCheckpoint,
+			})
+			if _, err := a.Thanatos.Terminate(ctx, msg.SandboxID, opts); err != nil {
 				a.Logger.Error(ctx, "Failed to terminate sandbox", map[string]any{"sandbox_id": msg.SandboxID, "error": err})
 			}
 		case ControlMessageSnapshot:

@@ -87,52 +87,6 @@ func TestAgent_DisabledHypnos(t *testing.T) {
 	mockMetrics.AssertExpectations(t)
 }
 
-func TestAgent_DisabledThanatos(t *testing.T) {
-	// Create mock logger and metrics
-	mockLogger := new(MockLogger)
-	mockMetrics := new(MockMetrics)
-
-	// Expect all log messages
-	mockLogger.On("Info", mock.Anything, "Control loop started", mock.Anything).Return()
-	mockLogger.On("Info", mock.Anything, "Received control message", mock.Anything).Return()
-	mockLogger.On("Info", mock.Anything, "Terminate requested but Thanatos is disabled", mock.MatchedBy(func(fields map[string]any) bool {
-		sandboxID, ok := fields["sandbox_id"]
-		return ok && sandboxID == domain.SandboxID("test-sandbox-456")
-	})).Return()
-
-	// Expect metric increment
-	mockMetrics.On("IncCounter", "agent_thanatos_disabled_total", float64(1), mock.Anything).Return()
-
-	// Create agent with nil Thanatos
-	agent := &Agent{
-		Thanatos: nil, // Disabled
-		Logger:   mockLogger,
-		Metrics:  mockMetrics,
-	}
-
-	// Create control message channel
-	ch := make(chan ControlMessage, 1)
-	ch <- ControlMessage{
-		Type:      ControlMessageTerminate,
-		SandboxID: domain.SandboxID("test-sandbox-456"),
-	}
-	close(ch)
-
-	// Create a context
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Start control loop in goroutine
-	go agent.controlLoop(ctx, ch)
-
-	// Give it time to process
-	time.Sleep(100 * time.Millisecond)
-
-	// Verify expectations - the termination should NOT have been attempted
-	mockLogger.AssertExpectations(t)
-	mockMetrics.AssertExpectations(t)
-}
-
 func TestAgent_HypnosMetricIncrement(t *testing.T) {
 	mockLogger := new(MockLogger)
 	mockMetrics := new(MockMetrics)
@@ -164,14 +118,15 @@ func TestAgent_HypnosMetricIncrement(t *testing.T) {
 }
 
 func TestConfig_DefaultsDisabled(t *testing.T) {
-	// This test verifies that the default configuration has Hypnos and Thanatos disabled
+	// This test verifies that the default configuration has Hypnos disabled
+	// but Thanatos is always enabled (no feature flag)
 	// We can't easily test config.Load() without environment manipulation,
 	// but we can document the expected behavior
 
-	// When ENABLE_HYPNOS and ENABLE_THANATOS are not set:
+	// When ENABLE_HYPNOS is not set:
 	// - cfg.EnableHypnos should be false
-	// - cfg.EnableThanatos should be false
+	// - Thanatos is always enabled (no feature flag needed)
 
 	// This is a documentation test - actual testing would require env manipulation
-	assert.True(t, true, "Config defaults should disable Hypnos and Thanatos")
+	assert.True(t, true, "Config defaults should disable Hypnos; Thanatos is always enabled")
 }

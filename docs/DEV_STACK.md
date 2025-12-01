@@ -41,18 +41,17 @@ The dev stack consists of:
 - **Typhon**: Enforces quarantine isolation for suspicious workloads (requires `tartarus.io/typhon` labeled nodes)
 - **Aeacus**: Audit logging for compliance and forensics
 
-### Phase 4 Components (Disabled by Default)
+### Phase 4 Components
 
 > [!NOTE]
-> The following components are implemented but **disabled** in v1.0 via feature flags:
+> Hypnos hibernation is disabled by default in v1.0 via feature flag. Thanatos graceful termination is always enabled.
 
-- **Hypnos**: VM hibernation/sleep (requires `EnableHypnos=true`)
-- **Thanatos**: Graceful termination handling (requires `EnableThanatos=true`)
+- **Hypnos**: VM hibernation/sleep (disabled by default, requires `EnableHypnos=true`)
+- **Thanatos**: Graceful termination handling (always enabled)
 
-To enable in development, set environment variables:
+To enable Hypnos in development:
 ```bash
 export ENABLE_HYPNOS=true
-export ENABLE_THANATOS=true
 ```
 
 ## Troubleshooting

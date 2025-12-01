@@ -15,7 +15,6 @@ This document provides a comprehensive reference for configuring Tartarus in pro
 | `REDIS_PASSWORD` | Redis password | No | - | `secret123` |
 | `REDIS_QUEUE_KEY` | Queue storage key prefix | No | `tartarus:queue` | `prod:queue` |
 | `ENABLE_HYPNOS` | Enable Hypnos hibernation | No | `false` | `true` |
-| `ENABLE_THANATOS` | Enable Thanatos termination | No | `false` | `true` |
 
 ### Agent Configuration
 
@@ -75,13 +74,11 @@ tartarus node label <node-id> tartarus.io/elysium=true
 
 ## Feature Flags
 
-### Phase 4 Components (Disabled by Default)
-
-The following Phase 4 components are implemented but **disabled by default** in v1.0:
+### Phase 4 Components
 
 #### Hypnos (VM Hibernation)
 
-Enable VM hibernation and sleep cycles:
+Disabled by default in v1.0. To enable VM hibernation and sleep cycles:
 
 ```bash
 export ENABLE_HYPNOS=true
@@ -91,16 +88,12 @@ export ENABLE_HYPNOS=true
 
 #### Thanatos (Graceful Termination)
 
-Enable graceful shutdown and state preservation:
+**Always enabled** as of Phase 6. Provides graceful shutdown, grace-period enforcement, and optional checkpoint-on-terminate via Hypnos integration.
 
-```bash
-export ENABLE_THANATOS=true
-```
-
-**Status**: Implemented but not fully tested for production. Enable at your own risk.
+**Status**: Production-ready. Fully tested and integrated.
 
 > [!CAUTION]
-> Enabling Hypnos or Thanatos in v1.0 is **not recommended** for production. These features will be fully validated and enabled by default in Phase 4.
+> Enabling Hypnos in v1.0 is **not recommended** for production. This feature will be fully validated and enabled by default in Phase 4.
 
 ## Policy Configuration
 
@@ -274,7 +267,8 @@ tartarus node label <node-id> tartarus.io/typhon=true
 | Aspect | Development | Production |
 |--------|-------------|------------|
 | Redis | Optional (defaults to `localhost:6379`) | **Required** |
-| Hypnos/Thanatos | Can be enabled for testing | **Disabled** (default) |
+| Hypnos | Can be enabled for testing | **Disabled** (default) |
+| Thanatos | Always enabled | Always enabled |
 | Node labels | Optional | **Required** for Typhon |
 | Audit logging | Logged only | Should export to sink |
 | Policies | In-memory cache OK | Must persist to Redis |
