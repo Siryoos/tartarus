@@ -17,7 +17,9 @@ import (
 
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
+	"github.com/tartarus-sandbox/tartarus/pkg/cerberus"
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
+	"github.com/tartarus-sandbox/tartarus/pkg/typhon"
 )
 
 // FirecrackerRuntime implements SandboxRuntime using the Firecracker SDK.
@@ -97,8 +99,34 @@ func (r *FirecrackerRuntime) Launch(ctx context.Context, req *domain.SandboxRequ
 
 	// Construct Kernel Args
 	// We want: console=ttyS0 reboot=k panic=1 pci=off init=/bin/sh -- -c "export VAR=VAL; exec cmd args..."
-	// Note: We use /bin/sh to setup env and exec the actual command.
-	kernelArgs := "console=ttyS0 reboot=k panic=1 pci=off"
+	// Comprehensive security hardening parameters:
+	// - console=ttyS0: Serial console for logging
+	// - reboot=k: Reboot via keyboard controller
+	// - panic=1: Reboot 1 second after kernel panic
+	// - pci=off: Disable PCI (reduces attack surface in microVM)
+	// - randomize_kstack_offset=on: Randomize kernel stack offset (KASLR enhancement)
+	// - nosmt: Disable SMT/Hyper-threading (Spectre/MDS mitigation)
+	// - mitigations=auto: Enable all CPU vulnerability mitigations
+	// - audit=1: Enable kernel auditing
+	// - slub_debug=P: Enable SLUB memory poison on free
+	// - page_poison=1: Poison pages on free (detect use-after-free)
+	// - pti=on: Page Table Isolation (Meltdown mitigation)
+	// - slab_nomerge: Prevent slab merging (heap exploitation hardening)
+	// - init_on_alloc=1: Zero memory on allocation
+	// - init_on_free=1: Zero memory on free (defense in depth)
+	// - mds=full,nosmt: Full MDS mitigation with SMT disabled
+	// - l1tf=full,force: Full L1TF mitigation
+	// - spec_store_bypass_disable=on: Spectre v4 mitigation
+	// - tsx=off: Disable Intel TSX (TAA mitigation)
+	// - vsyscall=none: Disable legacy vsyscalls (attack surface reduction)
+	// - debugfs=off: Disable debugfs (information disclosure prevention)
+	// - oops=panic: Panic on kernel oops (fail-secure)
+	kernelArgs := "console=ttyS0 reboot=k panic=1 pci=off " +
+		"randomize_kstack_offset=on nosmt mitigations=auto audit=1 " +
+		"slub_debug=P page_poison=1 pti=on slab_nomerge " +
+		"init_on_alloc=1 init_on_free=1 " +
+		"mds=full,nosmt l1tf=full,force spec_store_bypass_disable=on " +
+		"tsx=off vsyscall=none debugfs=off oops=panic"
 
 	if len(req.Command) > 0 {
 		// Build the shell script
@@ -123,9 +151,30 @@ func (r *FirecrackerRuntime) Launch(ctx context.Context, req *domain.SandboxRequ
 		}
 
 		// 1. Export Environment Variables
+		// Resolve secrets
+		secretProvider := cerberus.NewCompositeSecretProvider(
+			cerberus.NewEnvSecretProvider(),
+			cerberus.NewVaultSecretProvider(),
+		)
+
 		for k, v := range req.Env {
+			// Resolve potential secret references
+			resolvedVal := v
+			if strings.HasPrefix(v, "env:") || strings.HasPrefix(v, "vault:") {
+				if s, err := secretProvider.Resolve(ctx, v); err == nil {
+					resolvedVal = s
+				} else {
+					r.Logger.Warn("Failed to resolve secret", "key", k, "ref", v, "error", err)
+					// Keep original value or fail? For now keep original to avoid breaking non-secrets that look like secrets?
+					// But "env:" and "vault:" are specific.
+					// If resolution fails, it's likely a config error.
+					// We'll log warning and use empty string or original?
+					// Let's use original but log warning.
+				}
+			}
+
 			// Simple escaping for single quotes
-			val := strings.ReplaceAll(v, "'", "'\\''")
+			val := strings.ReplaceAll(resolvedVal, "'", "'\\''")
 			scriptBuilder.WriteString(fmt.Sprintf("export %s='%s'; ", k, val))
 		}
 
@@ -153,6 +202,28 @@ func (r *FirecrackerRuntime) Launch(ctx context.Context, req *domain.SandboxRequ
 		scriptEscaped := strings.ReplaceAll(script, "\"", "\\\"")
 
 		kernelArgs = fmt.Sprintf("%s init=/bin/sh -- -c \"%s\"", kernelArgs, scriptEscaped)
+	}
+
+	// Security: Seccomp Profile
+	// Determine class based on resources (simplified)
+	class := "default"
+	if memSz <= 128 {
+		class = "ember"
+	}
+
+	// Use Typhon to get the profile
+	profile := typhon.GetProfileForClass(class)
+	seccompJSON, err := profile.ToJSON()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate seccomp json: %w", err)
+	}
+
+	var seccompPath string
+	if seccompJSON != "" {
+		seccompPath = filepath.Join(r.SocketDir, fmt.Sprintf("seccomp-%s.json", req.ID))
+		if err := os.WriteFile(seccompPath, []byte(seccompJSON), 0644); err != nil {
+			return nil, fmt.Errorf("failed to write seccomp profile: %w", err)
+		}
 	}
 
 	fcCfg := firecracker.Config{
@@ -205,6 +276,11 @@ func (r *FirecrackerRuntime) Launch(ctx context.Context, req *domain.SandboxRequ
 	cmd := firecracker.VMCommandBuilder{}.
 		WithSocketPath(socketPath).
 		Build(ctx)
+
+	// Append seccomp arg if present
+	if seccompPath != "" {
+		cmd.Args = append(cmd.Args, "--seccomp-filter", seccompPath)
+	}
 
 	cmd.Stdout = consoleFile
 	cmd.Stderr = consoleFile

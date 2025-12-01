@@ -179,3 +179,33 @@ func GetProfileByName(name string) *SeccompProfile {
 		return GetDefaultProfile()
 	}
 }
+
+// GetProfileForClass returns the appropriate seccomp profile for a resource class
+// Graduated approach:
+// - ember (cold, <10s, <512MB): Strictest isolation with quarantine-strict
+// - flame (warm, <5min, <4GB): Quarantine profile blocking network/privileged ops
+// - blaze (hot, <30min, <16GB): Moderate restrictions with default profile
+// - inferno (unlimited, GPU): Permissive default (needs networking, GPU access)
+func GetProfileForClass(class string) *SeccompProfile {
+	switch class {
+	case "ember":
+		// Ember (Cold) gets strictest isolation - quarantine-strict profile
+		// Short-lived tasks don't need file ownership changes, IPC, or capabilities
+		return GetQuarantineStrictProfile()
+	case "flame":
+		// Flame (Warm) gets quarantine profile
+		// Block network, ptrace, kernel modules, privileged ops
+		return GetQuarantineProfile()
+	case "blaze":
+		// Blaze (Hot) gets moderate restrictions - default profile
+		// Allow most operations but block dangerous syscalls
+		return GetDefaultProfile()
+	case "inferno":
+		// Inferno (highest resource, GPU-capable) gets permissive default
+		// Needs maximum flexibility for long-running, high-resource workloads
+		return GetDefaultProfile()
+	default:
+		// Unknown classes default to quarantine for safety
+		return GetQuarantineProfile()
+	}
+}

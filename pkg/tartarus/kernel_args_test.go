@@ -9,7 +9,12 @@ import (
 func TestConstructKernelArgs(t *testing.T) {
 	// Replicate the logic from Launch for testing
 	construct := func(command []string, args []string, env map[string]string) string {
-		kernelArgs := "console=ttyS0 reboot=k panic=1 pci=off"
+		kernelArgs := "console=ttyS0 reboot=k panic=1 pci=off " +
+			"randomize_kstack_offset=on nosmt mitigations=auto audit=1 " +
+			"slub_debug=P page_poison=1 pti=on slab_nomerge " +
+			"init_on_alloc=1 init_on_free=1 " +
+			"mds=full,nosmt l1tf=full,force spec_store_bypass_disable=on " +
+			"tsx=off vsyscall=none debugfs=off oops=panic"
 		if len(command) > 0 {
 			var scriptBuilder strings.Builder
 
@@ -48,7 +53,7 @@ func TestConstructKernelArgs(t *testing.T) {
 			command: []string{"/bin/echo"},
 			args:    []string{"hello"},
 			env:     nil,
-			want:    `console=ttyS0 reboot=k panic=1 pci=off init=/bin/sh -- -c "exec '/bin/echo' 'hello'"`,
+			want:    `console=ttyS0 reboot=k panic=1 pci=off randomize_kstack_offset=on nosmt mitigations=auto audit=1 slub_debug=P page_poison=1 pti=on slab_nomerge init_on_alloc=1 init_on_free=1 mds=full,nosmt l1tf=full,force spec_store_bypass_disable=on tsx=off vsyscall=none debugfs=off oops=panic init=/bin/sh -- -c "exec '/bin/echo' 'hello'"`,
 		},
 		{
 			name:    "Command with spaces and quotes",
@@ -57,7 +62,7 @@ func TestConstructKernelArgs(t *testing.T) {
 			env:     nil,
 			// script: exec '/bin/sh' '-c' 'echo '\''hello world'\'''
 			// escaped: exec '/bin/sh' '-c' 'echo '\''hello world'\''' (no double quotes to escape)
-			want: `console=ttyS0 reboot=k panic=1 pci=off init=/bin/sh -- -c "exec '/bin/sh' '-c' 'echo '\''hello world'\'''"`,
+			want: `console=ttyS0 reboot=k panic=1 pci=off randomize_kstack_offset=on nosmt mitigations=auto audit=1 slub_debug=P page_poison=1 pti=on slab_nomerge init_on_alloc=1 init_on_free=1 mds=full,nosmt l1tf=full,force spec_store_bypass_disable=on tsx=off vsyscall=none debugfs=off oops=panic init=/bin/sh -- -c "exec '/bin/sh' '-c' 'echo '\''hello world'\'''"`,
 		},
 		{
 			name:    "Env vars",
@@ -65,7 +70,7 @@ func TestConstructKernelArgs(t *testing.T) {
 			args:    nil,
 			env:     map[string]string{"FOO": "BAR"},
 			// script: export FOO='BAR'; exec '/app/run'
-			want: `console=ttyS0 reboot=k panic=1 pci=off init=/bin/sh -- -c "export FOO='BAR'; exec '/app/run'"`,
+			want: `console=ttyS0 reboot=k panic=1 pci=off randomize_kstack_offset=on nosmt mitigations=auto audit=1 slub_debug=P page_poison=1 pti=on slab_nomerge init_on_alloc=1 init_on_free=1 mds=full,nosmt l1tf=full,force spec_store_bypass_disable=on tsx=off vsyscall=none debugfs=off oops=panic init=/bin/sh -- -c "export FOO='BAR'; exec '/app/run'"`,
 		},
 		{
 			name:    "Env with quotes",
@@ -73,7 +78,7 @@ func TestConstructKernelArgs(t *testing.T) {
 			args:    nil,
 			env:     map[string]string{"MSG": "It's me"},
 			// script: export MSG='It'\''s me'; exec '/app/run'
-			want: `console=ttyS0 reboot=k panic=1 pci=off init=/bin/sh -- -c "export MSG='It'\''s me'; exec '/app/run'"`,
+			want: `console=ttyS0 reboot=k panic=1 pci=off randomize_kstack_offset=on nosmt mitigations=auto audit=1 slub_debug=P page_poison=1 pti=on slab_nomerge init_on_alloc=1 init_on_free=1 mds=full,nosmt l1tf=full,force spec_store_bypass_disable=on tsx=off vsyscall=none debugfs=off oops=panic init=/bin/sh -- -c "export MSG='It'\''s me'; exec '/app/run'"`,
 		},
 		{
 			name:    "Env with double quotes",
@@ -82,7 +87,7 @@ func TestConstructKernelArgs(t *testing.T) {
 			env:     map[string]string{"JSON": `{"a":1}`},
 			// script: export JSON='{"a":1}'; exec '/app/run'
 			// escaped: export JSON='{\"a\":1}'; exec '/app/run'
-			want: `console=ttyS0 reboot=k panic=1 pci=off init=/bin/sh -- -c "export JSON='{\"a\":1}'; exec '/app/run'"`,
+			want: `console=ttyS0 reboot=k panic=1 pci=off randomize_kstack_offset=on nosmt mitigations=auto audit=1 slub_debug=P page_poison=1 pti=on slab_nomerge init_on_alloc=1 init_on_free=1 mds=full,nosmt l1tf=full,force spec_store_bypass_disable=on tsx=off vsyscall=none debugfs=off oops=panic init=/bin/sh -- -c "export JSON='{\"a\":1}'; exec '/app/run'"`,
 		},
 	}
 

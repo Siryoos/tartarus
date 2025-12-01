@@ -1,0 +1,79 @@
+# Vulnerability Scanning Policy
+
+# Severity thresholds for template scanning
+severity:
+  # Minimum severity to report
+  min_report: "LOW"
+  
+  # Severity levels that cause scan failure
+  fail_on:
+    - "CRITICAL"
+    - "HIGH"
+  
+  # Whether to fail builds on any vulnerability
+  strict_mode: false
+
+# Scan configuration
+scanner:
+  # Scanner to use: trivy, grype
+  type: "trivy"
+  
+  # Scaninterval for automated rescanning
+  schedule:
+    enabled: true
+    interval: "24h"  # Rescan templates every 24 hours
+  
+  # Timeout for individual scans
+  timeout: "5m"
+  
+  # Whether to use offline vulnerability database
+  offline_mode: false
+  
+  # Cache scan results to avoid rescanning unchanged images
+  cache:
+    enabled: true
+    ttl: "1h"
+
+# Exemptions and allowlists
+exemptions:
+  # CVE IDs to ignore (use sparingly and with justification)
+  cves: []
+    # - "CVE-2024-12345"  # Example: False positive in base image
+  
+  # Package names to exempt from scanning
+  packages: []
+    # - "example-package"  # Example: Known safe internal package
+
+# Integration settings
+integration:
+  # Fail template creation if scan fails
+  block_on_failure: true
+  
+  # Emit metrics for scan results
+  metrics:
+    enabled: true
+    prefix: "tartarus_vulnerability_scan"
+  
+  # Log scan results
+  logging:
+    enabled: true
+    level: "info"  # debug, info, warn, error
+    verbose: false
+  
+  # Store scan reports
+  reports:
+    enabled: true
+    path: "/var/lib/tartarus/scan-reports"
+    retention: "30d"
+
+# Advanced options
+advanced:
+  # Scan depth (filesystem layers to scan)
+  max_depth: 10
+  
+  # Parallel scan workers
+  workers: 4
+  
+  # Skip scanning for specific templates
+  skip_templates: []
+    # - "base-minimal-v1"  # Example: Pre-scanned certified template

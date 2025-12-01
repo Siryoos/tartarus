@@ -1,0 +1,64 @@
+# Kernel Hardening Configuration
+
+This document describes the comprehensive kernel security hardening parameters used in Tartarus guest VMs.
+
+## Parameter Categories
+
+### Memory Protection
+- **init_on_alloc=1**: Zeroes all memory pages on allocation to prevent information disclosure
+- **init_on_free=1**: Zeroes memory pages on free for defense in depth
+- **page_poison=1**: Poisons freed pages to detect use-after-free vulnerabilities
+- **slub_debug=P**: Enables SLUB memory allocator poisoning on free
+- **slab_nomerge**: Prevents SLAB cache merging to harden against heap exploitation
+
+### Speculative Execution Mitigations
+- **pti=on**: Page Table Isolation to mitigate ME ltdown (CVE-2017-5754)
+- **nosmt**: Disables Symmetric Multi-Threading (Hyper-Threading) to prevent Spectre/MDS attacks
+- **mitigations=auto**: Enables all available CPU vulnerability mitigations automatically
+- **mds=full,nosmt**: Full MDS (Microarchitectural Data Sampling) mitigation with SMT disabled
+- **l1tf=full,force**: Full L1TF (L1 Terminal Fault) mitigation
+- **spec_store_bypass_disable=on**: Mitigates Spectre Variant 4 (CVE-2018-3639)
+- **tsx=off**: Disables Intel TSX to mitigate TAA (TSX Asynchronous Abort)
+
+### Attack Surface Reduction
+- **pci=off**: Disables PCI bus enumeration (not needed in microVMs)
+- **vsyscall=none**: Disables legacy vsyscall interface (obsolete and insecure)
+- **debugfs=off**: Disables debugfs to prevent information disclosure
+
+### Kernel Hardening
+- **randomize_kstack_offset=on**: Randomizes kernel stack offset (enhances KASLR)
+- **audit=1**: Enables kernel auditing for security monitoring
+- **oops=panic**: Converts kernel oops to panic for fail-secure behavior
+
+### Boot & Recovery
+- **console=ttyS0**: Serial console for logging
+- **reboot=k**: Reboot via keyboard controller
+- **panic=1**: Auto-reboot 1 second after kernel panic
+
+## Security Impact
+
+### High Impact (Critical)
+- Speculative execution mitigations: Prevent Spectre, Meltdown, MDS, L1TF attacks
+- Memory sanitization: Prevent information disclosure and use-after-free
+
+### Medium Impact (Important)
+- Attack surface reduction: Minimize exposed kernel interfaces
+- KASLR enhancements: Make exploitation harder
+
+### Low Impact (Defense in Depth)
+- Fail-secure behaviors: Panic on oops
+- Audit enablement: Improve observability
+
+## Performance Considerations
+
+Some parameters have performance impact:
+- **nosmt**: Reduces CPU throughput by ~20-40% (security over performance)
+- **init_on_alloc/init_on_free**: ~5-10% memory allocation overhead
+- **pti=on**: ~5-10% syscall overhead (varies by workload)
+
+These trade-offs are acceptable for security-critical multi-tenant sandbox environments.
+
+##References
+- [Kernel Parameters Documentation](https://www.kernel.org/doc/html/latest/admin-guide/kernel-parameters.html)
+- [Spectre & Meltdown Mitigations](https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/index.html)
+- [SLUB Debugging](https://www.kernel.org/doc/html/latest/mm/slub.html)

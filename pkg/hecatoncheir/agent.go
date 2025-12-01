@@ -3,6 +3,7 @@ package hecatoncheir
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/shirou/gopsutil/v3/process"
+	"github.com/tartarus-sandbox/tartarus/pkg/cerberus"
 	"github.com/tartarus-sandbox/tartarus/pkg/hypnos"
 	"github.com/vishvananda/netlink"
 
@@ -45,6 +47,7 @@ type Agent struct {
 	Registry   hades.Registry
 	DeadLetter cocytus.Sink
 	Control    ControlListener
+	Secrets    cerberus.SecretProvider
 	Metrics    hermes.Metrics
 	Logger     hermes.Logger
 }
@@ -117,6 +120,26 @@ func (a *Agent) Run(ctx context.Context) error {
 				a.Queue.Nack(ctx, receipt, "failed to attach network")
 				a.Metrics.IncCounter("agent_jobs_failed_total", 1, hermes.Label{Key: "reason", Value: "network_attach_failed"})
 				continue
+			}
+
+			// 3.5 Resolve Secrets (Cerberus)
+			if len(req.Secrets) > 0 && a.Secrets != nil {
+				if req.Env == nil {
+					req.Env = make(map[string]string)
+				}
+				for key, ref := range req.Secrets {
+					val, err := a.Secrets.Resolve(ctx, ref)
+					if err != nil {
+						a.Logger.Error(ctx, "Failed to resolve secret", map[string]any{"key": key, "ref": ref, "error": err})
+						// Fail the job if secret resolution fails? Yes, security critical.
+						a.Lethe.Destroy(ctx, overlay)
+						a.Styx.Detach(ctx, req.ID)
+						a.Queue.Nack(ctx, receipt, fmt.Sprintf("failed to resolve secret %s", key))
+						a.Metrics.IncCounter("agent_jobs_failed_total", 1, hermes.Label{Key: "reason", Value: "secret_resolution_failed"})
+						continue
+					}
+					req.Env[key] = val
+				}
 			}
 
 			// 4. Launch (Runtime)

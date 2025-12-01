@@ -79,9 +79,13 @@ func (m *mockStyx) Detach(ctx context.Context, sandboxID domain.SandboxID) error
 
 type mockRuntime struct {
 	tartarus.SandboxRuntime
+	LaunchFunc func(ctx context.Context, req *domain.SandboxRequest, cfg tartarus.VMConfig) (*domain.SandboxRun, error)
 }
 
 func (m *mockRuntime) Launch(ctx context.Context, req *domain.SandboxRequest, cfg tartarus.VMConfig) (*domain.SandboxRun, error) {
+	if m.LaunchFunc != nil {
+		return m.LaunchFunc(ctx, req, cfg)
+	}
 	if req.ID == "req-fail" {
 		return nil, errors.New("launch failed")
 	}
@@ -246,4 +250,62 @@ func TestAgent_Run_Success_Cleanup(t *testing.T) {
 	// We can't easily verify cleanup because mocks don't track calls in this simple setup.
 	// But at least we verify it doesn't crash.
 	// To verify cleanup, we'd need spy mocks.
+}
+
+type mockSecretProvider struct {
+	secrets map[string]string
+}
+
+func (m *mockSecretProvider) Resolve(ctx context.Context, ref string) (string, error) {
+	if val, ok := m.secrets[ref]; ok {
+		return val, nil
+	}
+	return "", errors.New("secret not found")
+}
+
+func TestAgent_Run_WithSecrets(t *testing.T) {
+	req := &domain.SandboxRequest{
+		ID:       "req-secrets",
+		Template: "base",
+		Resources: domain.ResourceSpec{
+			CPU: 1,
+			Mem: 128,
+		},
+		NetworkRef: domain.NetworkPolicyRef{ID: "net-1"},
+		Secrets: map[string]string{
+			"API_KEY": "env:MY_API_KEY",
+		},
+	}
+
+	runtime := &mockRuntime{}
+	// Override Launch to verify env
+	runtime.LaunchFunc = func(ctx context.Context, r *domain.SandboxRequest, cfg tartarus.VMConfig) (*domain.SandboxRun, error) {
+		if r.Env["API_KEY"] != "secret-value" {
+			return nil, errors.New("secret not injected")
+		}
+		return &domain.SandboxRun{ID: r.ID, Status: domain.RunStatusRunning}, nil
+	}
+
+	agent := &Agent{
+		Queue:      &mockQueue{req: req},
+		Nyx:        &mockNyx{},
+		Lethe:      &mockLethe{},
+		Styx:       &mockStyx{},
+		Runtime:    runtime,
+		Registry:   &mockRegistry{},
+		Furies:     &mockFury{},
+		DeadLetter: &mockSink{},
+		Logger:     &mockLogger{},
+		Metrics:    &mockMetrics{},
+		Secrets: &mockSecretProvider{
+			secrets: map[string]string{
+				"env:MY_API_KEY": "secret-value",
+			},
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	agent.Run(ctx)
 }

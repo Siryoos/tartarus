@@ -120,3 +120,27 @@ func TestSeccompProfileGradation(t *testing.T) {
 	assert.Less(t, len(quarantineProfile.Syscalls), len(strictProfile.Syscalls),
 		"Strict should have more restrictions than quarantine")
 }
+
+func TestGetProfileForClass(t *testing.T) {
+	tests := []struct {
+		class           string
+		expectedProfile *SeccompProfile
+		desc            string
+	}{
+		{"ember", GetQuarantineStrictProfile(), "Ember should get quarantine-strict profile"},
+		{"flame", GetQuarantineProfile(), "Flame should get quarantine profile"},
+		{"blaze", GetDefaultProfile(), "Blaze should get default profile"},
+		{"inferno", GetDefaultProfile(), "Inferno should get default profile"},
+		{"unknown", GetQuarantineProfile(), "Unknown class should default to quarantine for safety"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.class, func(t *testing.T) {
+			profile := GetProfileForClass(tt.class)
+			// We can't compare pointers directly as they are new structs
+			// Compare content by JSON or key fields
+			assert.Equal(t, len(tt.expectedProfile.Syscalls), len(profile.Syscalls), tt.desc)
+			assert.Equal(t, tt.expectedProfile.DefaultAction, profile.DefaultAction, tt.desc)
+		})
+	}
+}

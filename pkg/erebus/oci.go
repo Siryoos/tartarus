@@ -24,13 +24,15 @@ type OCIBuilder struct {
 	Store   Store
 	Logger  hermes.Logger
 	Fetcher ImageFetcher
+	Scanner Scanner
 }
 
 // NewOCIBuilder creates a new OCIBuilder.
 func NewOCIBuilder(store Store, logger hermes.Logger) *OCIBuilder {
 	return &OCIBuilder{
-		Store:  store,
-		Logger: logger,
+		Store:   store,
+		Logger:  logger,
+		Scanner: NewTrivyScanner(),
 		Fetcher: func(ctx context.Context, ref string) (v1.Image, error) {
 			nameRef, err := name.ParseReference(ref)
 			if err != nil {
