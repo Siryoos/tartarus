@@ -176,7 +176,7 @@ func main() {
 		Name:        "Hello World",
 		Description: "A simple hello world template",
 		BaseImage:   "/var/lib/tartarus/images/hello-world.ext4",
-		KernelImage: "/var/lib/tartarus/kernels/vmlinux",
+		KernelImage: "/var/lib/firecracker/vmlinux",
 		Resources: domain.ResourceSpec{
 			CPU: 1000,
 			Mem: 128,
@@ -191,7 +191,7 @@ func main() {
 			Name:        "Python Data Science",
 			Description: "Python environment with NumPy, Pandas, Scikit-learn preloaded",
 			BaseImage:   "/var/lib/tartarus/images/python-ds.ext4",
-			KernelImage: "/var/lib/tartarus/kernels/vmlinux",
+			KernelImage: "/var/lib/firecracker/vmlinux",
 			Resources: domain.ResourceSpec{
 				CPU: 2000,
 				Mem: 2048,
@@ -203,7 +203,7 @@ func main() {
 			Name:        "PyTorch ML",
 			Description: "PyTorch environment preloaded",
 			BaseImage:   "/var/lib/tartarus/images/pytorch-ml.ext4",
-			KernelImage: "/var/lib/tartarus/kernels/vmlinux",
+			KernelImage: "/var/lib/firecracker/vmlinux",
 			Resources: domain.ResourceSpec{
 				CPU: 4000,
 				Mem: 8192,
@@ -216,7 +216,7 @@ func main() {
 			Name:        "R Analytics",
 			Description: "R environment with Tidyverse preloaded",
 			BaseImage:   "/var/lib/tartarus/images/r-analytics.ext4",
-			KernelImage: "/var/lib/tartarus/kernels/vmlinux",
+			KernelImage: "/var/lib/firecracker/vmlinux",
 			Resources: domain.ResourceSpec{
 				CPU: 2000,
 				Mem: 4096,
@@ -228,7 +228,7 @@ func main() {
 			Name:        "Julia Science",
 			Description: "Julia environment preloaded",
 			BaseImage:   "/var/lib/tartarus/images/julia-sci.ext4",
-			KernelImage: "/var/lib/tartarus/kernels/vmlinux",
+			KernelImage: "/var/lib/firecracker/vmlinux",
 			Resources: domain.ResourceSpec{
 				CPU: 2000,
 				Mem: 4096,

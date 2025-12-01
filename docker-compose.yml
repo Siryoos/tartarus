@@ -39,6 +39,9 @@ services:
       context: .
       dockerfile: build/Dockerfile.agent
     privileged: true
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
     devices:
       - /dev/kvm:/dev/kvm
     environment:
@@ -49,9 +52,9 @@ services:
       S3_BUCKET: "tartarus-snapshots"
       S3_ACCESS_KEY: "minioadmin"
       S3_SECRET_KEY: "minioadmin"
-      FC_KERNEL_IMAGE: "/var/lib/firecracker/vmlinux" # Downloaded by dev-setup.sh
+      FC_KERNEL_IMAGE: "/var/lib/firecracker/vmlinux" # Downloaded by Dockerfile
       FC_ROOTFS_BASE: "/var/lib/firecracker/rootfs.img" # Downloaded by dev-setup.sh
     volumes:
-      - ./data/firecracker:/var/lib/firecracker # Mount local data for kernel/rootfs
+      - ./data/firecracker/rootfs.img:/var/lib/firecracker/rootfs.img # Mount only rootfs, kernel is in image
     depends_on:
       - olympus

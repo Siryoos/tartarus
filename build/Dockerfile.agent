@@ -18,6 +18,9 @@ RUN apk add --no-cache \
     ca-certificates \
     genext2fs
 
+# Download Kernel
+RUN curl -L -o /var/lib/firecracker/vmlinux https://s3.amazonaws.com/spec.ccfc.min/img/quickstart_guide/x86_64/kernels/vmlinux.bin
+
 # Install Firecracker
 ARG FC_VERSION=v1.7.0
 ARG ARCH=x86_64
