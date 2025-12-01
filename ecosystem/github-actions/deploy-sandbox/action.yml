@@ -1,0 +1,15 @@
+name: 'Deploy Sandbox'
+description: 'Deploy a sandbox to Tartarus'
+inputs:
+  name:
+    description: 'Sandbox name'
+    required: true
+  image:
+    description: 'Sandbox image'
+    required: true
+runs:
+  using: 'composite'
+  steps:
+    - run: |
+        tartarus run --name ${{ inputs.name }} --image ${{ inputs.image }}
+      shell: bash

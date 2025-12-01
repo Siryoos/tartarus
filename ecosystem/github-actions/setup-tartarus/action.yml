@@ -1,0 +1,14 @@
+name: 'Setup Tartarus'
+description: 'Install the Tartarus CLI'
+inputs:
+  version:
+    description: 'Tartarus version'
+    required: false
+    default: 'latest'
+runs:
+  using: 'composite'
+  steps:
+    - run: |
+        curl -sL https://get.tartarus.io/install.sh | bash -s -- ${{ inputs.version }}
+        echo "/usr/local/bin" >> $GITHUB_PATH
+      shell: bash

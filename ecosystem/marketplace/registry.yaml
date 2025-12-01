@@ -1,0 +1,11 @@
+templates:
+  - name: python-ds
+    description: "Python Data Science environment with NumPy, Pandas, and Scikit-learn"
+    version: "1.0.0"
+    author: "Tartarus Team"
+    url: "https://github.com/tartarus/templates/python-ds"
+  - name: node-api
+    description: "Node.js API server with Express"
+    version: "1.2.0"
+    author: "Community"
+    url: "https://github.com/tartarus/templates/node-api"
