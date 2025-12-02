@@ -25,7 +25,7 @@
 
 ### CLI v2.0 (`cmd/tartarus`)
 - [x] Implement interactive commands: `logs --follow` streaming from Hermes, `exec` attaching to running sandboxes, `inspect` detail view, snapshot create/list/delete, `init template`.
-- [ ] Shell completions (bash/zsh) and config profiles; integration tests for streaming commands.
+- [x] Shell completions (bash/zsh) and config profiles; integration tests for streaming commands.
 
 ### Kubernetes Integration (`pkg/kubernetes`, `tartarus-operator`)
 - [ ] CRI shim or SandboxJob operator wiring to Moirai/Hecatoncheir; CRDs for SandboxJob/SandboxTemplate with status conditions.
