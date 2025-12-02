@@ -79,7 +79,10 @@ func (m *ReconcileMockControlPlane) Wake(ctx context.Context, nodeID domain.Node
 func (m *ReconcileMockControlPlane) Snapshot(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID) error {
 	return nil
 }
-func (m *ReconcileMockControlPlane) Exec(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID, cmd []string) error {
+func (m *ReconcileMockControlPlane) Exec(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID, cmd []string, stdout, stderr io.Writer) error {
+	return nil
+}
+func (m *ReconcileMockControlPlane) ExecInteractive(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID, cmd []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	return nil
 }
 

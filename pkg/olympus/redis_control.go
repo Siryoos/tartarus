@@ -94,37 +94,109 @@ func (r *RedisControlPlane) Snapshot(ctx context.Context, nodeID domain.NodeID, 
 	return r.client.Publish(ctx, topic, msg).Err()
 }
 
-func (r *RedisControlPlane) Exec(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID, cmd []string) error {
-	topic := fmt.Sprintf("tartarus:control:%s", nodeID)
-	// Format: EXEC sandboxID cmd...
-	// We need to join cmd args carefully or use JSON?
-	// The agent parses space-separated args.
-	// "TYPE SANDBOX_ID [ARGS...]"
-	// If cmd contains spaces, simple split will break.
-	// But for now, let's assume simple args or we need to change agent parsing.
-	// Agent uses strings.Split(msg.Payload, " ").
-	// This is fragile for Exec.
-	// But to keep it simple and consistent with existing protocol:
-	// We can join with spaces.
-	// If we want robust exec, we should use JSON payload for control messages.
-	// But that requires changing all messages.
-	// For this task, let's just join with spaces and note the limitation.
-	// Or we can encode the cmd args as a single JSON string argument?
-	// Agent: args = parts[2:] -> this takes all remaining parts.
-	// So if we send "EXEC id arg1 arg2", agent gets ["arg1", "arg2"].
-	// This works for simple commands.
-	// If arg has spaces "arg with space", agent gets ["arg", "with", "space"].
-	// This breaks arguments with spaces.
-	// However, changing the protocol is out of scope for "CLI v2.0" unless necessary.
-	// Let's stick to simple args for now as per "CLI v2.0" usually implies basic functionality first.
-	// Or better: use a separator that is unlikely? No.
-	// Let's just join with spaces.
+func (r *RedisControlPlane) Exec(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID, cmd []string, stdout, stderr io.Writer) error {
+	requestID := uuid.New().String()
+	responseTopic := fmt.Sprintf("tartarus:exec:%s:%s", sandboxID, requestID)
 
-	msg := fmt.Sprintf("EXEC %s", sandboxID)
+	// 1. Subscribe to response topic
+	pubsub := r.client.Subscribe(ctx, responseTopic)
+	defer pubsub.Close()
+
+	// Verify subscription
+	if _, err := pubsub.Receive(ctx); err != nil {
+		return fmt.Errorf("failed to subscribe to exec output: %w", err)
+	}
+
+	// 2. Send request
+	topic := fmt.Sprintf("tartarus:control:%s", nodeID)
+	// Format: EXEC sandboxID requestID args...
+	msg := fmt.Sprintf("EXEC %s %s", sandboxID, requestID)
 	for _, arg := range cmd {
 		msg += " " + arg
 	}
-	return r.client.Publish(ctx, topic, msg).Err()
+	if err := r.client.Publish(ctx, topic, msg).Err(); err != nil {
+		return fmt.Errorf("failed to send exec command: %w", err)
+	}
+
+	// 3. Stream output
+	ch := pubsub.Channel()
+	// Use a timeout for inactivity? Or just context?
+	// If the command hangs, the user can cancel the context.
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case msg, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			// Write to stdout (we don't distinguish stdout/stderr in this simple protocol yet)
+			if _, err := stdout.Write([]byte(msg.Payload)); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func (r *RedisControlPlane) ExecInteractive(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID, cmd []string, stdin io.Reader, stdout, stderr io.Writer) error {
+	requestID := uuid.New().String()
+	responseTopic := fmt.Sprintf("tartarus:exec:%s:%s", sandboxID, requestID)
+	stdinTopic := fmt.Sprintf("tartarus:exec:stdin:%s", requestID)
+
+	// 1. Subscribe to response topic (stdout/stderr)
+	pubsub := r.client.Subscribe(ctx, responseTopic)
+	defer pubsub.Close()
+
+	// Verify subscription
+	if _, err := pubsub.Receive(ctx); err != nil {
+		return fmt.Errorf("failed to subscribe to exec output: %w", err)
+	}
+
+	// 2. Send request
+	topic := fmt.Sprintf("tartarus:control:%s", nodeID)
+	// Format: EXEC_INTERACTIVE sandboxID requestID args...
+	msg := fmt.Sprintf("EXEC_INTERACTIVE %s %s", sandboxID, requestID)
+	for _, arg := range cmd {
+		msg += " " + arg
+	}
+	if err := r.client.Publish(ctx, topic, msg).Err(); err != nil {
+		return fmt.Errorf("failed to send exec command: %w", err)
+	}
+
+	// 3. Stream stdin in background
+	go func() {
+		buf := make([]byte, 1024)
+		for {
+			n, err := stdin.Read(buf)
+			if n > 0 {
+				if err := r.client.Publish(ctx, stdinTopic, buf[:n]).Err(); err != nil {
+					// Failed to publish stdin, maybe context canceled
+					return
+				}
+			}
+			if err != nil {
+				// EOF or error
+				return
+			}
+		}
+	}()
+
+	// 4. Stream output
+	ch := pubsub.Channel()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case msg, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			// Write to stdout (we don't distinguish stdout/stderr in this simple protocol yet)
+			if _, err := stdout.Write([]byte(msg.Payload)); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 func (r *RedisControlPlane) ListSandboxes(ctx context.Context, nodeID domain.NodeID) ([]domain.SandboxRun, error) {

@@ -403,7 +403,7 @@ func (m *Manager) Exec(ctx context.Context, id domain.SandboxID, cmd []string) e
 		return ErrSandboxNotFound
 	}
 
-	if err := m.Control.Exec(ctx, run.NodeID, id, cmd); err != nil {
+	if err := m.Control.Exec(ctx, run.NodeID, id, cmd, io.Discard, io.Discard); err != nil {
 		m.Logger.Error(ctx, "Failed to send exec command", map[string]any{
 			"sandbox_id": id,
 			"node_id":    run.NodeID,
@@ -413,6 +413,31 @@ func (m *Manager) Exec(ctx context.Context, id domain.SandboxID, cmd []string) e
 	}
 
 	m.Logger.Info(ctx, "Exec command sent", map[string]any{
+		"sandbox_id": id,
+		"node_id":    run.NodeID,
+		"command":    cmd,
+	})
+	return nil
+}
+
+// ExecInteractive executes a command in the sandbox with interactive streams.
+func (m *Manager) ExecInteractive(ctx context.Context, id domain.SandboxID, cmd []string, stdin io.Reader, stdout, stderr io.Writer) error {
+	// Find which node is running this sandbox
+	run, err := m.Hades.GetRun(ctx, id)
+	if err != nil {
+		return ErrSandboxNotFound
+	}
+
+	if err := m.Control.ExecInteractive(ctx, run.NodeID, id, cmd, stdin, stdout, stderr); err != nil {
+		m.Logger.Error(ctx, "Failed to send exec interactive command", map[string]any{
+			"sandbox_id": id,
+			"node_id":    run.NodeID,
+			"error":      err,
+		})
+		return err
+	}
+
+	m.Logger.Info(ctx, "Exec interactive command sent", map[string]any{
 		"sandbox_id": id,
 		"node_id":    run.NodeID,
 		"command":    cmd,

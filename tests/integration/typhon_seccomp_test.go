@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"net/netip"
 	"os"
@@ -77,6 +78,10 @@ func (m *LatencyInjectingRuntime) Launch(ctx context.Context, req *domain.Sandbo
 	}
 
 	return m.MockRuntime.Launch(ctx, req, cfg)
+}
+
+func (m *LatencyInjectingRuntime) ExecInteractive(ctx context.Context, id domain.SandboxID, cmd []string, stdin io.Reader, stdout, stderr io.Writer) error {
+	return m.MockRuntime.ExecInteractive(ctx, id, cmd, stdin, stdout, stderr)
 }
 
 func TestSeccompIsolationLatencyReporting(t *testing.T) {

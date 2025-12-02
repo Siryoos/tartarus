@@ -347,12 +347,21 @@ func (u *UnifiedRuntime) Wait(ctx context.Context, id domain.SandboxID) error {
 }
 
 // Exec implements SandboxRuntime interface.
-func (u *UnifiedRuntime) Exec(ctx context.Context, id domain.SandboxID, cmd []string) error {
+func (u *UnifiedRuntime) Exec(ctx context.Context, id domain.SandboxID, cmd []string, stdout, stderr io.Writer) error {
 	runtime, err := u.delegateToRuntime(ctx, id, "exec")
 	if err != nil {
 		return err
 	}
-	return runtime.Exec(ctx, id, cmd)
+	return runtime.Exec(ctx, id, cmd, stdout, stderr)
+}
+
+// ExecInteractive implements SandboxRuntime interface.
+func (u *UnifiedRuntime) ExecInteractive(ctx context.Context, id domain.SandboxID, cmd []string, stdin io.Reader, stdout, stderr io.Writer) error {
+	runtime, err := u.delegateToRuntime(ctx, id, "exec_interactive")
+	if err != nil {
+		return err
+	}
+	return runtime.ExecInteractive(ctx, id, cmd, stdin, stdout, stderr)
 }
 
 // RuntimeSelector implements automatic runtime selection logic.

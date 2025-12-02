@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
@@ -24,6 +25,21 @@ func (m *MockControlListener) Listen(ctx context.Context) (<-chan ControlMessage
 func (m *MockControlListener) PublishLogs(ctx context.Context, sandboxID domain.SandboxID, logs []byte) error {
 	args := m.Called(ctx, sandboxID, logs)
 	return args.Error(0)
+}
+
+func (m *MockControlListener) PublishSandboxes(ctx context.Context, requestID string, sandboxes []domain.SandboxRun) error {
+	args := m.Called(ctx, requestID, sandboxes)
+	return args.Error(0)
+}
+
+func (m *MockControlListener) PublishExecOutput(ctx context.Context, sandboxID domain.SandboxID, requestID string, output []byte) error {
+	args := m.Called(ctx, sandboxID, requestID, output)
+	return args.Error(0)
+}
+
+func (m *MockControlListener) SubscribeStdin(ctx context.Context, requestID string) (<-chan []byte, error) {
+	args := m.Called(ctx, requestID)
+	return args.Get(0).(<-chan []byte), args.Error(1)
 }
 
 // MockRuntime
@@ -55,8 +71,12 @@ func (m *MockRuntime) Allocation(ctx context.Context) (domain.ResourceCapacity, 
 	return domain.ResourceCapacity{}, nil
 }
 func (m *MockRuntime) Wait(ctx context.Context, id domain.SandboxID) error { return nil }
-func (m *MockRuntime) Exec(ctx context.Context, id domain.SandboxID, cmd []string) error {
-	args := m.Called(ctx, id, cmd)
+func (m *MockRuntime) Exec(ctx context.Context, id domain.SandboxID, cmd []string, stdout, stderr io.Writer) error {
+	args := m.Called(ctx, id, cmd, stdout, stderr)
+	return args.Error(0)
+}
+func (m *MockRuntime) ExecInteractive(ctx context.Context, id domain.SandboxID, cmd []string, stdin io.Reader, stdout, stderr io.Writer) error {
+	args := m.Called(ctx, id, cmd, stdin, stdout, stderr)
 	return args.Error(0)
 }
 
@@ -75,7 +95,7 @@ func TestAgent_ControlLoop_Exec(t *testing.T) {
 	sandboxID := domain.SandboxID("test-sandbox")
 	cmd := []string{"ls", "-la"}
 
-	mockRuntime.On("Exec", mock.Anything, sandboxID, cmd).Return(nil)
+	mockRuntime.On("Exec", mock.Anything, sandboxID, cmd, mock.Anything, mock.Anything).Return(nil)
 
 	// Create channel and send message
 	ch := make(chan ControlMessage)
@@ -83,13 +103,16 @@ func TestAgent_ControlLoop_Exec(t *testing.T) {
 		ch <- ControlMessage{
 			Type:      ControlMessageExec,
 			SandboxID: sandboxID,
-			Args:      cmd,
+			Args:      append([]string{"req-1"}, cmd...),
 		}
 		close(ch)
 	}()
 
 	// Run control loop
 	agent.controlLoop(ctx, ch)
+
+	// Wait for goroutines to finish
+	time.Sleep(100 * time.Millisecond)
 
 	// Verify
 	mockRuntime.AssertExpectations(t)

@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/netip"
@@ -16,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"github.com/tartarus-sandbox/tartarus/pkg/acheron"
@@ -593,6 +595,87 @@ func main() {
 
 		w.WriteHeader(http.StatusAccepted)
 		json.NewEncoder(w).Encode(map[string]string{"status": "waking", "id": string(id)})
+	})
+
+	var upgrader = websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
+
+	mux.HandleFunc("/sandboxes/exec/sock/", func(w http.ResponseWriter, r *http.Request) {
+		// /sandboxes/exec/sock/{id}
+		id := domain.SandboxID(r.URL.Path[len("/sandboxes/exec/sock/"):])
+		if id == "" {
+			http.Error(w, "Missing sandbox ID", http.StatusBadRequest)
+			return
+		}
+
+		// Upgrade to WebSocket
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			logger.Error("Failed to upgrade to websocket", "error", err)
+			return
+		}
+		defer conn.Close()
+
+		// Create pipes for stdin/stdout/stderr
+		stdinReader, stdinWriter := io.Pipe()
+		stdoutReader, stdoutWriter := io.Pipe()
+
+		// Start ExecInteractive in a goroutine
+		cmdStr := r.URL.Query().Get("cmd")
+		if cmdStr == "" {
+			cmdStr = "sh" // Default
+		}
+		cmd := strings.Fields(cmdStr)
+
+		// Use a context that is canceled when the connection closes
+		// But r.Context() might be sufficient?
+		// Let's rely on r.Context() for now.
+		ctx := r.Context()
+
+		errCh := make(chan error, 1)
+		go func() {
+			// Merge stdout and stderr for now
+			err := manager.ExecInteractive(ctx, id, cmd, stdinReader, stdoutWriter, stdoutWriter)
+			stdoutWriter.Close() // Close writer to signal EOF to reader
+			errCh <- err
+		}()
+
+		// Pump WS -> stdin
+		go func() {
+			defer stdinWriter.Close()
+			for {
+				_, message, err := conn.ReadMessage()
+				if err != nil {
+					return
+				}
+				if _, err := stdinWriter.Write(message); err != nil {
+					return
+				}
+			}
+		}()
+
+		// Pump stdout -> WS
+		buf := make([]byte, 1024)
+		for {
+			n, err := stdoutReader.Read(buf)
+			if n > 0 {
+				if err := conn.WriteMessage(websocket.BinaryMessage, buf[:n]); err != nil {
+					break
+				}
+			}
+			if err != nil {
+				break
+			}
+		}
+
+		// Check error from Exec
+		if err := <-errCh; err != nil {
+			logger.Error("Exec interactive failed", "id", id, "error", err)
+			conn.WriteMessage(websocket.TextMessage, []byte("Error: "+err.Error()))
+		}
 	})
 
 	mux.HandleFunc("/templates", func(w http.ResponseWriter, r *http.Request) {

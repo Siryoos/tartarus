@@ -14,14 +14,15 @@ import (
 type ControlMessageType string
 
 const (
-	ControlMessageKill          ControlMessageType = "KILL"
-	ControlMessageLogs          ControlMessageType = "LOGS"
-	ControlMessageHibernate     ControlMessageType = "HIBERNATE"
-	ControlMessageWake          ControlMessageType = "WAKE"
-	ControlMessageTerminate     ControlMessageType = "TERMINATE"
-	ControlMessageSnapshot      ControlMessageType = "SNAPSHOT"
-	ControlMessageExec          ControlMessageType = "EXEC"
-	ControlMessageListSandboxes ControlMessageType = "LIST_SANDBOXES"
+	ControlMessageKill            ControlMessageType = "KILL"
+	ControlMessageLogs            ControlMessageType = "LOGS"
+	ControlMessageHibernate       ControlMessageType = "HIBERNATE"
+	ControlMessageWake            ControlMessageType = "WAKE"
+	ControlMessageTerminate       ControlMessageType = "TERMINATE"
+	ControlMessageSnapshot        ControlMessageType = "SNAPSHOT"
+	ControlMessageExec            ControlMessageType = "EXEC"
+	ControlMessageExecInteractive ControlMessageType = "EXEC_INTERACTIVE"
+	ControlMessageListSandboxes   ControlMessageType = "LIST_SANDBOXES"
 )
 
 // ControlMessage is a command sent to the agent.
@@ -39,6 +40,10 @@ type ControlListener interface {
 	PublishLogs(ctx context.Context, sandboxID domain.SandboxID, logs []byte) error
 	// PublishSandboxes publishes the list of sandboxes to a response topic.
 	PublishSandboxes(ctx context.Context, requestID string, sandboxes []domain.SandboxRun) error
+	// PublishExecOutput publishes exec output to a topic.
+	PublishExecOutput(ctx context.Context, sandboxID domain.SandboxID, requestID string, output []byte) error
+	// SubscribeStdin subscribes to the stdin topic for a request.
+	SubscribeStdin(ctx context.Context, requestID string) (<-chan []byte, error)
 }
 
 // RedisControlListener implements ControlListener using Redis Pub/Sub.
@@ -119,4 +124,37 @@ func (r *RedisControlListener) PublishSandboxes(ctx context.Context, requestID s
 		return err
 	}
 	return r.client.Publish(ctx, topic, payload).Err()
+}
+
+// SubscribeStdin subscribes to the stdin topic for a request.
+func (r *RedisControlListener) SubscribeStdin(ctx context.Context, requestID string) (<-chan []byte, error) {
+	topic := fmt.Sprintf("tartarus:exec:stdin:%s", requestID)
+	pubsub := r.client.Subscribe(ctx, topic)
+
+	// Verify connection
+	if _, err := pubsub.Receive(ctx); err != nil {
+		return nil, err
+	}
+
+	ch := make(chan []byte)
+
+	go func() {
+		defer close(ch)
+		defer pubsub.Close()
+
+		redisCh := pubsub.Channel()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case msg, ok := <-redisCh:
+				if !ok {
+					return
+				}
+				ch <- []byte(msg.Payload)
+			}
+		}
+	}()
+
+	return ch, nil
 }

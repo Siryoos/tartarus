@@ -270,8 +270,14 @@ func (g *GVisorRuntime) Wait(ctx context.Context, id domain.SandboxID) error {
 }
 
 // Exec implements SandboxRuntime interface.
-func (g *GVisorRuntime) Exec(ctx context.Context, id domain.SandboxID, cmd []string) error {
+func (g *GVisorRuntime) Exec(ctx context.Context, id domain.SandboxID, cmd []string, stdout, stderr io.Writer) error {
 	// TODO: Call runsc exec
 	g.Logger.Info("gVisor exec (stub)", "id", id, "cmd", cmd)
+	g.Logger.Info("gVisor exec (stub)", "id", id, "cmd", cmd)
+	return nil
+}
+
+func (g *GVisorRuntime) ExecInteractive(ctx context.Context, id domain.SandboxID, cmd []string, stdin io.Reader, stdout, stderr io.Writer) error {
+	g.Logger.Info("gVisor exec interactive (stub)", "id", id, "cmd", cmd)
 	return nil
 }

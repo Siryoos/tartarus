@@ -275,6 +275,11 @@ func (w *WasmRuntime) Kill(ctx context.Context, id domain.SandboxID) error {
 	return nil
 }
 
+func (w *WasmRuntime) ExecInteractive(ctx context.Context, id domain.SandboxID, cmd []string, stdin io.Reader, stdout, stderr io.Writer) error {
+	w.Logger.Info("Wasm exec interactive (stub)", "id", id, "cmd", cmd)
+	return nil
+}
+
 // Pause is not supported for WASM runtime.
 func (w *WasmRuntime) Pause(ctx context.Context, id domain.SandboxID) error {
 	return fmt.Errorf("pause not supported for WASM runtime")
@@ -409,6 +414,6 @@ func (w *WasmRuntime) Wait(ctx context.Context, id domain.SandboxID) error {
 }
 
 // Exec is not supported for WASM runtime.
-func (w *WasmRuntime) Exec(ctx context.Context, id domain.SandboxID, cmd []string) error {
+func (w *WasmRuntime) Exec(ctx context.Context, id domain.SandboxID, cmd []string, stdout, stderr io.Writer) error {
 	return fmt.Errorf("exec not supported for WASM runtime")
 }

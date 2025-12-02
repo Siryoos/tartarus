@@ -24,7 +24,7 @@
 - [x] Security hardening: hardened guest kernel option, seccomp profile generator with per-template defaults, automated template vulnerability scanning, and Vault/KMS-backed secret injection flow.
 
 ### CLI v2.0 (`cmd/tartarus`)
-- [ ] Implement interactive commands: `logs --follow` streaming from Hermes, `exec` attaching to running sandboxes, `inspect` detail view, snapshot create/list/delete, `init template`.
+- [x] Implement interactive commands: `logs --follow` streaming from Hermes, `exec` attaching to running sandboxes, `inspect` detail view, snapshot create/list/delete, `init template`.
 - [ ] Shell completions (bash/zsh) and config profiles; integration tests for streaming commands.
 
 ### Kubernetes Integration (`pkg/kubernetes`, `tartarus-operator`)

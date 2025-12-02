@@ -14,7 +14,8 @@ type ControlPlane interface {
 	Hibernate(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID) error
 	Wake(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID) error
 	Snapshot(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID) error
-	Exec(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID, cmd []string) error
+	Exec(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID, cmd []string, stdout, stderr io.Writer) error
+	ExecInteractive(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID, cmd []string, stdin io.Reader, stdout, stderr io.Writer) error
 	ListSandboxes(ctx context.Context, nodeID domain.NodeID) ([]domain.SandboxRun, error)
 }
 
@@ -41,7 +42,11 @@ func (n *NoopControlPlane) Snapshot(ctx context.Context, nodeID domain.NodeID, s
 	return nil
 }
 
-func (n *NoopControlPlane) Exec(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID, cmd []string) error {
+func (n *NoopControlPlane) Exec(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID, cmd []string, stdout, stderr io.Writer) error {
+	return nil
+}
+
+func (n *NoopControlPlane) ExecInteractive(ctx context.Context, nodeID domain.NodeID, sandboxID domain.SandboxID, cmd []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	return nil
 }
 

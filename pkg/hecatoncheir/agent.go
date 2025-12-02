@@ -384,29 +384,118 @@ func (a *Agent) controlLoop(ctx context.Context, ch <-chan ControlMessage) {
 			a.Logger.Info(ctx, "Snapshot requested", map[string]any{"sandbox_id": msg.SandboxID})
 			go a.handleSnapshot(ctx, msg.SandboxID)
 		case ControlMessageExec:
-			a.Logger.Info(ctx, "Exec requested", map[string]any{"sandbox_id": msg.SandboxID, "cmd": msg.Args})
-			if err := a.Runtime.Exec(ctx, msg.SandboxID, msg.Args); err != nil {
-				a.Logger.Error(ctx, "Failed to exec command", map[string]any{"sandbox_id": msg.SandboxID, "error": err})
-			}
+			go a.handleExec(ctx, msg)
+		case ControlMessageExecInteractive:
+			go a.handleExecInteractive(ctx, msg)
 		case ControlMessageListSandboxes:
-			// Args[0] is requestID
-			if len(msg.Args) < 1 {
-				a.Logger.Error(ctx, "ListSandboxes requested without requestID", nil)
-				continue
-			}
-			requestID := msg.Args[0]
-			a.Logger.Info(ctx, "ListSandboxes requested", map[string]any{"request_id": requestID})
+			go a.handleListSandboxes(ctx, msg)
+		}
+	}
+}
 
-			sandboxes, err := a.Runtime.List(ctx)
+func (a *Agent) handleExec(ctx context.Context, msg ControlMessage) {
+	if len(msg.Args) < 2 {
+		a.Logger.Error(ctx, "Exec requested without requestID or command", nil)
+		return
+	}
+	requestID := msg.Args[0]
+	cmd := msg.Args[1:]
+
+	a.Logger.Info(ctx, "Exec requested", map[string]any{"sandbox_id": msg.SandboxID, "request_id": requestID, "cmd": cmd})
+
+	r, w := io.Pipe()
+	go func() {
+		defer r.Close()
+		buf := make([]byte, 4096)
+		for {
+			n, err := r.Read(buf)
+			if n > 0 {
+				if pErr := a.Control.PublishExecOutput(ctx, msg.SandboxID, requestID, buf[:n]); pErr != nil {
+					a.Logger.Error(ctx, "Failed to publish exec output", map[string]any{"sandbox_id": msg.SandboxID, "error": pErr})
+				}
+			}
 			if err != nil {
-				a.Logger.Error(ctx, "Failed to list sandboxes from runtime", map[string]any{"error": err})
-				continue
-			}
-
-			if err := a.Control.PublishSandboxes(ctx, requestID, sandboxes); err != nil {
-				a.Logger.Error(ctx, "Failed to publish sandboxes", map[string]any{"request_id": requestID, "error": err})
+				return
 			}
 		}
+	}()
+
+	defer w.Close()
+	if err := a.Runtime.Exec(ctx, msg.SandboxID, cmd, w, w); err != nil {
+		a.Logger.Error(ctx, "Failed to exec command", map[string]any{"sandbox_id": msg.SandboxID, "error": err})
+		fmt.Fprintf(w, "Error executing command: %v\n", err)
+	}
+}
+
+func (a *Agent) handleExecInteractive(ctx context.Context, msg ControlMessage) {
+	if len(msg.Args) < 2 {
+		a.Logger.Error(ctx, "Exec interactive requested without requestID or command", nil)
+		return
+	}
+	requestID := msg.Args[0]
+	cmd := msg.Args[1:]
+
+	a.Logger.Info(ctx, "Exec interactive requested", map[string]any{"sandbox_id": msg.SandboxID, "request_id": requestID, "cmd": cmd})
+
+	// Subscribe to stdin
+	stdinCh, err := a.Control.SubscribeStdin(ctx, requestID)
+	if err != nil {
+		a.Logger.Error(ctx, "Failed to subscribe to stdin", map[string]any{"error": err})
+		return
+	}
+
+	// Create stdin pipe
+	stdinR, stdinW := io.Pipe()
+	go func() {
+		defer stdinW.Close()
+		for chunk := range stdinCh {
+			if _, err := stdinW.Write(chunk); err != nil {
+				return
+			}
+		}
+	}()
+
+	// Create stdout/stderr pipe
+	r, w := io.Pipe()
+	go func() {
+		defer r.Close()
+		buf := make([]byte, 4096)
+		for {
+			n, err := r.Read(buf)
+			if n > 0 {
+				if pErr := a.Control.PublishExecOutput(ctx, msg.SandboxID, requestID, buf[:n]); pErr != nil {
+					a.Logger.Error(ctx, "Failed to publish exec output", map[string]any{"sandbox_id": msg.SandboxID, "error": pErr})
+				}
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+
+	defer w.Close()
+	if err := a.Runtime.ExecInteractive(ctx, msg.SandboxID, cmd, stdinR, w, w); err != nil {
+		a.Logger.Error(ctx, "Failed to exec interactive command", map[string]any{"sandbox_id": msg.SandboxID, "error": err})
+		fmt.Fprintf(w, "Error executing command: %v\n", err)
+	}
+}
+
+func (a *Agent) handleListSandboxes(ctx context.Context, msg ControlMessage) {
+	if len(msg.Args) < 1 {
+		a.Logger.Error(ctx, "ListSandboxes requested without requestID", nil)
+		return
+	}
+	requestID := msg.Args[0]
+	a.Logger.Info(ctx, "ListSandboxes requested", map[string]any{"request_id": requestID})
+
+	sandboxes, err := a.Runtime.List(ctx)
+	if err != nil {
+		a.Logger.Error(ctx, "Failed to list sandboxes from runtime", map[string]any{"error": err})
+		return
+	}
+
+	if err := a.Control.PublishSandboxes(ctx, requestID, sandboxes); err != nil {
+		a.Logger.Error(ctx, "Failed to publish sandboxes", map[string]any{"request_id": requestID, "error": err})
 	}
 }
 

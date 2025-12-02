@@ -120,8 +120,27 @@ func (r *MockRuntime) Kill(ctx context.Context, id domain.SandboxID) error {
 }
 
 func (m *MockRuntime) StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writer, follow bool) error {
-	_, err := w.Write([]byte("mock logs for " + string(id) + "\n"))
-	return err
+	if _, err := w.Write([]byte("mock logs for " + string(id) + "\n")); err != nil {
+		return err
+	}
+
+	if !follow {
+		return nil
+	}
+
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case t := <-ticker.C:
+			if _, err := fmt.Fprintf(w, "mock log entry at %s\n", t.Format(time.RFC3339)); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 func (r *MockRuntime) Allocation(ctx context.Context) (domain.ResourceCapacity, error) {
@@ -159,7 +178,7 @@ func (r *MockRuntime) Wait(ctx context.Context, id domain.SandboxID) error {
 	}
 }
 
-func (r *MockRuntime) Exec(ctx context.Context, id domain.SandboxID, cmd []string) error {
+func (r *MockRuntime) Exec(ctx context.Context, id domain.SandboxID, cmd []string, stdout, stderr io.Writer) error {
 	r.mu.RLock()
 	_, ok := r.runs[id]
 	r.mu.RUnlock()
@@ -174,6 +193,17 @@ func (r *MockRuntime) Exec(ctx context.Context, id domain.SandboxID, cmd []strin
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+func (r *MockRuntime) ExecInteractive(ctx context.Context, id domain.SandboxID, cmd []string, stdin io.Reader, stdout, stderr io.Writer) error {
+	r.mu.RLock()
+	_, ok := r.runs[id]
+	r.mu.RUnlock()
+	if !ok {
+		return errors.New("sandbox not found")
+	}
+	r.Logger.Info("Executing interactive command in sandbox", "id", id, "cmd", cmd)
+	return nil
 }
 
 func (r *MockRuntime) Pause(ctx context.Context, id domain.SandboxID) error {
