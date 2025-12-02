@@ -16,7 +16,7 @@
 
 ### Charon (Request Ferry)
 - [x] Production load balancer for Olympus instances with health checks, weighted/least-conn strategies, and consistent hashing for sticky sessions.
-- [ ] Circuit breaker + retry + backoff middleware; tenant-aware rate limiting; end-to-end failover tests in `tests/integration/charon`.
+- [x] Circuit breaker + retry + backoff middleware; tenant-aware rate limiting; end-to-end failover tests in `tests/integration/charon`.
 - [ ] Telemetry for ferry decisions (success/fail/latency) exported to Hermes/Grafana.
 
 ### Observability and Security

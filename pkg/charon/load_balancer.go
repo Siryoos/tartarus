@@ -210,53 +210,110 @@ func (f *BoatFerry) Cross(ctx context.Context, req *http.Request) (*http.Respons
 		return nil, ToHTTPError(err)
 	}
 
-	// Check circuit breaker
-	breaker := f.breakers[shore.ID]
-	if !breaker.Allow() {
-		// Try to find an alternative shore
-		return f.retryWithFallback(ctx, req, shore.ID)
+	// Forward request with retry loop
+	var resp *http.Response
+	var lastErr error
+
+	// Initial attempt + retries
+	maxAttempts := 1
+	if f.config.Retry.MaxRetries > 0 {
+		maxAttempts += f.config.Retry.MaxRetries
 	}
 
-	// Forward request
-	start := time.Now()
-	resp, err := f.forwardRequest(ctx, req, shore)
-	duration := time.Since(start)
+	// Track shores we've already tried to avoid retrying the same failing shore
+	triedShores := make(map[string]bool)
 
-	if err != nil {
-		breaker.RecordFailure()
-		f.healthChecker.RecordRequest(shore.ID, false)
-		f.telemetry.RecordRequest(shore.ID, false, duration)
+	// First attempt uses the selected shore
+	currentShore := shore
+	triedShores[currentShore.ID] = true
 
-		// Retry if configured
-		if f.config.Retry.MaxRetries > 0 {
-			return f.retryRequest(ctx, req, shore.ID, 0)
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		// If this is a retry (attempt > 0), we need to select a new shore if the previous one failed
+		if attempt > 0 {
+			// Calculate backoff
+			delay := f.config.Retry.InitialDelay * time.Duration(1<<uint(attempt-1))
+			if delay > f.config.Retry.MaxDelay {
+				delay = f.config.Retry.MaxDelay
+			}
+
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+
+			// Find a new healthy shore
+			nextShore, err := f.retryWithFallback(ctx, req, triedShores)
+			if err != nil {
+				// No more healthy shores to try
+				if lastErr != nil {
+					return nil, ToHTTPError(lastErr)
+				}
+				return nil, ToHTTPError(err)
+			}
+			currentShore = nextShore
+			triedShores[currentShore.ID] = true
 		}
-		return nil, ToHTTPError(err)
-	}
 
-	// Check if status code warrants a retry
-	shouldRetry := false
-	for _, code := range f.config.Retry.RetryOn {
-		if resp.StatusCode == code {
-			shouldRetry = true
-			break
+		// Check circuit breaker for the current shore
+		breaker := f.breakers[currentShore.ID]
+		if !breaker.Allow() {
+			// This shouldn't happen for the first shore if we checked before loop,
+			// but could happen if state changed or for fallback shores.
+			// Treat as failure and continue to next attempt
+			lastErr = fmt.Errorf("circuit breaker open for shore %s", currentShore.ID)
+			continue
 		}
-	}
 
-	if shouldRetry {
-		breaker.RecordFailure()
-		f.healthChecker.RecordRequest(shore.ID, false)
+		start := time.Now()
+		resp, err = f.forwardRequest(ctx, req, currentShore)
+		duration := time.Since(start)
 
-		if f.config.Retry.MaxRetries > 0 {
-			return f.retryRequest(ctx, req, shore.ID, 0)
+		if err != nil {
+			breaker.RecordFailure()
+			f.healthChecker.RecordRequest(currentShore.ID, false)
+			f.telemetry.RecordRequest(currentShore.ID, false, duration)
+			lastErr = err
+			continue
 		}
+
+		// Check if status code warrants a retry
+		shouldRetry := false
+		for _, code := range f.config.Retry.RetryOn {
+			if resp.StatusCode == code {
+				shouldRetry = true
+				break
+			}
+		}
+
+		if shouldRetry {
+			breaker.RecordFailure()
+			f.healthChecker.RecordRequest(currentShore.ID, false)
+			// Don't record telemetry failure here as it was technically a successful HTTP request, just a bad status
+			// Or maybe we should? Let's stick to existing pattern but maybe we want to track these.
+			// For now, just mark breaker/health.
+
+			lastErr = fmt.Errorf("received retryable status code: %d", resp.StatusCode)
+
+			// Close body before retrying
+			if resp.Body != nil {
+				resp.Body.Close()
+			}
+			continue
+		}
+
+		// Success!
+		breaker.RecordSuccess()
+		f.healthChecker.RecordRequest(currentShore.ID, true)
+		f.telemetry.RecordRequest(currentShore.ID, true, duration)
+		return resp, nil
 	}
 
-	breaker.RecordSuccess()
-	f.healthChecker.RecordRequest(shore.ID, true)
-	f.telemetry.RecordRequest(shore.ID, true, duration)
-
-	return resp, nil
+	// If we exhausted all attempts
+	if lastErr != nil {
+		return nil, ToHTTPError(lastErr)
+	}
+	return nil, ToHTTPError(fmt.Errorf("request failed after %d attempts", maxAttempts))
 }
 
 // selectShore chooses a backend based on the configured strategy.
@@ -462,36 +519,14 @@ func (f *BoatFerry) proxyErrorHandler(w http.ResponseWriter, r *http.Request, er
 	http.Error(w, "Bad Gateway", http.StatusBadGateway)
 }
 
-// retryRequest retries a failed request with exponential backoff.
-func (f *BoatFerry) retryRequest(ctx context.Context, req *http.Request, excludeShoreID string, attempt int) (*http.Response, error) {
-	if attempt >= f.config.Retry.MaxRetries {
-		return nil, fmt.Errorf("max retries exceeded")
-	}
-
-	// Calculate delay with exponential backoff
-	delay := f.config.Retry.InitialDelay * time.Duration(1<<uint(attempt))
-	if delay > f.config.Retry.MaxDelay {
-		delay = f.config.Retry.MaxDelay
-	}
-
-	select {
-	case <-time.After(delay):
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-
-	// Try again with a different shore
-	return f.retryWithFallback(ctx, req, excludeShoreID)
-}
-
-// retryWithFallback tries to forward to an alternative shore.
-func (f *BoatFerry) retryWithFallback(ctx context.Context, req *http.Request, excludeShoreID string) (*http.Response, error) {
+// retryWithFallback tries to find an alternative healthy shore.
+func (f *BoatFerry) retryWithFallback(ctx context.Context, req *http.Request, triedShores map[string]bool) (*Shore, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
-	// Find healthy shores excluding the failed one
+	// Find healthy shores excluding the ones we've already tried
 	for _, shore := range f.shores {
-		if shore.ID == excludeShoreID {
+		if triedShores[shore.ID] {
 			continue
 		}
 		if !f.healthChecker.IsHealthy(shore.ID) {
@@ -501,16 +536,8 @@ func (f *BoatFerry) retryWithFallback(ctx context.Context, req *http.Request, ex
 			continue
 		}
 
-		// Try this shore
-		resp, err := f.forwardRequest(ctx, req, shore)
-		if err == nil {
-			f.breakers[shore.ID].RecordSuccess()
-			f.healthChecker.RecordRequest(shore.ID, true)
-			return resp, nil
-		}
-
-		f.breakers[shore.ID].RecordFailure()
-		f.healthChecker.RecordRequest(shore.ID, false)
+		// Found a candidate
+		return shore, nil
 	}
 
 	return nil, ErrNoHealthyShores
