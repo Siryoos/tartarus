@@ -139,6 +139,61 @@ func (e *BearerTokenExtractor) Extract(r *http.Request) (Credentials, error) {
 	}, nil
 }
 
+// MTLSExtractor extracts client certificate credentials from the TLS connection.
+type MTLSExtractor struct{}
+
+// NewMTLSExtractor creates a credential extractor for mTLS.
+func NewMTLSExtractor() *MTLSExtractor {
+	return &MTLSExtractor{}
+}
+
+// Extract returns mTLS credentials if a client certificate is present.
+func (e *MTLSExtractor) Extract(r *http.Request) (Credentials, error) {
+	if r.TLS == nil {
+		return nil, NewAuthenticationError("no TLS connection", nil)
+	}
+
+	if len(r.TLS.PeerCertificates) == 0 {
+		return nil, NewAuthenticationError("no client certificate provided", nil)
+	}
+
+	return &MTLSCredential{
+		ConnectionState: *r.TLS,
+	}, nil
+}
+
+// CompositeCredentialExtractor tries multiple extractors in order.
+// This allows supporting multiple authentication methods simultaneously.
+type CompositeCredentialExtractor struct {
+	extractors []CredentialExtractor
+}
+
+// NewCompositeCredentialExtractor creates an extractor that tries multiple methods.
+func NewCompositeCredentialExtractor(extractors ...CredentialExtractor) *CompositeCredentialExtractor {
+	return &CompositeCredentialExtractor{
+		extractors: extractors,
+	}
+}
+
+// Extract tries each extractor in order until one succeeds.
+func (e *CompositeCredentialExtractor) Extract(r *http.Request) (Credentials, error) {
+	var lastErr error
+
+	for _, extractor := range e.extractors {
+		creds, err := extractor.Extract(r)
+		if err == nil {
+			return creds, nil
+		}
+		lastErr = err
+	}
+
+	if lastErr != nil {
+		return nil, lastErr
+	}
+
+	return nil, NewAuthenticationError("no credentials found", nil)
+}
+
 // DefaultResourceMapper provides a simple mapping from HTTP requests to resources.
 type DefaultResourceMapper struct{}
 

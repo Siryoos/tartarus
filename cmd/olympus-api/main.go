@@ -647,13 +647,31 @@ func main() {
 
 	// 2. OIDC Authenticator
 	if cfg.OIDCIssuerURL != "" && cfg.OIDCClientID != "" {
-		oidcAuth, err := cerberus.NewOIDCAuthenticator(context.Background(), cfg.OIDCIssuerURL, cfg.OIDCClientID)
+		oidcAuth, err := cerberus.NewOIDCAuthenticator(context.Background(), cfg.OIDCIssuerURL, cfg.OIDCClientID, "")
 		if err != nil {
 			logger.Error("Failed to initialize OIDC authenticator", "error", err)
 			os.Exit(1)
 		}
 		authenticators = append(authenticators, oidcAuth)
 		logger.Info("Enabled OIDC authentication", "issuer", cfg.OIDCIssuerURL)
+	}
+
+	// 3. mTLS Authenticator (for agent communication)
+	if cfg.TLSClientAuth == "require-verify" && cfg.TLSCAFile != "" {
+		// Load the CA pool for verifying client certificates
+		caPool := x509.NewCertPool()
+		caBytes, err := os.ReadFile(cfg.TLSCAFile)
+		if err != nil {
+			logger.Error("Failed to read CA file for mTLS", "error", err)
+			os.Exit(1)
+		}
+		if !caPool.AppendCertsFromPEM(caBytes) {
+			logger.Error("Failed to append CA certificates for mTLS")
+			os.Exit(1)
+		}
+		mtlsAuth := cerberus.NewMTLSAuthenticator(caPool)
+		authenticators = append(authenticators, mtlsAuth)
+		logger.Info("Enabled mTLS authentication for agents")
 	}
 
 	var cerberusAuth cerberus.Authenticator
@@ -691,10 +709,23 @@ func main() {
 	// Create the three-headed gateway
 	cerberusGateway := cerberus.NewGateway(cerberusAuth, cerberusAuthz, cerberusAudit)
 
+	// Create credential extractor (supports both mTLS and bearer tokens)
+	var credExtractor cerberus.CredentialExtractor
+	if cfg.TLSClientAuth == "require-verify" {
+		// Try mTLS first, then fall back to bearer token
+		credExtractor = cerberus.NewCompositeCredentialExtractor(
+			cerberus.NewMTLSExtractor(),
+			cerberus.NewBearerTokenExtractor(),
+		)
+	} else {
+		// Only bearer token auth
+		credExtractor = cerberus.NewBearerTokenExtractor()
+	}
+
 	// Create HTTP middleware
 	cerberusMiddleware := cerberus.NewHTTPMiddleware(
 		cerberusGateway,
-		cerberus.NewBearerTokenExtractor(),
+		credExtractor,
 		cerberus.NewDefaultResourceMapper(),
 	)
 
@@ -707,35 +738,35 @@ func main() {
 	// TLS Configuration
 	var tlsConfig *tls.Config
 	if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" {
-		tlsConfig = &tls.Config{
-			MinVersion: tls.VersionTLS12,
-		}
-
+		var clientAuth tls.ClientAuthType
 		if cfg.TLSClientAuth != "none" && cfg.TLSCAFile != "" {
-			caCert, err := os.ReadFile(cfg.TLSCAFile)
-			if err != nil {
-				logger.Error("Failed to read CA file", "path", cfg.TLSCAFile, "error", err)
-				os.Exit(1)
-			}
-			caCertPool := x509.NewCertPool()
-			caCertPool.AppendCertsFromPEM(caCert)
-			tlsConfig.ClientCAs = caCertPool
-
 			switch cfg.TLSClientAuth {
 			case "request":
-				tlsConfig.ClientAuth = tls.RequestClientCert
+				clientAuth = tls.RequestClientCert
 			case "require":
-				tlsConfig.ClientAuth = tls.RequireAnyClientCert
+				clientAuth = tls.RequireAnyClientCert
 			case "verify-if-given":
-				tlsConfig.ClientAuth = tls.VerifyClientCertIfGiven
+				clientAuth = tls.VerifyClientCertIfGiven
 			case "require-verify":
-				tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
+				clientAuth = tls.RequireAndVerifyClientCert
 			default:
 				logger.Warn("Unknown TLS client auth mode, defaulting to NoClientCert", "mode", cfg.TLSClientAuth)
-				tlsConfig.ClientAuth = tls.NoClientCert
+				clientAuth = tls.NoClientCert
 			}
-			logger.Info("Enabled mTLS", "client_auth", cfg.TLSClientAuth)
+			logger.Info("Enabled mTLS with automated rotation", "client_auth", cfg.TLSClientAuth)
 		}
+
+		// Use CertWatcher for automated rotation
+		watcher, err := cerberus.NewCertWatcher(cfg.TLSCertFile, cfg.TLSKeyFile, cfg.TLSCAFile, clientAuth, logger)
+		if err != nil {
+			logger.Error("Failed to initialize certificate watcher", "error", err)
+			os.Exit(1)
+		}
+
+		// Start watcher in background
+		go watcher.Start(context.Background(), 1*time.Minute)
+
+		tlsConfig = watcher.TLSConfig()
 	}
 
 	srv := &http.Server{

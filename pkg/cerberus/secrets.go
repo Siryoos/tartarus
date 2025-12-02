@@ -30,6 +30,18 @@ func (p *EnvSecretProvider) Resolve(ctx context.Context, ref string) (string, er
 		return val, nil
 	}
 
+	// Support key: prefix for API key verification keys
+	// Maps key:kid to env var CERBERUS_KEY_kid
+	if len(ref) > 4 && ref[:4] == "key:" {
+		keyID := ref[4:]
+		envVar := "CERBERUS_KEY_" + keyID
+		val := os.Getenv(envVar)
+		if val == "" {
+			return "", fmt.Errorf("signing key not found in environment: %s", envVar)
+		}
+		return val, nil
+	}
+
 	return "", fmt.Errorf("unsupported secret reference format: %s", ref)
 }
 
