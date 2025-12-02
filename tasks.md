@@ -17,7 +17,7 @@
 ### Charon (Request Ferry)
 - [x] Production load balancer for Olympus instances with health checks, weighted/least-conn strategies, and consistent hashing for sticky sessions.
 - [x] Circuit breaker + retry + backoff middleware; tenant-aware rate limiting; end-to-end failover tests in `tests/integration/charon`.
-- [ ] Telemetry for ferry decisions (success/fail/latency) exported to Hermes/Grafana.
+- [x] Telemetry for ferry decisions (success/fail/latency) exported to Hermes/Grafana.
 
 ### Observability and Security
 - [ ] Grafana dashboards: real-time sandbox topology, resource usage heatmaps, error/latency SLOs; bundle with `docker-compose.observability.yml`.

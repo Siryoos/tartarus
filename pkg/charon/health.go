@@ -16,6 +16,8 @@ type HealthChecker struct {
 
 	stopChan chan struct{}
 	doneChan chan struct{}
+
+	telemetry *Telemetry
 }
 
 // shoreHealthState tracks health state for a single shore.
@@ -160,8 +162,14 @@ func (hc *HealthChecker) performCheck(ctx context.Context, state *shoreHealthSta
 	// Check status code
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		hc.recordSuccess(state, latency)
+		if hc.telemetry != nil {
+			hc.telemetry.RecordHealthCheck(state.shore.ID, true, latency)
+		}
 	} else {
 		hc.recordFailure(state)
+		if hc.telemetry != nil {
+			hc.telemetry.RecordHealthCheck(state.shore.ID, false, latency)
+		}
 	}
 }
 
@@ -178,7 +186,12 @@ func (hc *HealthChecker) recordSuccess(state *shoreHealthState, latency time.Dur
 	// Update status if needed
 	if state.shore.HealthCheck != nil &&
 		state.consecutiveSuccess >= state.shore.HealthCheck.Healthy {
-		state.status = HealthStatusHealthy
+		if state.status != HealthStatusHealthy {
+			state.status = HealthStatusHealthy
+			if hc.telemetry != nil {
+				hc.telemetry.RecordShoreHealth(state.shore.ID, HealthStatusHealthy)
+			}
+		}
 	}
 }
 
@@ -194,7 +207,12 @@ func (hc *HealthChecker) recordFailure(state *shoreHealthState) {
 	// Update status if needed
 	if state.shore.HealthCheck != nil &&
 		state.consecutiveFailure >= state.shore.HealthCheck.Unhealthy {
-		state.status = HealthStatusUnhealthy
+		if state.status != HealthStatusUnhealthy {
+			state.status = HealthStatusUnhealthy
+			if hc.telemetry != nil {
+				hc.telemetry.RecordShoreHealth(state.shore.ID, HealthStatusUnhealthy)
+			}
+		}
 	}
 }
 

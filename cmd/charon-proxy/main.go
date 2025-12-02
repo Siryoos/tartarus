@@ -12,7 +12,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/tartarus-sandbox/tartarus/pkg/charon"
+	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
 )
 
 // Config represents the Charon proxy configuration.
@@ -40,6 +42,10 @@ func main() {
 		slog.Error("Failed to load configuration", "error", err)
 		os.Exit(1)
 	}
+
+	// Initialize metrics
+	metrics := hermes.NewPrometheusMetrics()
+	config.Ferry.Metrics = metrics
 
 	// Create ferry
 	ferry, err := charon.NewBoatFerry(config.Ferry)
@@ -70,6 +76,9 @@ func main() {
 	// Health check endpoint
 	middleware := charon.NewFerryMiddleware(ferry)
 	mux.HandleFunc("/health", middleware.HealthHandler())
+
+	// Metrics endpoint
+	mux.Handle("/metrics", promhttp.Handler())
 
 	// Proxy all other requests
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

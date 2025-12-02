@@ -14,6 +14,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
 )
 
 // BoatFerry implements the Ferry interface with load balancing, rate limiting,
@@ -36,6 +38,37 @@ type BoatFerry struct {
 	telemetry      *Telemetry
 
 	mu sync.RWMutex
+}
+
+// TelemetryCircuitBreaker wraps a CircuitBreakerInterface to record state changes.
+type TelemetryCircuitBreaker struct {
+	CircuitBreakerInterface
+	shoreID   string
+	telemetry *Telemetry
+	lastState CircuitBreakerState
+}
+
+func (tcb *TelemetryCircuitBreaker) RecordSuccess() {
+	tcb.CircuitBreakerInterface.RecordSuccess()
+	tcb.checkState()
+}
+
+func (tcb *TelemetryCircuitBreaker) RecordFailure() {
+	tcb.CircuitBreakerInterface.RecordFailure()
+	tcb.checkState()
+}
+
+func (tcb *TelemetryCircuitBreaker) Reset() {
+	tcb.CircuitBreakerInterface.Reset()
+	tcb.checkState()
+}
+
+func (tcb *TelemetryCircuitBreaker) checkState() {
+	currentState := tcb.CircuitBreakerInterface.State()
+	if currentState != tcb.lastState {
+		tcb.telemetry.RecordCircuitBreakerState(tcb.shoreID, currentState)
+		tcb.lastState = currentState
+	}
 }
 
 // NewBoatFerry creates a new ferry with the given configuration.
@@ -69,7 +102,9 @@ func NewBoatFerry(config *FerryConfig) (*BoatFerry, error) {
 
 	// Initialize telemetry
 	if config.Metrics != nil {
-		if metrics, ok := config.Metrics.(interface {
+		if metrics, ok := config.Metrics.(hermes.Metrics); ok {
+			ferry.telemetry = &Telemetry{metrics: metrics}
+		} else if metrics, ok := config.Metrics.(interface {
 			IncCounter(name string, value float64, labels ...interface{})
 			ObserveHistogram(name string, value float64, labels ...interface{})
 			SetGauge(name string, value float64, labels ...interface{})
@@ -82,6 +117,9 @@ func NewBoatFerry(config *FerryConfig) (*BoatFerry, error) {
 	if ferry.telemetry == nil {
 		ferry.telemetry = &Telemetry{metrics: nil} // Will no-op
 	}
+
+	// Inject telemetry into health checker
+	ferry.healthChecker.telemetry = ferry.telemetry
 
 	return ferry, nil
 }
@@ -127,13 +165,25 @@ func (f *BoatFerry) RegisterShore(shore *Shore) error {
 
 	// Initialize circuit breaker
 	if f.config.CircuitBreaker.Enabled {
-		f.breakers[shore.ID] = NewCircuitBreaker(
+		cb := NewCircuitBreaker(
 			f.config.CircuitBreaker.Threshold,
 			f.config.CircuitBreaker.Timeout,
 			f.config.CircuitBreaker.HalfOpenRequests,
 		)
+		f.breakers[shore.ID] = &TelemetryCircuitBreaker{
+			CircuitBreakerInterface: cb,
+			shoreID:                 shore.ID,
+			telemetry:               f.telemetry,
+			lastState:               cb.State(),
+		}
 	} else {
-		f.breakers[shore.ID] = NewNoOpCircuitBreaker()
+		cb := NewNoOpCircuitBreaker()
+		f.breakers[shore.ID] = &TelemetryCircuitBreaker{
+			CircuitBreakerInterface: cb,
+			shoreID:                 shore.ID,
+			telemetry:               f.telemetry,
+			lastState:               cb.State(),
+		}
 	}
 
 	// Initialize active connections counter
@@ -201,6 +251,7 @@ func (f *BoatFerry) Cross(ctx context.Context, req *http.Request) (*http.Respons
 	}
 
 	if err := f.rateLimiter.Allow(ctx, key); err != nil {
+		f.telemetry.RecordRateLimitHit(key)
 		return nil, ToHTTPError(err)
 	}
 
