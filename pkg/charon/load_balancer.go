@@ -32,6 +32,8 @@ type BoatFerry struct {
 	rrCounter      uint64
 	activeConns    map[string]*int32
 	reverseProxies map[string]*httputil.ReverseProxy
+	hashRing       *ConsistentHashRing
+	telemetry      *Telemetry
 
 	mu sync.RWMutex
 }
@@ -50,6 +52,7 @@ func NewBoatFerry(config *FerryConfig) (*BoatFerry, error) {
 		activeConns:    make(map[string]*int32),
 		reverseProxies: make(map[string]*httputil.ReverseProxy),
 		healthChecker:  NewHealthChecker(),
+		hashRing:       NewConsistentHashRing(150),
 	}
 
 	// Initialize rate limiter
@@ -62,6 +65,22 @@ func NewBoatFerry(config *FerryConfig) (*BoatFerry, error) {
 		)
 	} else {
 		ferry.rateLimiter = NewNoOpLimiter()
+	}
+
+	// Initialize telemetry
+	if config.Metrics != nil {
+		if metrics, ok := config.Metrics.(interface {
+			IncCounter(name string, value float64, labels ...interface{})
+			ObserveHistogram(name string, value float64, labels ...interface{})
+			SetGauge(name string, value float64, labels ...interface{})
+		}); ok {
+			// Convert to hermes.Metrics interface
+			// This is a bit hacky but avoids import cycles
+			ferry.telemetry = &Telemetry{metrics: &metricsAdapter{raw: metrics}}
+		}
+	}
+	if ferry.telemetry == nil {
+		ferry.telemetry = &Telemetry{metrics: nil} // Will no-op
 	}
 
 	return ferry, nil
@@ -124,6 +143,9 @@ func (f *BoatFerry) RegisterShore(shore *Shore) error {
 	// Add to health checker
 	f.healthChecker.AddShore(shore)
 
+	// Add to consistent hash ring
+	f.hashRing.Add(shore.ID)
+
 	return nil
 }
 
@@ -138,6 +160,9 @@ func (f *BoatFerry) DeregisterShore(shoreID string) error {
 
 	// Remove from health checker
 	f.healthChecker.RemoveShore(shoreID)
+
+	// Remove from hash ring
+	f.hashRing.Remove(shoreID)
 
 	// Remove from collections
 	delete(f.shoreMap, shoreID)
@@ -166,7 +191,15 @@ func (f *BoatFerry) Cross(ctx context.Context, req *http.Request) (*http.Respons
 	}
 
 	// Check rate limit (collecting the obol - payment for passage)
-	key := f.rateLimiter.(*TokenBucketLimiter).keyFunc(ctx)
+	// Extract key based on the rate limiter's key function
+	key := ""
+	if tbl, ok := f.rateLimiter.(*TokenBucketLimiter); ok {
+		key = tbl.keyFunc(ctx)
+	} else {
+		// For NoOpLimiter or other implementations, use a default key
+		key = "default"
+	}
+
 	if err := f.rateLimiter.Allow(ctx, key); err != nil {
 		return nil, ToHTTPError(err)
 	}
@@ -185,10 +218,14 @@ func (f *BoatFerry) Cross(ctx context.Context, req *http.Request) (*http.Respons
 	}
 
 	// Forward request
+	start := time.Now()
 	resp, err := f.forwardRequest(ctx, req, shore)
+	duration := time.Since(start)
+
 	if err != nil {
 		breaker.RecordFailure()
 		f.healthChecker.RecordRequest(shore.ID, false)
+		f.telemetry.RecordRequest(shore.ID, false, duration)
 
 		// Retry if configured
 		if f.config.Retry.MaxRetries > 0 {
@@ -217,6 +254,7 @@ func (f *BoatFerry) Cross(ctx context.Context, req *http.Request) (*http.Respons
 
 	breaker.RecordSuccess()
 	f.healthChecker.RecordRequest(shore.ID, true)
+	f.telemetry.RecordRequest(shore.ID, true, duration)
 
 	return resp, nil
 }
@@ -250,6 +288,9 @@ func (f *BoatFerry) selectShore(ctx context.Context, req *http.Request) (*Shore,
 
 	case StrategyIPHash:
 		return f.selectIPHash(healthy, req), nil
+
+	case StrategyConsistentHash:
+		return f.selectConsistentHash(healthy, req), nil
 
 	default:
 		return healthy[rand.Intn(len(healthy))], nil
@@ -296,7 +337,7 @@ func (f *BoatFerry) selectWeighted(shores []*Shore) *Shore {
 	return shores[0]
 }
 
-// selectIPHash selects using consistent hashing by IP.
+// selectIPHash selects using simple IP hashing (legacy).
 func (f *BoatFerry) selectIPHash(shores []*Shore, req *http.Request) *Shore {
 	// Extract IP from request
 	ip := req.RemoteAddr
@@ -308,6 +349,80 @@ func (f *BoatFerry) selectIPHash(shores []*Shore, req *http.Request) *Shore {
 	hash := sha256.Sum256([]byte(ip))
 	idx := binary.BigEndian.Uint64(hash[:8]) % uint64(len(shores))
 	return shores[idx]
+}
+
+// selectConsistentHash uses consistent hashing ring for sticky sessions.
+func (f *BoatFerry) selectConsistentHash(shores []*Shore, req *http.Request) *Shore {
+	// Extract session key based on configuration
+	key := f.extractSessionKey(req)
+
+	// Get primary shore from hash ring
+	primaryID := f.hashRing.Get(key)
+	if primaryID == "" {
+		// Ring is empty, fallback to random
+		return shores[rand.Intn(len(shores))]
+	}
+
+	// Check if primary is healthy
+	for _, shore := range shores {
+		if shore.ID == primaryID {
+			return shore
+		}
+	}
+
+	// Primary is not healthy, get fallback shores
+	fallbacks := f.hashRing.GetN(key, 3)
+	for _, fallbackID := range fallbacks {
+		for _, shore := range shores {
+			if shore.ID == fallbackID {
+				return shore
+			}
+		}
+	}
+
+	// No consistent hash match found (shouldn't happen), use first healthy
+	return shores[0]
+}
+
+// extractSessionKey extracts the session affinity key from the request.
+func (f *BoatFerry) extractSessionKey(req *http.Request) string {
+	affinityKey := f.config.SessionAffinityKey
+	if affinityKey == "" {
+		affinityKey = "ip" // Default
+	}
+
+	switch affinityKey {
+	case "tenant":
+		// Extract tenant ID from context or header
+		if tenantID := req.Context().Value("tenant_id"); tenantID != nil {
+			return fmt.Sprintf("tenant:%v", tenantID)
+		}
+		if tenantID := req.Header.Get("X-Tenant-ID"); tenantID != "" {
+			return fmt.Sprintf("tenant:%s", tenantID)
+		}
+
+	case "session":
+		// Extract session ID from cookie or header
+		if cookie, err := req.Cookie("session_id"); err == nil {
+			return fmt.Sprintf("session:%s", cookie.Value)
+		}
+		if sessionID := req.Header.Get("X-Session-ID"); sessionID != "" {
+			return fmt.Sprintf("session:%s", sessionID)
+		}
+
+	case "custom":
+		// Extract from custom header
+		if customKey := req.Header.Get("X-Affinity-Key"); customKey != "" {
+			return customKey
+		}
+	}
+
+	// Default to IP
+	ip := req.RemoteAddr
+	if forwarded := req.Header.Get("X-Forwarded-For"); forwarded != "" {
+		ip = forwarded
+	}
+	return fmt.Sprintf("ip:%s", ip)
 }
 
 // forwardRequest forwards the request to the selected shore.

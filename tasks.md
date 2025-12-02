@@ -15,7 +15,7 @@
 - [x] Secrets retrieval via Vault/KMS providers for tokens, client secrets, and signing keys.
 
 ### Charon (Request Ferry)
-- [ ] Production load balancer for Olympus instances with health checks, weighted/least-conn strategies, and consistent hashing for sticky sessions.
+- [x] Production load balancer for Olympus instances with health checks, weighted/least-conn strategies, and consistent hashing for sticky sessions.
 - [ ] Circuit breaker + retry + backoff middleware; tenant-aware rate limiting; end-to-end failover tests in `tests/integration/charon`.
 - [ ] Telemetry for ferry decisions (success/fail/latency) exported to Hermes/Grafana.
 

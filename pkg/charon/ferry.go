@@ -80,6 +80,11 @@ type FerryConfig struct {
 	// Load balancing strategy
 	Strategy LoadBalanceStrategy
 
+	// Session affinity key (for consistent hashing)
+	// Options: "ip", "tenant", "session", "custom"
+	// If empty, defaults to "ip"
+	SessionAffinityKey string
+
 	// Circuit breaker settings
 	CircuitBreaker CircuitBreakerConfig
 
@@ -92,6 +97,9 @@ type FerryConfig struct {
 	// Timeout for crossing
 	CrossingTimeout time.Duration
 
+	// Metrics for telemetry (optional)
+	Metrics interface{}
+
 	// Maximum concurrent requests (0 = unlimited)
 	MaxConcurrent int
 }
@@ -100,11 +108,12 @@ type FerryConfig struct {
 type LoadBalanceStrategy string
 
 const (
-	StrategyRoundRobin LoadBalanceStrategy = "round_robin" // Simple round-robin
-	StrategyLeastConn  LoadBalanceStrategy = "least_conn"  // Least active connections
-	StrategyWeighted   LoadBalanceStrategy = "weighted"    // Weighted random
-	StrategyIPHash     LoadBalanceStrategy = "ip_hash"     // Consistent hashing by IP
-	StrategyZoneAware  LoadBalanceStrategy = "zone_aware"  // Prefer same zone
+	StrategyRoundRobin     LoadBalanceStrategy = "round_robin"     // Simple round-robin
+	StrategyLeastConn      LoadBalanceStrategy = "least_conn"      // Least active connections
+	StrategyWeighted       LoadBalanceStrategy = "weighted"        // Weighted random
+	StrategyIPHash         LoadBalanceStrategy = "ip_hash"         // Simple IP hashing
+	StrategyConsistentHash LoadBalanceStrategy = "consistent_hash" // Consistent hashing with virtual nodes
+	StrategyZoneAware      LoadBalanceStrategy = "zone_aware"      // Prefer same zone
 )
 
 // CircuitBreakerConfig configures circuit breaker behavior.

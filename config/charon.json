@@ -1,0 +1,75 @@
+{
+    "listen_addr": ":8000",
+    "ferry": {
+        "strategy": "consistent_hash",
+        "session_affinity_key": "tenant",
+        "crossing_timeout": "30s",
+        "max_concurrent": 1000,
+        "circuit_breaker": {
+            "enabled": true,
+            "threshold": 5,
+            "timeout": "30s",
+            "half_open_requests": 3
+        },
+        "rate_limiting": {
+            "enabled": true,
+            "requests_per_second": 1000,
+            "burst": 2000,
+            "key_func": "tenant"
+        },
+        "retry": {
+            "max_retries": 2,
+            "initial_delay": "100ms",
+            "max_delay": "2s",
+            "retry_on": [
+                502,
+                503,
+                504
+            ]
+        }
+    },
+    "shores": [
+        {
+            "id": "olympus-1",
+            "address": "http://olympus-1:8080",
+            "weight": 1,
+            "zone": "us-east-1a",
+            "priority": 1,
+            "health_check": {
+                "path": "/health",
+                "interval": "10s",
+                "timeout": "5s",
+                "healthy": 2,
+                "unhealthy": 3
+            }
+        },
+        {
+            "id": "olympus-2",
+            "address": "http://olympus-2:8080",
+            "weight": 1,
+            "zone": "us-east-1b",
+            "priority": 1,
+            "health_check": {
+                "path": "/health",
+                "interval": "10s",
+                "timeout": "5s",
+                "healthy": 2,
+                "unhealthy": 3
+            }
+        },
+        {
+            "id": "olympus-3",
+            "address": "http://olympus-3:8080",
+            "weight": 1,
+            "zone": "us-east-1c",
+            "priority": 1,
+            "health_check": {
+                "path": "/health",
+                "interval": "10s",
+                "timeout": "5s",
+                "healthy": 2,
+                "unhealthy": 3
+            }
+        }
+    ]
+}
