@@ -88,6 +88,7 @@ const (
 	ActionDelete  Action = "delete"
 	ActionExecute Action = "execute"
 	ActionAdmin   Action = "admin"
+	ActionAll     Action = "*"
 )
 
 // Resource represents what is being accessed.
@@ -107,6 +108,7 @@ const (
 	ResourceTypeSnapshot ResourceType = "snapshot"
 	ResourceTypePolicy   ResourceType = "policy"
 	ResourceTypeNode     ResourceType = "node"
+	ResourceTypeAll      ResourceType = "*"
 )
 
 // AuditEntry captures access information for compliance and security monitoring.

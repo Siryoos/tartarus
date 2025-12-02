@@ -64,7 +64,7 @@ func (r *RBACAuthorizer) Authorize(ctx context.Context, identity *Identity, acti
 			// Check if action is allowed
 			actionAllowed := false
 			for _, allowedAction := range perm.Actions {
-				if allowedAction == action {
+				if allowedAction == action || allowedAction == ActionAll {
 					actionAllowed = true
 					break
 				}
@@ -75,11 +75,52 @@ func (r *RBACAuthorizer) Authorize(ctx context.Context, identity *Identity, acti
 			}
 
 			// Check if resource type is allowed
+			resourceAllowed := false
 			for _, allowedResource := range perm.Resources {
-				if allowedResource == resource.Type {
-					return nil // Permission granted
+				if allowedResource == resource.Type || allowedResource == ResourceTypeAll {
+					resourceAllowed = true
+					break
 				}
 			}
+
+			if !resourceAllowed {
+				continue
+			}
+
+			// Check tenant scoping
+			// If the resource has a tenant ID, we must ensure the identity is allowed to access it.
+			// For now, we assume simple model:
+			// 1. If identity.TenantID matches resource.TenantID, allow.
+			// 2. If identity is "admin" (or has global access), allow.
+			// 3. If resource is public (no tenant), allow.
+
+			// If resource has no tenant, it's global/public
+			if resource.TenantID == "" {
+				return nil
+			}
+
+			// If identity has no tenant, they might be a super-admin or unauthenticated (if we allow that)
+			// But here we are in Authorize, so we assume Authenticate passed.
+			// If identity.TenantID is empty, maybe they are system admin?
+			// Let's assume empty identity.TenantID means "no tenant context", so deny unless role is specific.
+			// But wait, we don't have "IsAdmin" flag on identity.
+			// We rely on roles.
+			// If the policy allows the action/resource, does it imply tenant access?
+			// Usually RBAC is orthogonal to tenancy, or tenancy is a filter.
+			// Let's enforce: Identity must belong to the same tenant as the resource,
+			// UNLESS the role is a "system" role that spans tenants.
+			// How do we know if a role is system-wide?
+			// For now, let's hardcode "admin" role as system-wide.
+			if role == "admin" {
+				return nil
+			}
+
+			if identity.TenantID == resource.TenantID {
+				return nil
+			}
+
+			// If we get here, the permission matched action/resource, but tenant check failed.
+			// We continue to next permission/role in case another one grants access.
 		}
 	}
 

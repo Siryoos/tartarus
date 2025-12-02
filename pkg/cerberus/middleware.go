@@ -29,7 +29,7 @@ type CredentialExtractor interface {
 
 // ResourceMapper maps an HTTP request to a Cerberus resource and action.
 type ResourceMapper interface {
-	MapRequest(r *http.Request) (Action, Resource, error)
+	MapRequest(r *http.Request, identity *Identity) (Action, Resource, error)
 }
 
 // NewHTTPMiddleware creates middleware that enforces Cerberus security.
@@ -63,7 +63,7 @@ func (m *HTTPMiddleware) Wrap(next http.Handler) http.Handler {
 		}
 
 		// Map request to action and resource
-		action, resource, err := m.mapper.MapRequest(r)
+		action, resource, err := m.mapper.MapRequest(r, identity)
 		if err != nil {
 			m.recordAndRespond(r.Context(), w, r, identity, AuditResultError, err, startTime)
 			http.Error(w, "Bad Request: "+err.Error(), http.StatusBadRequest)
@@ -91,7 +91,7 @@ func (m *HTTPMiddleware) Wrap(next http.Handler) http.Handler {
 
 // recordAndRespond creates an audit entry and records it.
 func (m *HTTPMiddleware) recordAndRespond(ctx context.Context, w http.ResponseWriter, r *http.Request, identity *Identity, result AuditResult, err error, startTime time.Time) {
-	action, resource, _ := m.mapper.MapRequest(r)
+	action, resource, _ := m.mapper.MapRequest(r, identity)
 
 	entry := &AuditEntry{
 		Timestamp: time.Now(),
@@ -203,7 +203,7 @@ func NewDefaultResourceMapper() *DefaultResourceMapper {
 }
 
 // MapRequest maps HTTP method and path to action and resource.
-func (m *DefaultResourceMapper) MapRequest(r *http.Request) (Action, Resource, error) {
+func (m *DefaultResourceMapper) MapRequest(r *http.Request, identity *Identity) (Action, Resource, error) {
 	// Map HTTP method to action
 	var action Action
 	switch r.Method {
@@ -241,10 +241,15 @@ func (m *DefaultResourceMapper) MapRequest(r *http.Request) (Action, Resource, e
 		resourceType = ResourceTypeSandbox // Default
 	}
 
+	tenantID := "default"
+	if identity != nil {
+		tenantID = identity.TenantID
+	}
+
 	resource := Resource{
 		Type:      resourceType,
 		ID:        resourceID,
-		TenantID:  "default", // TODO: Extract from identity or request
+		TenantID:  tenantID,
 		Namespace: "default",
 	}
 

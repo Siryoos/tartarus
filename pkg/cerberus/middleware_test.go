@@ -132,7 +132,7 @@ func TestDefaultResourceMapper(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(tt.method, tt.path, nil)
 
-			action, resource, err := mapper.MapRequest(req)
+			action, resource, err := mapper.MapRequest(req, nil)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return

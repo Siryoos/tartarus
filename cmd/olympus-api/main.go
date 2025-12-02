@@ -645,6 +645,11 @@ func main() {
 		authenticators = append(authenticators, cerberus.NewSimpleAPIKeyAuthenticator(apiKey))
 	}
 
+	// 1.5 Signed API Key Authenticator (for rotated keys)
+	// Uses EnvSecretProvider to resolve signing keys from CERBERUS_KEY_* env vars
+	secretProvider := cerberus.NewEnvSecretProvider()
+	authenticators = append(authenticators, cerberus.NewSignedAPIKeyAuthenticator(secretProvider))
+
 	// 2. OIDC Authenticator
 	if cfg.OIDCIssuerURL != "" && cfg.OIDCClientID != "" {
 		oidcAuth, err := cerberus.NewOIDCAuthenticator(context.Background(), cfg.OIDCIssuerURL, cfg.OIDCClientID, "")

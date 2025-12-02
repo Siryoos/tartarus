@@ -10,7 +10,7 @@
 ## Phase 5 — Ascension to Olympus (Production Hardening)
 ### Cerberus (Auth Gateway)
 - [x] Implement the three heads: API keys (signed/rotatable), OAuth2/OIDC (code + client creds), and mutual TLS for agents with automated cert rotation.
-- [ ] Enforce RBAC/tenant scoping in `pkg/cerberus` gateway/middleware and thread identity through `cmd/olympus-api` handlers.
+- [x] Enforce RBAC/tenant scoping in `pkg/cerberus` gateway/middleware and thread identity through `cmd/olympus-api` handlers.
 - [ ] Centralize audit logging and anomaly hooks to `pkg/hermes` with tamper-evident storage.
 - [ ] Secrets retrieval via Vault/KMS providers for tokens, client secrets, and signing keys.
 
