@@ -536,8 +536,12 @@ func (f *BoatFerry) extractSessionKey(req *http.Request) string {
 // forwardRequest forwards the request to the selected shore.
 func (f *BoatFerry) forwardRequest(ctx context.Context, req *http.Request, shore *Shore) (*http.Response, error) {
 	// Increment active connections
-	atomic.AddInt32(f.activeConns[shore.ID], 1)
-	defer atomic.AddInt32(f.activeConns[shore.ID], -1)
+	newCount := atomic.AddInt32(f.activeConns[shore.ID], 1)
+	f.telemetry.RecordActiveConnections(shore.ID, int(newCount))
+	defer func() {
+		newCount := atomic.AddInt32(f.activeConns[shore.ID], -1)
+		f.telemetry.RecordActiveConnections(shore.ID, int(newCount))
+	}()
 
 	// Get reverse proxy for this shore
 	proxy := f.reverseProxies[shore.ID]

@@ -213,3 +213,55 @@ func TestBoatFerry_Telemetry_Request(t *testing.T) {
 	assert.NotEmpty(t, durations, "Request duration should be recorded")
 	assert.Greater(t, durations[0], 0.0)
 }
+
+func TestBoatFerry_Telemetry_ActiveConnections(t *testing.T) {
+	metrics := NewMockMetrics()
+	config := DefaultFerryConfig()
+	config.Metrics = metrics
+
+	ferry, err := NewBoatFerry(config)
+	assert.NoError(t, err)
+
+	// Register a shore
+	// We use a channel to control when the request finishes, so we can check active conns while it's running
+	finishChan := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-finishChan
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	shore := &Shore{ID: "shore-1", Address: server.URL}
+	err = ferry.RegisterShore(shore)
+	assert.NoError(t, err)
+
+	// Start a request in a goroutine
+	go func() {
+		req := httptest.NewRequest("GET", "/", nil)
+		ferry.Cross(context.Background(), req)
+	}()
+
+	// Wait a bit for the request to reach the handler
+	// In a real test we might want something more deterministic, but sleep is simple for now
+	time.Sleep(50 * time.Millisecond)
+
+	// Check active connections (should be 1)
+	metrics.mu.Lock()
+	val, ok := metrics.gauges["charon_active_connections|shore_id=shore-1"]
+	metrics.mu.Unlock()
+
+	assert.True(t, ok, "Active connections gauge should be recorded")
+	assert.Equal(t, 1.0, val, "Active connections should be 1")
+
+	// Finish the request
+	close(finishChan)
+	time.Sleep(50 * time.Millisecond)
+
+	// Check active connections (should be 0)
+	metrics.mu.Lock()
+	val, ok = metrics.gauges["charon_active_connections|shore_id=shore-1"]
+	metrics.mu.Unlock()
+
+	assert.True(t, ok, "Active connections gauge should be recorded")
+	assert.Equal(t, 0.0, val, "Active connections should be 0")
+}

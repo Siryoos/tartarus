@@ -205,6 +205,136 @@
             ],
             "title": "Cerberus Access Latency (P99)",
             "type": "timeseries"
+        },
+        {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "hideFrom": {
+                            "legend": false,
+                            "tooltip": false,
+                            "viz": false
+                        }
+                    },
+                    "mappings": []
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 8
+            },
+            "id": 3,
+            "options": {
+                "calculate": false,
+                "cellGap": 1,
+                "color": {
+                    "exponent": 0.5,
+                    "mode": "scheme",
+                    "scheme": "Spectral",
+                    "steps": 64
+                },
+                "dataFormat": "tsbuckets",
+                "filterValues": {
+                    "le": 1e-9
+                },
+                "legend": {
+                    "show": true
+                },
+                "rows": false,
+                "showValue": "never",
+                "tooltip": {
+                    "show": true,
+                    "yHistogram": false
+                },
+                "yAxis": {
+                    "axisPlacement": "left",
+                    "reverse": false,
+                    "unit": "short"
+                }
+            },
+            "pluginVersion": "7.5.7",
+            "targets": [
+                {
+                    "expr": "sum(rate(container_cpu_usage_seconds_total{image!=\"\"}[5m])) by (id)",
+                    "format": "heatmap",
+                    "legendFormat": "{{id}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "Container CPU Usage Heatmap",
+            "type": "heatmap"
+        },
+        {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "hideFrom": {
+                            "legend": false,
+                            "tooltip": false,
+                            "viz": false
+                        }
+                    },
+                    "mappings": []
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 8
+            },
+            "id": 4,
+            "options": {
+                "calculate": false,
+                "cellGap": 1,
+                "color": {
+                    "exponent": 0.5,
+                    "mode": "scheme",
+                    "scheme": "Spectral",
+                    "steps": 64
+                },
+                "dataFormat": "tsbuckets",
+                "filterValues": {
+                    "le": 1e-9
+                },
+                "legend": {
+                    "show": true
+                },
+                "rows": false,
+                "showValue": "never",
+                "tooltip": {
+                    "show": true,
+                    "yHistogram": false
+                },
+                "yAxis": {
+                    "axisPlacement": "left",
+                    "reverse": false,
+                    "unit": "bytes"
+                }
+            },
+            "pluginVersion": "7.5.7",
+            "targets": [
+                {
+                    "expr": "sum(container_memory_usage_bytes{image!=\"\"}) by (id)",
+                    "format": "heatmap",
+                    "legendFormat": "{{id}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "Container Memory Usage Heatmap",
+            "type": "heatmap"
         }
     ],
     "refresh": "",

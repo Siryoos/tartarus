@@ -20,7 +20,7 @@
 - [x] Telemetry for ferry decisions (success/fail/latency) exported to Hermes/Grafana.
 
 ### Observability and Security
-- [ ] Grafana dashboards: real-time sandbox topology, resource usage heatmaps, error/latency SLOs; bundle with `docker-compose.observability.yml`.
+- [x] Grafana dashboards: real-time sandbox topology, resource usage heatmaps, error/latency SLOs; bundle with `docker-compose.observability.yml`.
 - [ ] Security hardening: hardened guest kernel option, seccomp profile generator with per-template defaults, automated template vulnerability scanning, and Vault/KMS-backed secret injection flow.
 
 ### CLI v2.0 (`cmd/tartarus`)
