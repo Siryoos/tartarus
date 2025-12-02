@@ -4,7 +4,7 @@
 - [x] Bench `python-ds` cold starts to prove <200ms target; add repeatable perf harness under `tests/perf` with Hermes metrics and regression alerts.
 - [x] Time OCI image -> rootfs conversion (<30s) in `pkg/erebus` using representative large images; profile extraction/dedupe/init injection and document cache hit behavior.
 - [x] Measure Typhon quarantine routing overhead (<50ms) with normal vs quarantine comparison; add integration test that exercises seccomp isolation and reports added latency.
-- [ ] Validate Hypnos wake-from-sleep (<100ms); enable feature flags in staging, capture hibernation/resume traces, and gate releases on SLO.
+- [x] Validate Hypnos wake-from-sleep (<100ms); enable feature flags in staging, capture hibernation/resume traces, and gate releases on SLO.
 - [ ] Publish a Phase 4 performance report and dashboards (Grafana/Prometheus) covering the above SLOs to prevent regression.
 
 ## Phase 5 — Ascension to Olympus (Production Hardening)

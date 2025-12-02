@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,6 +25,7 @@ func TestHypnosHibernateAndWake(t *testing.T) {
 
 	// Mock Runtime
 	runtime := tartarus.NewMockRuntime(slog.Default())
+	runtime.SetStartDuration(1 * time.Millisecond)
 
 	// Local Store
 	tmpDir := t.TempDir()
@@ -88,8 +90,13 @@ func TestHypnosHibernateAndWake(t *testing.T) {
 	assert.True(t, exists, "Disk snapshot should exist")
 
 	// 3. Wake
+	start := time.Now()
 	wakeRun, err := manager.Wake(ctx, req.ID)
+	duration := time.Since(start)
+	t.Logf("Wake duration: %v", duration)
+
 	require.NoError(t, err)
+	assert.Less(t, duration, 100*time.Millisecond, "Wake latency should be < 100ms")
 	assert.NotNil(t, wakeRun)
 	assert.Equal(t, req.ID, wakeRun.ID)
 	assert.Equal(t, domain.RunStatusRunning, wakeRun.Status)

@@ -75,6 +75,8 @@ func NewManager(runtime tartarus.SandboxRuntime, store erebus.Store, stagingDir 
 // Sleep captures a snapshot of the running sandbox and tears down the VM process.
 func (m *Manager) Sleep(ctx context.Context, id domain.SandboxID, opts *SleepOptions) (*SleepRecord, error) {
 	start := time.Now()
+	defer m.trace(ctx, "Sleep")()
+
 	if opts == nil {
 		opts = &SleepOptions{GracefulShutdown: true}
 	}
@@ -116,13 +118,16 @@ func (m *Manager) Sleep(ctx context.Context, id domain.SandboxID, opts *SleepOpt
 	memPath := snapshotBase + ".mem"
 	diskPath := snapshotBase + ".disk"
 
+	pauseSpan := m.trace(ctx, "Sleep.Pause")
 	if err := m.Runtime.Pause(ctx, id); err != nil {
 		if m.Metrics != nil {
 			m.Metrics.IncCounter("hypnos_errors_total", 1, hermes.Label{Key: "phase", Value: "pause"})
 		}
 		return nil, fmt.Errorf("failed to pause sandbox: %w", err)
 	}
+	pauseSpan()
 
+	snapshotSpan := m.trace(ctx, "Sleep.Snapshot")
 	if err := m.Runtime.CreateSnapshot(ctx, id, memPath, diskPath); err != nil {
 		// Best-effort resume if snapshotting fails.
 		_ = m.Runtime.Resume(ctx, id)
@@ -131,6 +136,7 @@ func (m *Manager) Sleep(ctx context.Context, id domain.SandboxID, opts *SleepOpt
 		}
 		return nil, fmt.Errorf("failed to create snapshot: %w", err)
 	}
+	snapshotSpan()
 
 	if opts.GracefulShutdown {
 		_ = m.Runtime.Shutdown(ctx, id)
@@ -142,6 +148,7 @@ func (m *Manager) Sleep(ctx context.Context, id domain.SandboxID, opts *SleepOpt
 
 	// Compress and upload memory snapshot
 	memCompressedPath := memPath + ".gz"
+	compressSpan := m.trace(ctx, "Sleep.Compress")
 	compressionRatio, err := m.compressFile(memPath, memCompressedPath)
 	if err != nil {
 		if m.Metrics != nil {
@@ -149,11 +156,13 @@ func (m *Manager) Sleep(ctx context.Context, id domain.SandboxID, opts *SleepOpt
 		}
 		return nil, fmt.Errorf("failed to compress memory snapshot: %w", err)
 	}
+	compressSpan()
 
 	if m.Metrics != nil {
 		m.Metrics.ObserveHistogram("hypnos_compression_ratio", compressionRatio)
 	}
 
+	uploadSpan := m.trace(ctx, "Sleep.Upload")
 	if err := m.copyToStore(ctx, keyBase+".mem.gz", memCompressedPath); err != nil {
 		if m.Metrics != nil {
 			m.Metrics.IncCounter("hypnos_errors_total", 1, hermes.Label{Key: "phase", Value: "upload_memory"})
@@ -166,6 +175,7 @@ func (m *Manager) Sleep(ctx context.Context, id domain.SandboxID, opts *SleepOpt
 		}
 		return nil, err
 	}
+	uploadSpan()
 
 	record := &SleepRecord{
 		SandboxID:        id,
@@ -202,6 +212,8 @@ func (m *Manager) Sleep(ctx context.Context, id domain.SandboxID, opts *SleepOpt
 // Wake restores a previously sleeping sandbox.
 func (m *Manager) Wake(ctx context.Context, id domain.SandboxID) (*domain.SandboxRun, error) {
 	start := time.Now()
+	defer m.trace(ctx, "Wake")()
+
 	record, ok := m.getRecord(id)
 	if !ok {
 		if m.Metrics != nil {
@@ -235,6 +247,7 @@ func (m *Manager) Wake(ctx context.Context, id domain.SandboxID) (*domain.Sandbo
 	diskPath := snapshotBase + ".disk"
 
 	// Download and decompress memory snapshot
+	downloadSpan := m.trace(ctx, "Wake.Download")
 	if err := m.copyFromStore(ctx, record.SnapshotKey+".mem.gz", memCompressedPath); err != nil {
 		if m.Metrics != nil {
 			m.Metrics.IncCounter("hypnos_errors_total", 1, hermes.Label{Key: "phase", Value: "download_memory"})
@@ -255,11 +268,13 @@ func (m *Manager) Wake(ctx context.Context, id domain.SandboxID) (*domain.Sandbo
 		}
 		return nil, err
 	}
+	downloadSpan()
 
 	cfg := record.Config
 	cfg.Snapshot.Path = snapshotBase
 
 	req := record.Request
+	launchSpan := m.trace(ctx, "Wake.Launch")
 	run, err := m.Runtime.Launch(ctx, &req, cfg)
 	if err != nil {
 		if m.Metrics != nil {
@@ -267,6 +282,7 @@ func (m *Manager) Wake(ctx context.Context, id domain.SandboxID) (*domain.Sandbo
 		}
 		return nil, fmt.Errorf("failed to wake sandbox: %w", err)
 	}
+	launchSpan()
 
 	m.mu.Lock()
 	delete(m.sleeping, id)
