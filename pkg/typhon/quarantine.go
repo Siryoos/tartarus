@@ -29,6 +29,7 @@ type QuarantineRequest struct {
 	Evidence       []Evidence
 	RequestedBy    string
 	AutoQuarantine bool
+	Hardened       bool
 }
 
 type QuarantineReason string

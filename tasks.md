@@ -21,7 +21,7 @@
 
 ### Observability and Security
 - [x] Grafana dashboards: real-time sandbox topology, resource usage heatmaps, error/latency SLOs; bundle with `docker-compose.observability.yml`.
-- [ ] Security hardening: hardened guest kernel option, seccomp profile generator with per-template defaults, automated template vulnerability scanning, and Vault/KMS-backed secret injection flow.
+- [x] Security hardening: hardened guest kernel option, seccomp profile generator with per-template defaults, automated template vulnerability scanning, and Vault/KMS-backed secret injection flow.
 
 ### CLI v2.0 (`cmd/tartarus`)
 - [ ] Implement interactive commands: `logs --follow` streaming from Hermes, `exec` attaching to running sandboxes, `inspect` detail view, snapshot create/list/delete, `init template`.

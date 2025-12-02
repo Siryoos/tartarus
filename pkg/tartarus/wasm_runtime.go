@@ -72,6 +72,9 @@ func (w *WasmRuntime) Launch(ctx context.Context, req *domain.SandboxRequest, cf
 	if modulePath == "" {
 		return nil, fmt.Errorf("no WASM module path specified in snapshot")
 	}
+	if _, err := os.Stat(modulePath); err != nil {
+		return nil, fmt.Errorf("WASM module not found at %s: %w", modulePath, err)
+	}
 
 	// Create log file
 	logPath := filepath.Join(instanceDir, "console.log")

@@ -74,6 +74,9 @@ func (h *HardenedQuarantineManager) Quarantine(ctx context.Context, req *Quarant
 		return nil, fmt.Errorf("isolation enforcement failed: %w", err)
 	}
 
+	// Set Hardened flag
+	req.Hardened = true
+
 	// Call base manager
 	record, err := h.base.Quarantine(ctx, req)
 	if err != nil {

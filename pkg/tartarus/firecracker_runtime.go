@@ -99,34 +99,24 @@ func (r *FirecrackerRuntime) Launch(ctx context.Context, req *domain.SandboxRequ
 
 	// Construct Kernel Args
 	// We want: console=ttyS0 reboot=k panic=1 pci=off init=/bin/sh -- -c "export VAR=VAL; exec cmd args..."
-	// Comprehensive security hardening parameters:
-	// - console=ttyS0: Serial console for logging
-	// - reboot=k: Reboot via keyboard controller
-	// - panic=1: Reboot 1 second after kernel panic
-	// - pci=off: Disable PCI (reduces attack surface in microVM)
-	// - randomize_kstack_offset=on: Randomize kernel stack offset (KASLR enhancement)
-	// - nosmt: Disable SMT/Hyper-threading (Spectre/MDS mitigation)
-	// - mitigations=auto: Enable all CPU vulnerability mitigations
-	// - audit=1: Enable kernel auditing
-	// - slub_debug=P: Enable SLUB memory poison on free
-	// - page_poison=1: Poison pages on free (detect use-after-free)
-	// - pti=on: Page Table Isolation (Meltdown mitigation)
-	// - slab_nomerge: Prevent slab merging (heap exploitation hardening)
-	// - init_on_alloc=1: Zero memory on allocation
-	// - init_on_free=1: Zero memory on free (defense in depth)
-	// - mds=full,nosmt: Full MDS mitigation with SMT disabled
-	// - l1tf=full,force: Full L1TF mitigation
-	// - spec_store_bypass_disable=on: Spectre v4 mitigation
-	// - tsx=off: Disable Intel TSX (TAA mitigation)
-	// - vsyscall=none: Disable legacy vsyscalls (attack surface reduction)
-	// - debugfs=off: Disable debugfs (information disclosure prevention)
-	// - oops=panic: Panic on kernel oops (fail-secure)
-	kernelArgs := "console=ttyS0 reboot=k panic=1 pci=off " +
+	// Standard kernel args (lighter, for performance)
+	standardKernelArgs := "console=ttyS0 reboot=k panic=1 pci=off " +
+		"randomize_kstack_offset=on audit=1 " +
+		"init_on_alloc=0 init_on_free=0 " + // Performance optimization
+		"oops=panic"
+
+	// Hardened kernel args (comprehensive security)
+	hardenedKernelArgs := "console=ttyS0 reboot=k panic=1 pci=off " +
 		"randomize_kstack_offset=on nosmt mitigations=auto audit=1 " +
 		"slub_debug=P page_poison=1 pti=on slab_nomerge " +
 		"init_on_alloc=1 init_on_free=1 " +
 		"mds=full,nosmt l1tf=full,force spec_store_bypass_disable=on " +
 		"tsx=off vsyscall=none debugfs=off oops=panic"
+
+	kernelArgs := standardKernelArgs
+	if req.Hardened {
+		kernelArgs = hardenedKernelArgs
+	}
 
 	if len(req.Command) > 0 {
 		// Build the shell script
@@ -152,9 +142,11 @@ func (r *FirecrackerRuntime) Launch(ctx context.Context, req *domain.SandboxRequ
 
 		// 1. Export Environment Variables
 		// Resolve secrets
+		kmsProvider, _ := cerberus.NewKMSSecretProvider(ctx, "us-east-1") // Default region, should be configurable
 		secretProvider := cerberus.NewCompositeSecretProvider(
 			cerberus.NewEnvSecretProvider(),
 			cerberus.NewVaultSecretProvider(),
+			kmsProvider,
 		)
 
 		for k, v := range req.Env {

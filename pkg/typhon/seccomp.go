@@ -116,3 +116,9 @@ func GetProfileForClass(class string) (*SeccompProfile, error) {
 		return GetQuarantineProfile()
 	}
 }
+
+// GenerateProfileForTemplate generates a seccomp profile for a specific template
+func GenerateProfileForTemplate(templateID string) (*SeccompProfile, error) {
+	gen := NewSeccompProfileGenerator()
+	return gen.GenerateProfile(templateID, nil)
+}
