@@ -11,8 +11,8 @@
 ### Cerberus (Auth Gateway)
 - [x] Implement the three heads: API keys (signed/rotatable), OAuth2/OIDC (code + client creds), and mutual TLS for agents with automated cert rotation.
 - [x] Enforce RBAC/tenant scoping in `pkg/cerberus` gateway/middleware and thread identity through `cmd/olympus-api` handlers.
-- [ ] Centralize audit logging and anomaly hooks to `pkg/hermes` with tamper-evident storage.
-- [ ] Secrets retrieval via Vault/KMS providers for tokens, client secrets, and signing keys.
+- [x] Centralize audit logging and anomaly hooks to `pkg/hermes` with tamper-evident storage.
+- [x] Secrets retrieval via Vault/KMS providers for tokens, client secrets, and signing keys.
 
 ### Charon (Request Ferry)
 - [ ] Production load balancer for Olympus instances with health checks, weighted/least-conn strategies, and consistent hashing for sticky sessions.

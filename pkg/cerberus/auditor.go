@@ -2,9 +2,10 @@ package cerberus
 
 import (
 	"context"
-	"log/slog"
+	"time"
 
 	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
+	"github.com/tartarus-sandbox/tartarus/pkg/hermes/audit"
 )
 
 // Auditor records access attempts for compliance and security monitoring.
@@ -12,57 +13,50 @@ type Auditor interface {
 	RecordAccess(ctx context.Context, entry *AuditEntry) error
 }
 
-// LogAuditor writes audit entries to structured logs.
-type LogAuditor struct {
-	logger *slog.Logger
+// HermesAuditor adapts Cerberus audit entries to Hermes audit events.
+type HermesAuditor struct {
+	auditor audit.Auditor
 }
 
-// NewLogAuditor creates an auditor that writes to logs.
-func NewLogAuditor(logger *slog.Logger) *LogAuditor {
-	return &LogAuditor{
-		logger: logger,
+// NewHermesAuditor creates a new auditor that delegates to Hermes.
+func NewHermesAuditor(a audit.Auditor) *HermesAuditor {
+	return &HermesAuditor{
+		auditor: a,
 	}
 }
 
-// RecordAccess logs the audit entry.
-func (a *LogAuditor) RecordAccess(ctx context.Context, entry *AuditEntry) error {
-	attrs := []slog.Attr{
-		slog.String("request_id", entry.RequestID),
-		slog.String("action", string(entry.Action)),
-		slog.String("resource_type", string(entry.Resource.Type)),
-		slog.String("resource_id", entry.Resource.ID),
-		slog.String("result", string(entry.Result)),
-		slog.Duration("latency", entry.Latency),
-		slog.String("source_ip", entry.SourceIP),
-		slog.String("user_agent", entry.UserAgent),
+// RecordAccess converts the entry and records it via Hermes.
+func (a *HermesAuditor) RecordAccess(ctx context.Context, entry *AuditEntry) error {
+	event := &audit.Event{
+		ID:        entry.RequestID, // Use RequestID as Event ID for correlation, or let Hermes generate one?
+		Timestamp: entry.Timestamp,
+		Action:    audit.Action(entry.Action),
+		Result:    audit.Result(entry.Result),
+		Resource: audit.Resource{
+			Type: string(entry.Resource.Type),
+			ID:   entry.Resource.ID,
+			Name: entry.Resource.Namespace, // Mapping Namespace to Name for now
+		},
+		SourceIP:     entry.SourceIP,
+		UserAgent:    entry.UserAgent,
+		RequestID:    entry.RequestID,
+		Latency:      entry.Latency,
+		ErrorMessage: entry.ErrorMessage,
 	}
 
 	if entry.Identity != nil {
-		attrs = append(attrs,
-			slog.String("identity_id", entry.Identity.ID),
-			slog.String("identity_type", string(entry.Identity.Type)),
-			slog.String("tenant_id", entry.Identity.TenantID),
-		)
+		event.Identity = &audit.Identity{
+			ID:       entry.Identity.ID,
+			Type:     string(entry.Identity.Type),
+			TenantID: entry.Identity.TenantID,
+		}
 	}
 
-	if entry.ErrorMessage != "" {
-		attrs = append(attrs, slog.String("error", entry.ErrorMessage))
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now()
 	}
 
-	level := slog.LevelInfo
-	message := "access granted"
-
-	switch entry.Result {
-	case AuditResultDenied:
-		level = slog.LevelWarn
-		message = "access denied"
-	case AuditResultError:
-		level = slog.LevelError
-		message = "access error"
-	}
-
-	a.logger.LogAttrs(ctx, level, message, attrs...)
-	return nil
+	return a.auditor.Record(ctx, event)
 }
 
 // MetricsAuditor emits metrics for access attempts.

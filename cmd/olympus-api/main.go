@@ -646,9 +646,35 @@ func main() {
 	}
 
 	// 1.5 Signed API Key Authenticator (for rotated keys)
-	// Uses EnvSecretProvider to resolve signing keys from CERBERUS_KEY_* env vars
-	secretProvider := cerberus.NewEnvSecretProvider()
-	authenticators = append(authenticators, cerberus.NewSignedAPIKeyAuthenticator(secretProvider))
+	// Uses SecretProvider to resolve signing keys
+	// Chain: Env -> Vault -> KMS
+	var secretProviders []cerberus.SecretProvider
+	secretProviders = append(secretProviders, cerberus.NewEnvSecretProvider())
+
+	if cfg.VaultAddress != "" {
+		vaultConfig := cerberus.VaultConfig{
+			Address:   cfg.VaultAddress,
+			Token:     cfg.VaultToken,
+			Namespace: cfg.VaultNamespace,
+		}
+		secretProviders = append(secretProviders, cerberus.NewRealVaultSecretProvider(vaultConfig))
+		logger.Info("Enabled Vault secret provider", "address", cfg.VaultAddress)
+	}
+
+	if cfg.KMSRegion != "" {
+		// KMS provider (actually SSM Parameter Store)
+		kmsProvider, err := cerberus.NewKMSSecretProvider(context.Background(), cfg.KMSRegion)
+		if err != nil {
+			logger.Error("Failed to initialize KMS secret provider", "error", err)
+			// Don't exit, just log error and continue without KMS
+		} else {
+			secretProviders = append(secretProviders, kmsProvider)
+			logger.Info("Enabled KMS/SSM secret provider", "region", cfg.KMSRegion)
+		}
+	}
+
+	compositeProvider := cerberus.NewCompositeSecretProvider(secretProviders...)
+	authenticators = append(authenticators, cerberus.NewSignedAPIKeyAuthenticator(compositeProvider))
 
 	// 2. OIDC Authenticator
 	if cfg.OIDCIssuerURL != "" && cfg.OIDCClientID != "" {

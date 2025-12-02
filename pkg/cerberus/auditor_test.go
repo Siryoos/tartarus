@@ -2,12 +2,11 @@ package cerberus
 
 import (
 	"context"
-	"log/slog"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
+	"github.com/tartarus-sandbox/tartarus/pkg/hermes/audit"
 )
 
 type MockMetrics struct {
@@ -18,10 +17,19 @@ func (m *MockMetrics) IncCounter(name string, value float64, labels ...hermes.La
 func (m *MockMetrics) ObserveHistogram(name string, value float64, labels ...hermes.Label) {}
 func (m *MockMetrics) SetGauge(name string, value float64, labels ...hermes.Label)         {}
 
-func TestLogAuditor(t *testing.T) {
+type MockHermesAuditor struct {
+	events []*audit.Event
+}
+
+func (m *MockHermesAuditor) Record(ctx context.Context, event *audit.Event) error {
+	m.events = append(m.events, event)
+	return nil
+}
+
+func TestHermesAuditor(t *testing.T) {
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	auditor := NewLogAuditor(logger)
+	mockAuditor := &MockHermesAuditor{}
+	auditor := NewHermesAuditor(mockAuditor)
 
 	identity := &Identity{
 		ID:       "test-user",
@@ -49,12 +57,16 @@ func TestLogAuditor(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// Test with denied result
-	entry.Result = AuditResultDenied
-	entry.ErrorMessage = "permission denied"
-	err = auditor.RecordAccess(ctx, entry)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+	if len(mockAuditor.events) != 1 {
+		t.Errorf("expected 1 event, got %d", len(mockAuditor.events))
+	}
+
+	event := mockAuditor.events[0]
+	if event.Action != audit.ActionCreate {
+		t.Errorf("expected action %s, got %s", audit.ActionCreate, event.Action)
+	}
+	if event.Identity.ID != "test-user" {
+		t.Errorf("expected identity ID test-user, got %s", event.Identity.ID)
 	}
 }
 
@@ -76,13 +88,13 @@ func TestNoopAuditor(t *testing.T) {
 
 func TestCompositeAuditor(t *testing.T) {
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	logAuditor := NewLogAuditor(logger)
+	mockAuditor := &MockHermesAuditor{}
+	hermesAuditor := NewHermesAuditor(mockAuditor)
 	metricsAuditor := NewMetricsAuditor(&MockMetrics{})
 	noopAuditor := NewNoopAuditor()
 
-	composite := NewCompositeAuditor(logAuditor, metricsAuditor, noopAuditor)
+	composite := NewCompositeAuditor(hermesAuditor, metricsAuditor, noopAuditor)
 
 	entry := &AuditEntry{
 		Timestamp: time.Now(),
@@ -98,9 +110,11 @@ func TestCompositeAuditor(t *testing.T) {
 
 	err := composite.RecordAccess(ctx, entry)
 	if err != nil {
-		// Composite auditor may return error if any child fails,
-		// but should continue processing all auditors
 		t.Logf("composite auditor returned error (expected): %v", err)
+	}
+
+	if len(mockAuditor.events) != 1 {
+		t.Errorf("expected 1 event in mock auditor, got %d", len(mockAuditor.events))
 	}
 }
 

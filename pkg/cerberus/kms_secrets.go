@@ -8,14 +8,14 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/kms"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
 )
 
-// KMSSecretProvider resolves secrets from AWS KMS
-// Format: kms:arn:aws:kms:region:account:key/key-id:secret-name
-// Example: kms:arn:aws:kms:us-east-1:123456789012:key/abc-123:db-password
+// KMSSecretProvider resolves secrets from AWS SSM Parameter Store (which uses KMS)
+// Format: kms:parameter-name
+// Example: kms:/tartarus/prod/db-password
 type KMSSecretProvider struct {
-	client *kms.Client
+	client *ssm.Client
 	cache  map[string]cachedSecret
 	mu     sync.RWMutex
 	ttl    time.Duration
@@ -27,21 +27,21 @@ type cachedSecret struct {
 }
 
 // NewKMSSecretProvider creates a new KMS secret provider with default AWS config
-func NewKMSSecretProvider(ctx context.Context) (*KMSSecretProvider, error) {
-	cfg, err := config.LoadDefaultConfig(ctx)
+func NewKMSSecretProvider(ctx context.Context, region string) (*KMSSecretProvider, error) {
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
 	if err != nil {
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
 	return &KMSSecretProvider{
-		client: kms.NewFromConfig(cfg),
+		client: ssm.NewFromConfig(cfg),
 		cache:  make(map[string]cachedSecret),
 		ttl:    15 * time.Minute, // Default TTL for cached secrets
 	}, nil
 }
 
-// NewKMSSecretProviderWithClient creates a provider with a custom KMS client
-func NewKMSSecretProviderWithClient(client *kms.Client, ttl time.Duration) *KMSSecretProvider {
+// NewKMSSecretProviderWithClient creates a provider with a custom SSM client
+func NewKMSSecretProviderWithClient(client *ssm.Client, ttl time.Duration) *KMSSecretProvider {
 	if ttl == 0 {
 		ttl = 15 * time.Minute
 	}
@@ -52,9 +52,8 @@ func NewKMSSecretProviderWithClient(client *kms.Client, ttl time.Duration) *KMSS
 	}
 }
 
-// Resolve decrypts a secret from KMS
-// Format: kms:arn:aws:kms:region:account:key/key-id:secret-name
-// The ciphertext is the base64-encoded encrypted secret
+// Resolve fetches a secret from AWS SSM Parameter Store
+// Format: kms:parameter-name
 func (p *KMSSecretProvider) Resolve(ctx context.Context, ref string) (string, error) {
 	if len(ref) < 5 || ref[:4] != "kms:" {
 		return "", fmt.Errorf("unsupported secret reference format: %s", ref)
@@ -70,61 +69,35 @@ func (p *KMSSecretProvider) Resolve(ctx context.Context, ref string) (string, er
 	}
 	p.mu.RUnlock()
 
-	// Parse ref format: kms:arn:...:key/key-id:secret-name
-	// For simplicity, we'll expect the entire ref after "kms:" to be the key ARN
-	// and we'll use a mock encrypted value or parameter store lookup
-	// In a real implementation, you would:
-	// 1. Store encrypted secrets in Parameter Store or Secrets Manager
-	// 2. Use KMS to decrypt them
-	// 3. Or directly call KMS Decrypt with ciphertext
+	// Parse ref format: kms:parameter-name
+	paramName := ref[4:] // Remove "kms:" prefix
 
-	// For now, this is a stub showing the structure
-	// In production, you'd:
-	// - Parse the ARN to extract the key ID
-	// - Retrieve the encrypted secret from somewhere (Parameter Store, S3, etc.)
-	// - Call KMS Decrypt
+	// Fetch from SSM
+	input := &ssm.GetParameterInput{
+		Name:           aws.String(paramName),
+		WithDecryption: aws.Bool(true),
+	}
 
-	keyARN := ref[4:] // Remove "kms:" prefix
-	// Example: arn:aws:kms:us-east-1:123456789012:key/abc-123:secretname
+	result, err := p.client.GetParameter(ctx, input)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch parameter %s: %w", paramName, err)
+	}
 
-	// This is a simplified implementation
-	// In reality, you'd need to:
-	// 1. Parse the ARN and secret name
-	// 2. Fetch the encrypted secret from Parameter Store or Secrets Manager
-	// 3. Decrypt it using KMS
+	if result.Parameter == nil || result.Parameter.Value == nil {
+		return "", fmt.Errorf("parameter %s not found or empty", paramName)
+	}
 
-	// For demonstration, we'll return a mock decrypted value
-	// Real implementation would call kms.Decrypt
-	_ = keyARN
-
-	// Mock decryption - in production, use actual KMS Decrypt API
-	decryptedValue := fmt.Sprintf("decrypted-secret-from-%s", keyARN)
+	value := *result.Parameter.Value
 
 	// Cache the result
 	p.mu.Lock()
 	p.cache[ref] = cachedSecret{
-		value:     decryptedValue,
+		value:     value,
 		timestamp: time.Now(),
 	}
 	p.mu.Unlock()
 
-	return decryptedValue, nil
-}
-
-// RealResolve is an example of how a real KMS decrypt would work
-// This is commented out but shows the proper approach
-func (p *KMSSecretProvider) realResolve(ctx context.Context, ciphertext []byte, keyID string) (string, error) {
-	input := &kms.DecryptInput{
-		CiphertextBlob: ciphertext,
-		KeyId:          aws.String(keyID),
-	}
-
-	result, err := p.client.Decrypt(ctx, input)
-	if err != nil {
-		return "", fmt.Errorf("failed to decrypt secret: %w", err)
-	}
-
-	return string(result.Plaintext), nil
+	return value, nil
 }
 
 // ClearCache clears all cached secrets

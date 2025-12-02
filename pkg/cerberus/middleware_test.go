@@ -2,10 +2,8 @@ package cerberus
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 )
 
@@ -154,12 +152,12 @@ func TestDefaultResourceMapper(t *testing.T) {
 }
 
 func TestHTTPMiddleware(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	// logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	// Setup gateway
 	auth := NewSimpleAPIKeyAuthenticator("valid-key")
 	authz := NewAllowAllAuthorizer()
-	audit := NewLogAuditor(logger)
+	audit := NewNoopAuditor()
 	gateway := NewGateway(auth, authz, audit)
 
 	// Setup middleware
@@ -231,12 +229,12 @@ func TestHTTPMiddleware(t *testing.T) {
 }
 
 func TestHTTPMiddleware_Authorization(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	// logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	// Setup gateway with deny-all authorizer
 	auth := NewSimpleAPIKeyAuthenticator("valid-key")
 	authz := NewDenyAllAuthorizer() // Deny all requests
-	audit := NewLogAuditor(logger)
+	audit := NewNoopAuditor()
 	gateway := NewGateway(auth, authz, audit)
 
 	extractor := NewBearerTokenExtractor()

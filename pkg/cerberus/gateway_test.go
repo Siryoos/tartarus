@@ -3,19 +3,17 @@ package cerberus
 import (
 	"context"
 	"errors"
-	"log/slog"
-	"os"
 	"testing"
 )
 
 func TestGateway(t *testing.T) {
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	// logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	// Setup components
 	auth := NewSimpleAPIKeyAuthenticator("test-key")
 	authz := NewAllowAllAuthorizer()
-	audit := NewLogAuditor(logger)
+	audit := NewNoopAuditor()
 
 	gateway := NewGateway(auth, authz, audit)
 
@@ -58,11 +56,11 @@ func TestGateway(t *testing.T) {
 
 func TestGateway_AuthenticationFailure(t *testing.T) {
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	// logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	auth := NewSimpleAPIKeyAuthenticator("correct-key")
 	authz := NewAllowAllAuthorizer()
-	audit := NewLogAuditor(logger)
+	audit := NewNoopAuditor()
 
 	gateway := NewGateway(auth, authz, audit)
 
@@ -81,12 +79,12 @@ func TestGateway_AuthenticationFailure(t *testing.T) {
 
 func TestGateway_AuthorizationFailure(t *testing.T) {
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	// logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	auth := NewSimpleAPIKeyAuthenticator("test-key")
 	// Use deny-all authorizer
 	authz := NewDenyAllAuthorizer()
-	audit := NewLogAuditor(logger)
+	audit := NewNoopAuditor()
 
 	gateway := NewGateway(auth, authz, audit)
 

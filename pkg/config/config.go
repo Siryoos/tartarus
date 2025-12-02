@@ -39,6 +39,12 @@ type Config struct {
 	TLSClientAuth  string // "none", "request", "require", "verify-if-given", "require-verify"
 	TLSCAFile      string
 
+	// Secrets Management
+	VaultAddress   string
+	VaultToken     string
+	VaultNamespace string
+	KMSRegion      string
+
 	// Runtime Configuration (Phase 6: Unified Runtime + WASM)
 	RuntimeType       string // "firecracker", "wasm", "gvisor", "auto"
 	RuntimeAutoSelect bool   // Enable automatic runtime selection
@@ -79,6 +85,12 @@ func Load() *Config {
 		TLSKeyFile:     getEnv("TLS_KEY_FILE", ""),
 		TLSClientAuth:  getEnv("TLS_CLIENT_AUTH", "none"),
 		TLSCAFile:      getEnv("TLS_CA_FILE", ""),
+
+		// Secrets Management
+		VaultAddress:   getEnv("VAULT_ADDR", ""),
+		VaultToken:     getEnv("VAULT_TOKEN", ""),
+		VaultNamespace: getEnv("VAULT_NAMESPACE", ""),
+		KMSRegion:      getEnv("AWS_REGION", getEnv("S3_REGION", "us-east-1")), // Default to S3 region if not set
 
 		// Runtime Configuration (Phase 6: Unified Runtime + WASM)
 		RuntimeType:       getEnv("RUNTIME_TYPE", "firecracker"),
