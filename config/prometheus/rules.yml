@@ -1,0 +1,11 @@
+groups:
+  - name: tartarus-alerts
+    rules:
+      - alert: SlowColdStart
+        expr: histogram_quantile(0.99, rate(agent_launch_latency_seconds_bucket[5m])) > 0.2
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow cold starts detected"
+          description: "99th percentile of launch latency is > 200ms"

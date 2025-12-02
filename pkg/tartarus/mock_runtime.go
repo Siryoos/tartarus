@@ -23,7 +23,15 @@ type MockRuntime struct {
 	waiters  map[domain.SandboxID]chan struct{}
 	// ShutdownDelay allows tests to simulate slow graceful exits.
 	ShutdownDelay time.Duration
+	// StartDuration allows tests to simulate startup latency.
+	StartDuration time.Duration
 	mu            sync.RWMutex
+}
+
+func (r *MockRuntime) SetStartDuration(d time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.StartDuration = d
 }
 
 func NewMockRuntime(logger *slog.Logger) *MockRuntime {
@@ -41,8 +49,15 @@ func (r *MockRuntime) Launch(ctx context.Context, req *domain.SandboxRequest, cf
 	r.Logger.Info("Launching sandbox", "id", req.ID, "template", req.Template)
 
 	// Simulate startup delay
+	r.mu.RLock()
+	delay := r.StartDuration
+	r.mu.RUnlock()
+	if delay == 0 {
+		delay = 500 * time.Millisecond
+	}
+
 	select {
-	case <-time.After(500 * time.Millisecond):
+	case <-time.After(delay):
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}

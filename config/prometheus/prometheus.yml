@@ -6,3 +6,6 @@ scrape_configs:
   - job_name: 'olympus'
     static_configs:
       - targets: ['host.docker.internal:8080']
+
+rule_files:
+  - "rules.yml"
