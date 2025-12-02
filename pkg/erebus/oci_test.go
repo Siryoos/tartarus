@@ -2,7 +2,6 @@ package erebus
 
 import (
 	"archive/tar"
-	"bytes"
 	"context"
 	"io"
 	"os"
@@ -85,12 +84,12 @@ func TestOCIBuilder_Assemble(t *testing.T) {
 	img, err := mutate.AppendLayers(empty.Image, layer)
 	assert.NoError(t, err)
 
-	store := new(MockStore)
-	store.On("Exists", mock.Anything, mock.Anything).Return(false, nil)
-	store.On("Put", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		r := args.Get(2).(io.Reader)
-		io.Copy(io.Discard, r)
-	}).Return(nil)
+	cacheDir, err := os.MkdirTemp("", "erebus-oci-cache")
+	assert.NoError(t, err)
+	defer os.RemoveAll(cacheDir)
+
+	store, err := NewLocalStore(cacheDir)
+	assert.NoError(t, err)
 
 	logger := new(MockLogger)
 	logger.On("Info", mock.Anything, mock.Anything, mock.Anything).Return()
@@ -152,13 +151,23 @@ func TestOCIBuilder_Assemble_CacheHit(t *testing.T) {
 	// Get the compressed content of the layer to serve from mock store
 	compressed, err := layer.Compressed()
 	assert.NoError(t, err)
-	compressedBytes, err := io.ReadAll(compressed)
-	assert.NoError(t, err)
-	compressed.Close()
+	// We don't need to read it into bytes, just pass the reader to Put
+	// But Put consumes the reader, so we need to be careful if we need it again.
+	// In this test, we just Put it once.
 
-	store := new(MockStore)
-	store.On("Exists", mock.Anything, mock.Anything).Return(true, nil)
-	store.On("Get", mock.Anything, mock.Anything).Return(io.NopCloser(bytes.NewReader(compressedBytes)), nil)
+	cacheDir, err := os.MkdirTemp("", "erebus-oci-cache-hit")
+	assert.NoError(t, err)
+	defer os.RemoveAll(cacheDir)
+
+	store, err := NewLocalStore(cacheDir)
+	assert.NoError(t, err)
+
+	// Pre-populate cache
+	digest, err := layer.Digest()
+	assert.NoError(t, err)
+	key := "layers/" + digest.Hex
+	err = store.Put(context.Background(), key, compressed)
+	assert.NoError(t, err)
 
 	logger := new(MockLogger)
 	logger.On("Info", mock.Anything, mock.Anything, mock.Anything).Return()
@@ -226,12 +235,12 @@ func TestOCIBuilder_Assemble_Scan(t *testing.T) {
 	img, err := mutate.AppendLayers(empty.Image, layer)
 	assert.NoError(t, err)
 
-	store := new(MockStore)
-	store.On("Exists", mock.Anything, mock.Anything).Return(false, nil)
-	store.On("Put", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		r := args.Get(2).(io.Reader)
-		io.Copy(io.Discard, r)
-	}).Return(nil)
+	cacheDir, err := os.MkdirTemp("", "erebus-oci-scan-cache")
+	assert.NoError(t, err)
+	defer os.RemoveAll(cacheDir)
+
+	store, err := NewLocalStore(cacheDir)
+	assert.NoError(t, err)
 
 	logger := new(MockLogger)
 	logger.On("Info", mock.Anything, mock.Anything, mock.Anything).Return()

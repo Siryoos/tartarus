@@ -10,12 +10,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
+	"golang.org/x/sync/errgroup"
 )
 
 // ImageFetcher is a function that fetches an image.
@@ -78,82 +80,138 @@ func (b *OCIBuilder) Assemble(ctx context.Context, ref string, outputDir string)
 		b.Logger.Info(ctx, "Extracting layers", map[string]any{"count": len(layers), "output_dir": outputDir})
 	}
 
-	// Apply layers in order
+	// Prepare layer cache in parallel
+	// We use a map to store the ready status of each layer
+	// But we need to extract them in order.
+	// So we'll trigger downloads for all, and then wait for them in order.
+
+	type layerResult struct {
+		index int
+		err   error
+	}
+
+	// WaitGroup to wait for all downloads (for cleanup/error reporting)
+	// But for extraction, we just need to know if Layer I is ready.
+
+	// Let's use a slice of channels, one for each layer.
+	// When layer I is downloaded, we close its channel or send a signal.
+	layerReady := make([]chan error, len(layers))
+	for i := range layers {
+		layerReady[i] = make(chan error, 1)
+	}
+
+	g, ctx := errgroup.WithContext(ctx)
+
+	// Start downloads
 	for i, layer := range layers {
-		digest, err := layer.Digest()
-		if err != nil {
-			return fmt.Errorf("getting layer digest: %w", err)
-		}
-
-		if b.Logger != nil {
-			b.Logger.Info(ctx, "Processing layer", map[string]any{"index": i, "digest": digest.String()})
-		}
-
-		// Check if we have the layer cached in Store
-		key := fmt.Sprintf("layers/%s", digest.Hex)
-		exists, err := b.Store.Exists(ctx, key)
-		if err != nil {
-			// Log error but continue? Or fail?
-			// For now, fail as it might indicate store issues.
-			return fmt.Errorf("checking layer cache: %w", err)
-		}
-
-		var rc io.ReadCloser
-		if exists {
-			if b.Logger != nil {
-				b.Logger.Info(ctx, "Cache hit for layer", map[string]any{"digest": digest.String()})
-			}
-			cached, err := b.Store.Get(ctx, key)
+		i := i
+		layer := layer
+		g.Go(func() error {
+			digest, err := layer.Digest()
 			if err != nil {
-				return fmt.Errorf("getting cached layer: %w", err)
-			}
-			rc = cached
-		} else {
-			if b.Logger != nil {
-				b.Logger.Info(ctx, "Cache miss for layer, downloading", map[string]any{"digest": digest.String()})
-			}
-			// Get compressed stream
-			compressed, err := layer.Compressed()
-			if err != nil {
-				return fmt.Errorf("getting compressed layer content: %w", err)
+				layerReady[i] <- err
+				return err
 			}
 
-			// Tee to store
-			pr, pw := io.Pipe()
-			go func() {
-				if err := b.Store.Put(ctx, key, pr); err != nil {
-					if b.Logger != nil {
-						b.Logger.Error(ctx, "Failed to cache layer", map[string]any{"digest": digest.String(), "error": err.Error()})
-					}
-					pr.CloseWithError(err) // This will cause the reader to fail
-				} else {
-					pr.Close()
+			key := fmt.Sprintf("layers/%s", digest.Hex)
+
+			// Check if exists
+			exists, err := b.Store.Exists(ctx, key)
+			if err != nil {
+				layerReady[i] <- err
+				return err
+			}
+
+			if !exists {
+				if b.Logger != nil {
+					b.Logger.Info(ctx, "Cache miss for layer, downloading", map[string]any{"digest": digest.String()})
 				}
-			}()
+				compressed, err := layer.Compressed()
+				if err != nil {
+					layerReady[i] <- err
+					return err
+				}
+				defer compressed.Close()
 
-			// Wrap compressed with TeeReader to write to pw
-			// We need to close pw when we are done reading from the TeeReader
-			rc = &readCloserWrapper{
-				Reader: io.TeeReader(compressed, pw),
-				Closer: func() error {
-					pw.Close()
-					return compressed.Close()
-				},
+				if err := b.Store.Put(ctx, key, compressed); err != nil {
+					layerReady[i] <- err
+					return err
+				}
+			} else {
+				if b.Logger != nil {
+					b.Logger.Info(ctx, "Cache hit for layer", map[string]any{"digest": digest.String()})
+				}
+			}
+
+			// Signal ready
+			layerReady[i] <- nil
+			return nil
+		})
+	}
+
+	// Start extraction loop (sequential)
+	// We run this in the main goroutine (or another one, but we need to block Assemble anyway)
+	// We wait for layer 0, extract, then layer 1, etc.
+
+	extractErr := func() error {
+		for i, layer := range layers {
+			// Wait for download
+			select {
+			case err := <-layerReady[i]:
+				if err != nil {
+					return fmt.Errorf("layer %d download failed: %w", i, err)
+				}
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+
+			// Now extract
+			digest, _ := layer.Digest() // Should be cached now
+			key := fmt.Sprintf("layers/%s", digest.Hex)
+
+			rc, err := b.Store.Get(ctx, key)
+			if err != nil {
+				return fmt.Errorf("getting cached layer %s: %w", digest, err)
+			}
+
+			// Decompress
+			gzipReader, err := gzip.NewReader(rc)
+			if err != nil {
+				rc.Close()
+				return fmt.Errorf("creating gzip reader: %w", err)
+			}
+
+			err = untar(gzipReader, outputDir)
+			gzipReader.Close()
+			rc.Close()
+
+			if err != nil {
+				return fmt.Errorf("extracting layer %s: %w", digest, err)
+			}
+
+			if b.Logger != nil {
+				b.Logger.Info(ctx, "Extracted layer", map[string]any{"index": i, "digest": digest.String()})
 			}
 		}
+		return nil
+	}()
 
-		// Decompress
-		gzipReader, err := gzip.NewReader(rc)
-		if err != nil {
-			rc.Close()
-			return fmt.Errorf("creating gzip reader: %w", err)
+	// Wait for downloads to finish (should be done or cancelled)
+	if err := g.Wait(); err != nil {
+		// If download failed, extractErr likely already caught it or will be cancelled
+		// But we return the first error
+		if extractErr == nil {
+			return err
 		}
-		defer gzipReader.Close()
-		defer rc.Close()
+	}
 
-		if err := untar(gzipReader, outputDir); err != nil {
-			return fmt.Errorf("extracting layer %s: %w", digest, err)
-		}
+	if extractErr != nil {
+		return extractErr
+	}
+
+	// Inject Init
+	if err := b.InjectInit(ctx, outputDir); err != nil {
+		return fmt.Errorf("injecting init: %w", err)
 	}
 
 	// Scan the extracted directory
@@ -161,6 +219,40 @@ func (b *OCIBuilder) Assemble(ctx context.Context, ref string, outputDir string)
 		if err := b.Scanner.Scan(ctx, outputDir); err != nil {
 			return fmt.Errorf("scanning extracted image: %w", err)
 		}
+	}
+
+	return nil
+}
+
+// InjectInit injects the init binary into the rootfs.
+func (b *OCIBuilder) InjectInit(ctx context.Context, outputDir string) error {
+	// TODO: Locate the actual init binary. For now, we'll look for "init" in the current directory
+	// or just skip if not found, but log it.
+	// In production, this should come from a configured path or embedded asset.
+
+	initPath := "init" // Placeholder
+	if _, err := os.Stat(initPath); os.IsNotExist(err) {
+		if b.Logger != nil {
+			b.Logger.Info(ctx, "Init binary not found, skipping injection", map[string]any{"path": initPath, "level": "warn"})
+		}
+		return nil
+	}
+
+	dest := filepath.Join(outputDir, "init")
+	srcFile, err := os.Open(initPath)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+
+	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		return err
 	}
 
 	return nil
@@ -226,6 +318,13 @@ func calculateDirSize(path string) (int64, error) {
 func untar(r io.Reader, dest string) error {
 	tr := tar.NewReader(r)
 
+	cleanDest := filepath.Clean(dest) + string(os.PathSeparator)
+
+	// Cache created directories to avoid MkdirAll calls
+	createdDirs := make(map[string]bool)
+	createdDirs[dest] = true
+	createdDirs[filepath.Clean(dest)] = true
+
 	for {
 		header, err := tr.Next()
 		if err == io.EOF {
@@ -237,17 +336,32 @@ func untar(r io.Reader, dest string) error {
 
 		target := filepath.Join(dest, header.Name)
 
-		// Sanitize path to prevent Zip Slip (though unlikely with standard OCI images, good practice)
-		if !filepath.HasPrefix(target, filepath.Clean(dest)+string(os.PathSeparator)) {
+		// Optimized Zip Slip check
+		// filepath.Join calls Clean, so target is clean.
+		// We just need to check prefix.
+		if target != filepath.Clean(dest) && !strings.HasPrefix(target, cleanDest) {
 			return fmt.Errorf("illegal file path: %s", target)
 		}
 
 		switch header.Typeflag {
 		case tar.TypeDir:
+			if createdDirs[target] {
+				continue
+			}
 			if err := os.MkdirAll(target, 0755); err != nil {
 				return err
 			}
+			createdDirs[target] = true
 		case tar.TypeReg:
+			// Ensure parent dir exists
+			dir := filepath.Dir(target)
+			if !createdDirs[dir] {
+				if err := os.MkdirAll(dir, 0755); err != nil {
+					return err
+				}
+				createdDirs[dir] = true
+			}
+
 			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
 			if err != nil {
 				return err
@@ -258,12 +372,16 @@ func untar(r io.Reader, dest string) error {
 			}
 			f.Close()
 		case tar.TypeSymlink:
-			// For now, just create the symlink.
-			// Note: This might fail if the target doesn't exist yet, but standard tar behavior handles this.
-			// We might need to handle hardlinks too.
+			// Ensure parent dir exists
+			dir := filepath.Dir(target)
+			if !createdDirs[dir] {
+				if err := os.MkdirAll(dir, 0755); err != nil {
+					return err
+				}
+				createdDirs[dir] = true
+			}
+
 			if err := os.Symlink(header.Linkname, target); err != nil {
-				// Ignore existence errors for now? No, symlink creation shouldn't fail if target is missing.
-				// But if the file already exists (e.g. overwritten by a later layer?), we should remove it first.
 				os.Remove(target)
 				if err := os.Symlink(header.Linkname, target); err != nil {
 					return err

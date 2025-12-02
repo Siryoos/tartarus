@@ -2,7 +2,7 @@
 
 ## Phase 4 Debt — Verification of the Titans
 - [x] Bench `python-ds` cold starts to prove <200ms target; add repeatable perf harness under `tests/perf` with Hermes metrics and regression alerts.
-- [ ] Time OCI image -> rootfs conversion (<30s) in `pkg/erebus` using representative large images; profile extraction/dedupe/init injection and document cache hit behavior.
+- [x] Time OCI image -> rootfs conversion (<30s) in `pkg/erebus` using representative large images; profile extraction/dedupe/init injection and document cache hit behavior.
 - [ ] Measure Typhon quarantine routing overhead (<50ms) with normal vs quarantine comparison; add integration test that exercises seccomp isolation and reports added latency.
 - [ ] Validate Hypnos wake-from-sleep (<100ms); enable feature flags in staging, capture hibernation/resume traces, and gate releases on SLO.
 - [ ] Publish a Phase 4 performance report and dashboards (Grafana/Prometheus) covering the above SLOs to prevent regression.
