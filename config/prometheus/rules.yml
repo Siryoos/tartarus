@@ -9,3 +9,181 @@ groups:
         annotations:
           summary: "Slow cold starts detected"
           description: "99th percentile of launch latency is > 200ms"
+
+  - name: phase4-slo-alerts
+    rules:
+      # Python-DS Cold Start SLO (<200ms)
+      - alert: PythonDSColdStartSLOViolation
+        expr: histogram_quantile(0.99, rate(perf_python_ds_cold_start_seconds_bucket[5m])) > 0.2
+        for: 5m
+        labels:
+          severity: critical
+          slo: python-ds-cold-start
+          phase: 4
+        annotations:
+          summary: "Python-DS cold start SLO violation"
+          description: "P99 cold start latency {{ $value | printf \"%.3f\" }}s exceeds 200ms target"
+
+      - alert: PythonDSColdStartDegraded
+        expr: histogram_quantile(0.95, rate(perf_python_ds_cold_start_seconds_bucket[5m])) > 0.15
+        for: 5m
+        labels:
+          severity: warning
+          slo: python-ds-cold-start
+          phase: 4
+        annotations:
+          summary: "Python-DS cold start performance degraded"
+          description: "P95 cold start latency {{ $value | printf \"%.3f\" }}s approaching 200ms target"
+
+      # OCI Conversion SLO (<30s)
+      - alert: OCIConversionSLOViolation
+        expr: histogram_quantile(0.99, rate(perf_erebus_oci_conversion_seconds_bucket[5m])) > 30
+        for: 5m
+        labels:
+          severity: critical
+          slo: oci-conversion
+          phase: 4
+        annotations:
+          summary: "OCI image conversion SLO violation"
+          description: "P99 conversion time {{ $value | printf \"%.1f\" }}s exceeds 30s target"
+
+      - alert: OCIConversionDegraded
+        expr: histogram_quantile(0.95, rate(perf_erebus_oci_conversion_seconds_bucket[5m])) > 25
+        for: 5m
+        labels:
+          severity: warning
+          slo: oci-conversion
+          phase: 4
+        annotations:
+          summary: "OCI image conversion performance degraded"
+          description: "P95 conversion time {{ $value | printf \"%.1f\" }}s approaching 30s target"
+
+      - alert: LowCacheHitRatio
+        expr: avg(erebus_cache_hit_ratio) < 50
+        for: 10m
+        labels:
+          severity: warning
+          component: erebus
+          phase: 4
+        annotations:
+          summary: "Low layer cache hit ratio"
+          description: "Cache hit ratio {{ $value | printf \"%.1f\" }}% is below 50%"
+
+      # Typhon Quarantine Routing SLO (<50ms overhead)
+      - alert: TyphonQuarantineOverheadSLOViolation
+        expr: |
+          (histogram_quantile(0.99, rate(perf_typhon_quarantine_routing_seconds_bucket[5m])) -
+           histogram_quantile(0.99, rate(perf_typhon_normal_routing_seconds_bucket[5m]))) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          slo: typhon-quarantine-overhead
+          phase: 4
+        annotations:
+          summary: "Typhon quarantine routing overhead SLO violation"
+          description: "Quarantine routing overhead exceeds 50ms target"
+
+      - alert: TyphonRoutingDegraded
+        expr: histogram_quantile(0.99, rate(perf_typhon_decision_path_seconds_bucket[5m])) > 0.04
+        for: 5m
+        labels:
+          severity: warning
+          slo: typhon-quarantine-overhead
+          phase: 4
+        annotations:
+          summary: "Typhon routing performance degraded"
+          description: "Decision path latency approaching 50ms threshold"
+
+      # Hypnos Wake SLO (<100ms)
+      - alert: HypnosWakeSLOViolation
+        expr: histogram_quantile(0.99, rate(perf_hypnos_wake_seconds_bucket[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          slo: hypnos-wake
+          phase: 4
+        annotations:
+          summary: "Hypnos wake-from-sleep SLO violation"
+          description: "P99 wake latency {{ $value | printf \"%.3f\" }}s exceeds 100ms target"
+
+      - alert: HypnosWakeDegraded
+        expr: histogram_quantile(0.95, rate(perf_hypnos_wake_seconds_bucket[5m])) > 0.08
+        for: 5m
+        labels:
+          severity: warning
+          slo: hypnos-wake
+          phase: 4
+        annotations:
+          summary: "Hypnos wake performance degraded"
+          description: "P95 wake latency approaching 100ms target"
+
+      - alert: HypnosHighErrorRate
+        expr: sum(rate(hypnos_errors_total[5m])) / sum(rate(hypnos_wake_total[5m])) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          component: hypnos
+          phase: 4
+        annotations:
+          summary: "High Hypnos error rate"
+          description: "Error rate {{ $value | printf \"%.2f\" }}% exceeds 1% threshold"
+
+      # General Phase 4 Health
+      - alert: Phase4SLOHealthDegraded
+        expr: |
+          (
+            (histogram_quantile(0.99, rate(perf_python_ds_cold_start_seconds_bucket[5m])) > 0.18) +
+            (histogram_quantile(0.99, rate(perf_erebus_oci_conversion_seconds_bucket[5m])) > 28) +
+            (histogram_quantile(0.99, rate(perf_hypnos_wake_seconds_bucket[5m])) > 0.09)
+          ) >= 2
+        for: 10m
+        labels:
+          severity: warning
+          phase: 4
+        annotations:
+          summary: "Multiple Phase 4 SLOs approaching thresholds"
+          description: "Two or more SLO metrics are approaching their limits"
+
+  - name: phase4-recording-rules
+    rules:
+      # Recording rules for faster SLO calculations
+      - record: phase4:python_ds_cold_start_p99:5m
+        expr: histogram_quantile(0.99, rate(perf_python_ds_cold_start_seconds_bucket[5m]))
+
+      - record: phase4:python_ds_cold_start_p95:5m
+        expr: histogram_quantile(0.95, rate(perf_python_ds_cold_start_seconds_bucket[5m]))
+
+      - record: phase4:oci_conversion_p99:5m
+        expr: histogram_quantile(0.99, rate(perf_erebus_oci_conversion_seconds_bucket[5m]))
+
+      - record: phase4:typhon_overhead_p99:5m
+        expr: |
+          histogram_quantile(0.99, rate(perf_typhon_quarantine_routing_seconds_bucket[5m])) -
+          histogram_quantile(0.99, rate(perf_typhon_normal_routing_seconds_bucket[5m]))
+
+      - record: phase4:hypnos_wake_p99:5m
+        expr: histogram_quantile(0.99, rate(perf_hypnos_wake_seconds_bucket[5m]))
+
+      # SLO compliance percentages
+      - record: phase4:slo_compliance:python_ds
+        expr: |
+          (histogram_quantile(0.99, rate(perf_python_ds_cold_start_seconds_bucket[5m])) <= 0.2) * 100
+
+      - record: phase4:slo_compliance:oci_conversion
+        expr: |
+          (histogram_quantile(0.99, rate(perf_erebus_oci_conversion_seconds_bucket[5m])) <= 30) * 100
+
+      - record: phase4:slo_compliance:typhon_quarantine
+        expr: |
+          ((histogram_quantile(0.99, rate(perf_typhon_quarantine_routing_seconds_bucket[5m])) -
+            histogram_quantile(0.99, rate(perf_typhon_normal_routing_seconds_bucket[5m]))) <= 0.05) * 100
+
+      - record: phase4:slo_compliance:hypnos_wake
+        expr: |
+          (histogram_quantile(0.99, rate(perf_hypnos_wake_seconds_bucket[5m])) <= 0.1) * 100
+
+      # Overall Phase 4 SLO score
+      - record: phase4:overall_slo_score
+        expr: |
+          (phase4:slo_compliance:python_ds + phase4:slo_compliance:oci_conversion +
+           phase4:slo_compliance:typhon_quarantine + phase4:slo_compliance:hypnos_wake) / 4
