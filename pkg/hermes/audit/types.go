@@ -16,6 +16,7 @@ const (
 	ActionRead       Action = "read"
 	ActionExecute    Action = "execute"
 	ActionPermission Action = "permission"
+	ActionTerminate  Action = "terminate"
 )
 
 // Result represents the outcome of the action.

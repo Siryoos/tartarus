@@ -37,7 +37,7 @@
 - [x] Seasonal schedules with budget caps and Hypnos integration for hibernation cycles.
 
 ### Thanatos (Graceful Termination)
-- [ ] Graceful shutdown controller with checkpoint/export before kill; policy-driven grace windows; integration with Erinyes enforcement and Hermes audit.
+- [x] Graceful shutdown controller with checkpoint/export before kill; policy-driven grace windows; integration with Erinyes enforcement and Hermes audit.
 - [ ] User/API surface for deferred termination and resume-from-checkpoint flows.
 
 ### Kampe (Legacy Runtime)

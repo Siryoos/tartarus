@@ -19,6 +19,11 @@ type PollFury struct {
 	NetworkStats NetworkStatsProvider
 	Interval     time.Duration
 
+	// GracefulKillHook is called before force killing a sandbox.
+	// If it returns true, the sandbox was gracefully terminated and no kill is needed.
+	// If it returns false, proceed with force kill.
+	GracefulKillHook func(ctx context.Context, id domain.SandboxID, reason string) bool
+
 	mu     sync.Mutex
 	active map[domain.SandboxID]context.CancelFunc
 }
@@ -195,9 +200,34 @@ func (p *PollFury) checkAndEnforce(ctx context.Context, run *domain.SandboxRun, 
 func (p *PollFury) killForViolation(ctx context.Context, runID domain.SandboxID, reason string, fields map[string]any) {
 	// Log the violation
 	fields["reason"] = reason
-	p.Logger.Error(ctx, "Killing sandbox for policy violation", fields)
+	p.Logger.Error(ctx, "Policy violation detected", fields)
 
-	// Emit metrics
+	// Try graceful termination first if hook is configured
+	if p.GracefulKillHook != nil {
+		p.Logger.Info(ctx, "Attempting graceful termination before kill", map[string]any{
+			"sandbox_id": runID,
+			"reason":     reason,
+		})
+
+		if p.GracefulKillHook(ctx, runID, reason) {
+			// Graceful shutdown succeeded
+			p.Logger.Info(ctx, "Graceful termination succeeded", map[string]any{
+				"sandbox_id": runID,
+			})
+			p.Metrics.IncCounter("erinyes_graceful_kill_total", 1, hermes.Label{
+				Key:   "reason",
+				Value: reason,
+			})
+			p.stopWatching(runID)
+			return
+		}
+
+		p.Logger.Info(ctx, "Graceful termination failed, falling back to force kill", map[string]any{
+			"sandbox_id": runID,
+		})
+	}
+
+	// Emit metrics for force kill
 	p.Metrics.IncCounter("erinyes_kill_total", 1, hermes.Label{
 		Key:   "reason",
 		Value: reason,
