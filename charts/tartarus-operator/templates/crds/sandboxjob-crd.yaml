@@ -1,0 +1,145 @@
+{{- if .Values.crds.install }}
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: sandboxjobs.tartarus.io
+  annotations:
+    {{- if .Values.crds.keep }}
+    "helm.sh/resource-policy": keep
+    {{- end }}
+  labels:
+    {{- include "tartarus-operator.labels" . | nindent 4 }}
+spec:
+  group: tartarus.io
+  names:
+    kind: SandboxJob
+    listKind: SandboxJobList
+    plural: sandboxjobs
+    singular: sandboxjob
+    shortNames:
+      - sbj
+      - sbjob
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: SandboxJob is the Schema for the sandboxjobs API
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              required:
+                - template
+                - command
+              properties:
+                template:
+                  type: string
+                  description: Template is the ID of the template to use
+                command:
+                  type: array
+                  items:
+                    type: string
+                  description: Command to run in the sandbox
+                args:
+                  type: array
+                  items:
+                    type: string
+                  description: Arguments to the command
+                env:
+                  type: object
+                  additionalProperties:
+                    type: string
+                  description: Environment variables
+                resources:
+                  type: object
+                  properties:
+                    cpu:
+                      type: integer
+                      description: CPU millicores
+                    memory:
+                      type: integer
+                      description: Memory in Megabytes
+                network:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    name:
+                      type: string
+                  description: Network policy reference
+                heatLevel:
+                  type: string
+                  description: Phlegethon heat classification
+                retention:
+                  type: object
+                  properties:
+                    maxAge:
+                      type: string
+                      description: Maximum age (duration string)
+                    keepOutputs:
+                      type: boolean
+                  description: Retention policy
+                metadata:
+                  type: object
+                  additionalProperties:
+                    type: string
+                  description: Arbitrary metadata
+                tenantRef:
+                  type: string
+                  description: Explicit tenant reference
+            status:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: Tartarus Sandbox ID
+                state:
+                  type: string
+                  description: Current state
+                nodeID:
+                  type: string
+                  description: Node running the sandbox
+                message:
+                  type: string
+                  description: Status message
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                    required:
+                      - type
+                      - status
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Status
+          type: string
+          jsonPath: .status.state
+        - name: Node
+          type: string
+          jsonPath: .status.nodeID
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+{{- end }}

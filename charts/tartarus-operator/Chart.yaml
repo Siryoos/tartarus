@@ -1,0 +1,18 @@
+apiVersion: v2
+name: tartarus-operator
+description: A Helm chart for deploying the Tartarus Kubernetes Operator
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+home: https://github.com/tartarus-sandbox/tartarus
+sources:
+  - https://github.com/tartarus-sandbox/tartarus
+keywords:
+  - sandbox
+  - kubernetes
+  - operator
+  - microvm
+  - firecracker
+maintainers:
+  - name: Tartarus Authors
+    email: maintainers@tartarus.io

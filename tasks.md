@@ -29,7 +29,7 @@
 
 ### Kubernetes Integration (`pkg/kubernetes`, `tartarus-operator`)
 - [x] CRI shim or SandboxJob operator wiring to Moirai/Hecatoncheir; CRDs for SandboxJob/SandboxTemplate with status conditions.
-- [ ] End-to-end K8s conformance (overhead <1s), Helm chart, and multi-tenant network/policy mapping.
+- [x] End-to-end K8s conformance (overhead <1s), Helm chart, and multi-tenant network/policy mapping.
 
 ## Phase 6 — The Golden Age (Future Capabilities)
 ### Persephone (Seasonal Scaling)

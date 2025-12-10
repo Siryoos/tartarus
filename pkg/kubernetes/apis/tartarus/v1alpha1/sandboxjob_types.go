@@ -48,6 +48,10 @@ type SandboxJobSpec struct {
 
 	// Metadata defines arbitrary metadata (tenant, user, etc.)
 	Metadata map[string]string `json:"metadata,omitempty"`
+
+	// TenantRef explicitly references a TenantNetworkPolicy.
+	// If empty, the namespace is used as the tenant ID.
+	TenantRef string `json:"tenantRef,omitempty"`
 }
 
 // NetworkPolicyRef defines a reference to a network policy
