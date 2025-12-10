@@ -19,114 +19,222 @@
     "links": [],
     "panels": [
         {
-            "aliasColors": {},
-            "bars": false,
-            "dashLength": 10,
-            "dashes": false,
+            "collapsed": false,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 0
+            },
+            "id": 100,
+            "panels": [],
+            "title": "Phase 4 SLO Overview",
+            "type": "row"
+        },
+        {
             "datasource": "Prometheus",
             "fieldConfig": {
                 "defaults": {
-                    "custom": {},
+                    "color": {
+                        "mode": "thresholds"
+                    },
                     "mappings": [],
                     "thresholds": {
                         "mode": "absolute",
                         "steps": [
-                            {
-                                "color": "green",
-                                "value": null
-                            },
-                            {
-                                "color": "red",
-                                "value": 200
-                            }
+                            {"color": "green", "value": null},
+                            {"color": "yellow", "value": 0.8},
+                            {"color": "red", "value": 1}
                         ]
                     },
-                    "unit": "ms"
-                },
-                "overrides": []
+                    "unit": "percentunit"
+                }
             },
-            "fill": 1,
-            "fillGradient": 0,
             "gridPos": {
-                "h": 8,
-                "w": 12,
+                "h": 4,
+                "w": 6,
                 "x": 0,
-                "y": 0
+                "y": 1
             },
-            "hiddenSeries": false,
-            "id": 2,
-            "legend": {
-                "avg": false,
-                "current": false,
-                "max": false,
-                "min": false,
-                "show": true,
-                "total": false,
-                "values": false
-            },
-            "lines": true,
-            "linewidth": 1,
-            "nullPointMode": "null",
+            "id": 101,
             "options": {
-                "alertThreshold": true
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["lastNotNull"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
             },
-            "percentage": false,
-            "pluginVersion": "7.5.7",
-            "pointradius": 2,
-            "points": false,
-            "renderer": "flot",
-            "seriesOverrides": [],
-            "spaceLength": 10,
-            "stack": false,
-            "steppedLine": false,
             "targets": [
                 {
-                    "expr": "histogram_quantile(0.99, rate(sandbox_cold_start_duration_seconds_bucket[5m])) * 1000",
-                    "interval": "",
-                    "legendFormat": "P99 Cold Start",
+                    "expr": "phase4:slo_compliance:python_ds / 100",
+                    "legendFormat": "Python-DS SLO",
                     "refId": "A"
                 }
             ],
-            "thresholds": [],
-            "timeFrom": null,
-            "timeRegions": [],
-            "timeShift": null,
-            "title": "Python-DS Cold Start Latency (P99)",
-            "tooltip": {
-                "shared": true,
-                "sort": 0,
-                "value_type": "individual"
+            "title": "Python-DS Cold Start SLO",
+            "type": "stat"
+        },
+        {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {"color": "green", "value": null},
+                            {"color": "yellow", "value": 0.8},
+                            {"color": "red", "value": 1}
+                        ]
+                    },
+                    "unit": "percentunit"
+                }
             },
-            "type": "graph",
-            "xaxis": {
-                "buckets": null,
-                "mode": "time",
-                "name": null,
-                "show": true,
-                "values": []
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 6,
+                "y": 1
             },
-            "yaxes": [
-                {
-                    "format": "ms",
-                    "label": null,
-                    "logBase": 1,
-                    "max": null,
-                    "min": null,
-                    "show": true
+            "id": 102,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["lastNotNull"],
+                    "fields": "",
+                    "values": false
                 },
+                "textMode": "auto"
+            },
+            "targets": [
                 {
-                    "format": "short",
-                    "label": null,
-                    "logBase": 1,
-                    "max": null,
-                    "min": null,
-                    "show": true
+                    "expr": "phase4:slo_compliance:oci_conversion / 100",
+                    "legendFormat": "OCI Conversion SLO",
+                    "refId": "A"
                 }
             ],
-            "yaxis": {
-                "align": false,
-                "alignLevel": null
-            }
+            "title": "OCI Conversion SLO",
+            "type": "stat"
+        },
+        {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {"color": "green", "value": null},
+                            {"color": "yellow", "value": 0.8},
+                            {"color": "red", "value": 1}
+                        ]
+                    },
+                    "unit": "percentunit"
+                }
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 12,
+                "y": 1
+            },
+            "id": 103,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["lastNotNull"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "targets": [
+                {
+                    "expr": "phase4:slo_compliance:typhon_quarantine / 100",
+                    "legendFormat": "Typhon Quarantine SLO",
+                    "refId": "A"
+                }
+            ],
+            "title": "Typhon Quarantine SLO",
+            "type": "stat"
+        },
+        {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {"color": "green", "value": null},
+                            {"color": "yellow", "value": 0.8},
+                            {"color": "red", "value": 1}
+                        ]
+                    },
+                    "unit": "percentunit"
+                }
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 18,
+                "y": 1
+            },
+            "id": 104,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["lastNotNull"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "targets": [
+                {
+                    "expr": "phase4:slo_compliance:hypnos_wake / 100",
+                    "legendFormat": "Hypnos Wake SLO",
+                    "refId": "A"
+                }
+            ],
+            "title": "Hypnos Wake SLO",
+            "type": "stat"
+        },
+        {
+            "collapsed": false,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 5
+            },
+            "id": 110,
+            "panels": [],
+            "title": "Python-DS Cold Start Performance",
+            "type": "row"
         },
         {
             "aliasColors": {},
@@ -141,17 +249,11 @@
                     "thresholds": {
                         "mode": "absolute",
                         "steps": [
-                            {
-                                "color": "green",
-                                "value": null
-                            },
-                            {
-                                "color": "red",
-                                "value": 30
-                            }
+                            {"color": "green", "value": null},
+                            {"color": "red", "value": 200}
                         ]
                     },
-                    "unit": "s"
+                    "unit": "ms"
                 },
                 "overrides": []
             },
@@ -160,19 +262,19 @@
             "gridPos": {
                 "h": 8,
                 "w": 12,
-                "x": 12,
-                "y": 0
+                "x": 0,
+                "y": 6
             },
             "hiddenSeries": false,
-            "id": 3,
+            "id": 2,
             "legend": {
-                "avg": false,
-                "current": false,
-                "max": false,
+                "avg": true,
+                "current": true,
+                "max": true,
                 "min": false,
                 "show": true,
                 "total": false,
-                "values": false
+                "values": true
             },
             "lines": true,
             "linewidth": 1,
@@ -191,17 +293,36 @@
             "steppedLine": false,
             "targets": [
                 {
-                    "expr": "rate(erebus_oci_conversion_duration_seconds_sum[5m]) / rate(erebus_oci_conversion_duration_seconds_count[5m])",
+                    "expr": "histogram_quantile(0.99, rate(perf_python_ds_cold_start_seconds_bucket[5m])) * 1000",
                     "interval": "",
-                    "legendFormat": "Avg Conversion Time",
+                    "legendFormat": "P99 Cold Start",
                     "refId": "A"
+                },
+                {
+                    "expr": "histogram_quantile(0.95, rate(perf_python_ds_cold_start_seconds_bucket[5m])) * 1000",
+                    "legendFormat": "P95 Cold Start",
+                    "refId": "B"
+                },
+                {
+                    "expr": "histogram_quantile(0.50, rate(perf_python_ds_cold_start_seconds_bucket[5m])) * 1000",
+                    "legendFormat": "P50 Cold Start",
+                    "refId": "C"
                 }
             ],
-            "thresholds": [],
+            "thresholds": [
+                {
+                    "colorMode": "critical",
+                    "fill": true,
+                    "line": true,
+                    "op": "gt",
+                    "value": 200,
+                    "yaxis": "left"
+                }
+            ],
             "timeFrom": null,
             "timeRegions": [],
             "timeShift": null,
-            "title": "OCI Image Conversion Time",
+            "title": "Python-DS Cold Start Latency (Target: <200ms)",
             "tooltip": {
                 "shared": true,
                 "sort": 0,
@@ -216,34 +337,672 @@
                 "values": []
             },
             "yaxes": [
-                {
-                    "format": "s",
-                    "label": null,
-                    "logBase": 1,
-                    "max": null,
-                    "min": null,
-                    "show": true
+                {"format": "ms", "label": null, "logBase": 1, "max": null, "min": "0", "show": true},
+                {"format": "short", "label": null, "logBase": 1, "max": null, "min": null, "show": true}
+            ],
+            "yaxis": {"align": false, "alignLevel": null}
+        },
+        {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {},
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {"color": "green", "value": null},
+                            {"color": "red", "value": 200}
+                        ]
+                    },
+                    "unit": "ms"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 6
+            },
+            "id": 111,
+            "options": {
+                "displayMode": "gradient",
+                "orientation": "horizontal",
+                "reduceOptions": {
+                    "calcs": ["lastNotNull"],
+                    "fields": "",
+                    "values": false
                 },
+                "showUnfilled": true
+            },
+            "targets": [
                 {
-                    "format": "short",
-                    "label": null,
-                    "logBase": 1,
-                    "max": null,
-                    "min": null,
-                    "show": true
+                    "expr": "histogram_quantile(0.99, rate(perf_python_ds_cold_start_seconds_bucket[5m])) * 1000",
+                    "legendFormat": "P99",
+                    "refId": "A"
                 }
             ],
-            "yaxis": {
-                "align": false,
-                "alignLevel": null
-            }
+            "title": "Current P99 vs Target (200ms)",
+            "type": "bargauge"
+        },
+        {
+            "collapsed": false,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 14
+            },
+            "id": 120,
+            "panels": [],
+            "title": "OCI Image Conversion Performance",
+            "type": "row"
+        },
+        {
+            "aliasColors": {},
+            "bars": false,
+            "dashLength": 10,
+            "dashes": false,
+            "datasource": "Prometheus",
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {},
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {"color": "green", "value": null},
+                            {"color": "red", "value": 30}
+                        ]
+                    },
+                    "unit": "s"
+                },
+                "overrides": []
+            },
+            "fill": 1,
+            "fillGradient": 0,
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 15
+            },
+            "hiddenSeries": false,
+            "id": 3,
+            "legend": {
+                "avg": true,
+                "current": true,
+                "max": true,
+                "min": false,
+                "show": true,
+                "total": false,
+                "values": true
+            },
+            "lines": true,
+            "linewidth": 1,
+            "nullPointMode": "null",
+            "options": {
+                "alertThreshold": true
+            },
+            "percentage": false,
+            "pluginVersion": "7.5.7",
+            "pointradius": 2,
+            "points": false,
+            "renderer": "flot",
+            "seriesOverrides": [],
+            "spaceLength": 10,
+            "stack": false,
+            "steppedLine": false,
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.99, rate(perf_erebus_oci_conversion_seconds_bucket[5m]))",
+                    "interval": "",
+                    "legendFormat": "P99 Conversion Time",
+                    "refId": "A"
+                },
+                {
+                    "expr": "histogram_quantile(0.99, rate(erebus_warm_cache_duration_seconds_bucket[5m]))",
+                    "legendFormat": "P99 Warm Cache",
+                    "refId": "B"
+                }
+            ],
+            "thresholds": [
+                {
+                    "colorMode": "critical",
+                    "fill": true,
+                    "line": true,
+                    "op": "gt",
+                    "value": 30,
+                    "yaxis": "left"
+                }
+            ],
+            "timeFrom": null,
+            "timeRegions": [],
+            "timeShift": null,
+            "title": "OCI Image Conversion Time (Target: <30s)",
+            "tooltip": {
+                "shared": true,
+                "sort": 0,
+                "value_type": "individual"
+            },
+            "type": "graph",
+            "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+            },
+            "yaxes": [
+                {"format": "s", "label": null, "logBase": 1, "max": null, "min": "0", "show": true},
+                {"format": "short", "label": null, "logBase": 1, "max": null, "min": null, "show": true}
+            ],
+            "yaxis": {"align": false, "alignLevel": null}
+        },
+        {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {},
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {"color": "red", "value": null},
+                            {"color": "yellow", "value": 50},
+                            {"color": "green", "value": 90}
+                        ]
+                    },
+                    "unit": "percent"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 15
+            },
+            "id": 121,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["lastNotNull"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "targets": [
+                {
+                    "expr": "avg(erebus_cache_hit_ratio)",
+                    "legendFormat": "Cache Hit Ratio",
+                    "refId": "A"
+                }
+            ],
+            "title": "Layer Cache Hit Ratio",
+            "type": "stat"
+        },
+        {
+            "collapsed": false,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 23
+            },
+            "id": 130,
+            "panels": [],
+            "title": "Typhon Quarantine Routing",
+            "type": "row"
+        },
+        {
+            "aliasColors": {},
+            "bars": false,
+            "dashLength": 10,
+            "dashes": false,
+            "datasource": "Prometheus",
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {},
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {"color": "green", "value": null},
+                            {"color": "red", "value": 50}
+                        ]
+                    },
+                    "unit": "ms"
+                },
+                "overrides": []
+            },
+            "fill": 1,
+            "fillGradient": 0,
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 24
+            },
+            "hiddenSeries": false,
+            "id": 131,
+            "legend": {
+                "avg": true,
+                "current": true,
+                "max": true,
+                "min": false,
+                "show": true,
+                "total": false,
+                "values": true
+            },
+            "lines": true,
+            "linewidth": 1,
+            "nullPointMode": "null",
+            "options": {
+                "alertThreshold": true
+            },
+            "percentage": false,
+            "pluginVersion": "7.5.7",
+            "pointradius": 2,
+            "points": false,
+            "renderer": "flot",
+            "seriesOverrides": [],
+            "spaceLength": 10,
+            "stack": false,
+            "steppedLine": false,
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.99, rate(perf_typhon_quarantine_routing_seconds_bucket[5m])) * 1000",
+                    "interval": "",
+                    "legendFormat": "P99 Quarantine Routing",
+                    "refId": "A"
+                },
+                {
+                    "expr": "histogram_quantile(0.99, rate(perf_typhon_normal_routing_seconds_bucket[5m])) * 1000",
+                    "legendFormat": "P99 Normal Routing",
+                    "refId": "B"
+                }
+            ],
+            "thresholds": [
+                {
+                    "colorMode": "critical",
+                    "fill": true,
+                    "line": true,
+                    "op": "gt",
+                    "value": 50,
+                    "yaxis": "left"
+                }
+            ],
+            "timeFrom": null,
+            "timeRegions": [],
+            "timeShift": null,
+            "title": "Typhon Routing Latency - Normal vs Quarantine (Target: <50ms overhead)",
+            "tooltip": {
+                "shared": true,
+                "sort": 0,
+                "value_type": "individual"
+            },
+            "type": "graph",
+            "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+            },
+            "yaxes": [
+                {"format": "ms", "label": null, "logBase": 1, "max": null, "min": "0", "show": true},
+                {"format": "short", "label": null, "logBase": 1, "max": null, "min": null, "show": true}
+            ],
+            "yaxis": {"align": false, "alignLevel": null}
+        },
+        {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {},
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {"color": "green", "value": null},
+                            {"color": "red", "value": 50}
+                        ]
+                    },
+                    "unit": "ms"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 24
+            },
+            "id": 132,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["lastNotNull"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "targets": [
+                {
+                    "expr": "(histogram_quantile(0.99, rate(perf_typhon_quarantine_routing_seconds_bucket[5m])) - histogram_quantile(0.99, rate(perf_typhon_normal_routing_seconds_bucket[5m]))) * 1000",
+                    "legendFormat": "Overhead",
+                    "refId": "A"
+                }
+            ],
+            "title": "Quarantine Routing Overhead (P99)",
+            "type": "stat"
+        },
+        {
+            "collapsed": false,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 32
+            },
+            "id": 140,
+            "panels": [],
+            "title": "Hypnos Hibernation Performance",
+            "type": "row"
+        },
+        {
+            "aliasColors": {},
+            "bars": false,
+            "dashLength": 10,
+            "dashes": false,
+            "datasource": "Prometheus",
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {},
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {"color": "green", "value": null},
+                            {"color": "red", "value": 100}
+                        ]
+                    },
+                    "unit": "ms"
+                },
+                "overrides": []
+            },
+            "fill": 1,
+            "fillGradient": 0,
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 33
+            },
+            "hiddenSeries": false,
+            "id": 141,
+            "legend": {
+                "avg": true,
+                "current": true,
+                "max": true,
+                "min": false,
+                "show": true,
+                "total": false,
+                "values": true
+            },
+            "lines": true,
+            "linewidth": 1,
+            "nullPointMode": "null",
+            "options": {
+                "alertThreshold": true
+            },
+            "percentage": false,
+            "pluginVersion": "7.5.7",
+            "pointradius": 2,
+            "points": false,
+            "renderer": "flot",
+            "seriesOverrides": [],
+            "spaceLength": 10,
+            "stack": false,
+            "steppedLine": false,
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.99, rate(perf_hypnos_wake_seconds_bucket[5m])) * 1000",
+                    "interval": "",
+                    "legendFormat": "P99 Wake Time",
+                    "refId": "A"
+                },
+                {
+                    "expr": "histogram_quantile(0.99, rate(hypnos_wake_duration_seconds_bucket[5m])) * 1000",
+                    "legendFormat": "P99 Wake (Hermes)",
+                    "refId": "B"
+                }
+            ],
+            "thresholds": [
+                {
+                    "colorMode": "critical",
+                    "fill": true,
+                    "line": true,
+                    "op": "gt",
+                    "value": 100,
+                    "yaxis": "left"
+                }
+            ],
+            "timeFrom": null,
+            "timeRegions": [],
+            "timeShift": null,
+            "title": "Hypnos Wake-from-Sleep Latency (Target: <100ms)",
+            "tooltip": {
+                "shared": true,
+                "sort": 0,
+                "value_type": "individual"
+            },
+            "type": "graph",
+            "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+            },
+            "yaxes": [
+                {"format": "ms", "label": null, "logBase": 1, "max": null, "min": "0", "show": true},
+                {"format": "short", "label": null, "logBase": 1, "max": null, "min": null, "show": true}
+            ],
+            "yaxis": {"align": false, "alignLevel": null}
+        },
+        {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {},
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {"color": "green", "value": null}
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 12,
+                "y": 33
+            },
+            "id": 142,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "none",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["lastNotNull"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "targets": [
+                {
+                    "expr": "sum(increase(hypnos_wake_total[1h]))",
+                    "legendFormat": "Wakes (1h)",
+                    "refId": "A"
+                }
+            ],
+            "title": "Wakes (Last Hour)",
+            "type": "stat"
+        },
+        {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {},
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {"color": "green", "value": null}
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 18,
+                "y": 33
+            },
+            "id": 143,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "none",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["lastNotNull"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "targets": [
+                {
+                    "expr": "sum(increase(hypnos_sleep_total[1h]))",
+                    "legendFormat": "Sleeps (1h)",
+                    "refId": "A"
+                }
+            ],
+            "title": "Sleeps (Last Hour)",
+            "type": "stat"
+        },
+        {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {},
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {"color": "green", "value": null},
+                            {"color": "red", "value": 1}
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 12,
+                "y": 37
+            },
+            "id": 144,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["lastNotNull"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "targets": [
+                {
+                    "expr": "sum(increase(hypnos_errors_total[1h]))",
+                    "legendFormat": "Errors",
+                    "refId": "A"
+                }
+            ],
+            "title": "Hypnos Errors (Last Hour)",
+            "type": "stat"
+        },
+        {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {},
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {"color": "green", "value": null}
+                        ]
+                    },
+                    "unit": "percentunit"
+                }
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 18,
+                "y": 37
+            },
+            "id": 145,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "none",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["lastNotNull"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "targets": [
+                {
+                    "expr": "avg(hypnos_compression_ratio)",
+                    "legendFormat": "Compression Ratio",
+                    "refId": "A"
+                }
+            ],
+            "title": "Avg Compression Ratio",
+            "type": "stat"
         }
     ],
+    "refresh": "30s",
     "schemaVersion": 27,
     "style": "dark",
     "tags": [
         "SLO",
-        "Phase4"
+        "Phase4",
+        "Performance"
     ],
     "templating": {
         "list": []
@@ -254,7 +1013,7 @@
     },
     "timepicker": {},
     "timezone": "",
-    "title": "Phase 4 SLOs",
+    "title": "Phase 4 SLOs - Verification of the Titans",
     "uid": "phase4-slos",
-    "version": 1
+    "version": 2
 }

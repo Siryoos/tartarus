@@ -2,6 +2,7 @@ package perf
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/netip"
 	"os"
@@ -25,6 +26,9 @@ import (
 	"github.com/tartarus-sandbox/tartarus/pkg/tartarus"
 	"github.com/tartarus-sandbox/tartarus/pkg/themis"
 )
+
+// PythonDSColdStartTarget is the SLO target for Python DS cold starts.
+const PythonDSColdStartTarget = 200 * time.Millisecond
 
 // Mocks
 type MockNyx struct {
@@ -422,4 +426,318 @@ func calculatePercentile(durations []time.Duration, percentile int) time.Duratio
 		index = len(sorted) - 1
 	}
 	return sorted[index]
+}
+
+// TestPythonDSColdStartWithHarness runs the cold start test with full harness integration.
+func TestPythonDSColdStartWithHarness(t *testing.T) {
+	// 1. Setup Infrastructure with Harness
+	metrics := hermes.NewPrometheusMetrics()
+	harness := NewPerfHarness(metrics)
+	logger := hermes.NewSlogAdapter()
+	slogLogger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+	// Olympus Components
+	queue := acheron.NewMemoryQueue()
+	registry := hades.NewMemoryRegistry()
+	policyRepo := themis.NewMemoryRepo()
+	templateManager := olympus.NewMemoryTemplateManager()
+	scheduler := moirai.NewScheduler("least-loaded", logger)
+	heatClassifier := phlegethon.NewHeatClassifier()
+	control := &olympus.NoopControlPlane{}
+
+	// Judges
+	auditSink := judges.NewLogAuditSink(logger)
+	aeacusJudge := judges.NewAeacusJudge(logger, auditSink)
+	resourceJudge := judges.NewResourceJudge(policyRepo, logger)
+	networkJudge := judges.NewNetworkJudge([]string{"0.0.0.0/0"}, nil, logger)
+	judgeChain := &judges.Chain{
+		Pre: []judges.PreJudge{aeacusJudge, resourceJudge, networkJudge},
+	}
+
+	// Manager
+	manager := &olympus.Manager{
+		Queue:      queue,
+		Hades:      registry,
+		Policies:   policyRepo,
+		Templates:  templateManager,
+		Nyx:        &MockNyx{},
+		Judges:     judgeChain,
+		Scheduler:  scheduler,
+		Phlegethon: heatClassifier,
+		Control:    control,
+		Metrics:    metrics,
+		Logger:     logger,
+	}
+
+	// 2. Register Python-DS Template
+	pythonDSTpl := &domain.TemplateSpec{
+		ID:          "python-ds",
+		Name:        "Python Data Science",
+		BaseImage:   "/var/lib/tartarus/images/python-ds.ext4",
+		KernelImage: "/var/lib/firecracker/vmlinux",
+		Resources: domain.ResourceSpec{
+			CPU: 2000,
+			Mem: 2048,
+		},
+	}
+	require.NoError(t, templateManager.RegisterTemplate(context.Background(), pythonDSTpl))
+
+	// 3. Register Default Policy
+	defaultPolicy := &domain.SandboxPolicy{
+		ID:         "default-python-ds",
+		TemplateID: "python-ds",
+		Resources: domain.ResourceSpec{
+			CPU: 2000,
+			Mem: 2048,
+		},
+		NetworkPolicy: domain.NetworkPolicyRef{
+			ID: "lockdown-no-net",
+		},
+		Retention: domain.RetentionPolicy{
+			MaxAge: 30 * time.Minute,
+		},
+	}
+	require.NoError(t, policyRepo.UpsertPolicy(context.Background(), defaultPolicy))
+
+	// 4. Setup Agent with Mock Runtime
+	mockRuntime := tartarus.NewMockRuntime(slogLogger)
+	// Simulate realistic restore time (VM boot + app start)
+	mockRuntime.SetStartDuration(50 * time.Millisecond)
+
+	agentID := "perf-harness-agent-1"
+	agentResources := domain.ResourceCapacity{CPU: 8000, Mem: 16384}
+
+	agent := &hecatoncheir.Agent{
+		NodeID:   domain.NodeID(agentID),
+		Runtime:  mockRuntime,
+		Nyx:      &MockNyx{},
+		Lethe:    &MockLethe{},
+		Styx:     &MockStyx{},
+		Furies:   &MockFury{},
+		Queue:    queue,
+		Registry: registry,
+		Metrics:  metrics,
+		Logger:   logger,
+	}
+
+	// Register Node in Hades
+	nodeInfo := domain.NodeInfo{
+		ID:       domain.NodeID(agentID),
+		Address:  "localhost",
+		Capacity: agentResources,
+	}
+	registry.UpdateHeartbeat(context.Background(), hades.HeartbeatPayload{
+		Node: nodeInfo,
+		Load: domain.ResourceCapacity{},
+		Time: time.Now(),
+	})
+
+	// Start Agent Loop
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		if err := agent.Run(ctx); err != nil && err != context.Canceled {
+			t.Logf("Agent error: %v", err)
+		}
+	}()
+
+	// 5. Run iterations with harness tracking
+	iterations := 100
+
+	for i := 0; i < iterations; i++ {
+		req := &domain.SandboxRequest{
+			ID:       domain.SandboxID(fmt.Sprintf("python-ds-harness-%d", i)),
+			Template: "python-ds",
+			NetworkRef: domain.NetworkPolicyRef{
+				ID: "lockdown-no-net",
+			},
+		}
+
+		timer := harness.StartTimer("perf_python_ds_cold_start_seconds", map[string]string{
+			"template":  "python-ds",
+			"iteration": fmt.Sprintf("%d", i),
+		})
+
+		err := manager.Submit(ctx, req)
+		if err != nil {
+			timer.StopWithError(err)
+			continue
+		}
+
+		// Wait for Running status
+		success := false
+		for j := 0; j < 100; j++ {
+			run, err := registry.GetRun(ctx, req.ID)
+			if err == nil && run.Status == domain.RunStatusRunning {
+				success = true
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+
+		if !success {
+			timer.StopWithError(fmt.Errorf("sandbox failed to reach RUNNING state"))
+			continue
+		}
+
+		_ = timer.Stop()
+
+		// TODO: Implement actual phase timing instrumentation when queue/scheduler
+		// expose timing hooks. Current end-to-end duration is captured in the harness.
+
+		// Cleanup
+		manager.KillSandbox(ctx, req.ID)
+	}
+
+	// 6. Generate and verify report
+	report := harness.GenerateReport()
+	t.Log(report.String())
+
+	// 7. Check SLO compliance
+	passed, msg := harness.CheckSLO("perf_python_ds_cold_start_seconds")
+	t.Logf("SLO Check: %s", msg)
+
+	if !passed {
+		t.Errorf("SLO violation: %s", msg)
+	}
+
+	// Verify P99 is under target
+	p99, err := harness.CalculatePercentile("perf_python_ds_cold_start_seconds", 99)
+	require.NoError(t, err)
+	t.Logf("P99 Cold Start Latency: %v (target: %v)", p99, PythonDSColdStartTarget)
+
+	if p99 > PythonDSColdStartTarget {
+		t.Errorf("Performance Regression: P99 latency %v exceeds target %v", p99, PythonDSColdStartTarget)
+	}
+}
+
+// BenchmarkPythonDSColdStartDetailed provides detailed phase-by-phase benchmarking.
+func BenchmarkPythonDSColdStartDetailed(b *testing.B) {
+	logger := hermes.NewSlogAdapter()
+	metrics := hermes.NewPrometheusMetrics()
+	slogLogger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+	queue := acheron.NewMemoryQueue()
+	registry := hades.NewMemoryRegistry()
+	policyRepo := themis.NewMemoryRepo()
+	templateManager := olympus.NewMemoryTemplateManager()
+	scheduler := moirai.NewScheduler("least-loaded", logger)
+	heatClassifier := phlegethon.NewHeatClassifier()
+	control := &olympus.NoopControlPlane{}
+
+	auditSink := judges.NewLogAuditSink(logger)
+	aeacusJudge := judges.NewAeacusJudge(logger, auditSink)
+	resourceJudge := judges.NewResourceJudge(policyRepo, logger)
+	networkJudge := judges.NewNetworkJudge([]string{"0.0.0.0/0"}, nil, logger)
+	judgeChain := &judges.Chain{
+		Pre: []judges.PreJudge{aeacusJudge, resourceJudge, networkJudge},
+	}
+
+	manager := &olympus.Manager{
+		Queue:      queue,
+		Hades:      registry,
+		Policies:   policyRepo,
+		Templates:  templateManager,
+		Nyx:        &MockNyx{},
+		Judges:     judgeChain,
+		Scheduler:  scheduler,
+		Phlegethon: heatClassifier,
+		Control:    control,
+		Metrics:    metrics,
+		Logger:     logger,
+	}
+
+	pythonDSTpl := &domain.TemplateSpec{
+		ID:          "python-ds",
+		Name:        "Python Data Science",
+		BaseImage:   "/var/lib/tartarus/images/python-ds.ext4",
+		KernelImage: "/var/lib/firecracker/vmlinux",
+		Resources:   domain.ResourceSpec{CPU: 2000, Mem: 2048},
+	}
+	require.NoError(b, templateManager.RegisterTemplate(context.Background(), pythonDSTpl))
+
+	defaultPolicy := &domain.SandboxPolicy{
+		ID:            "default-python-ds",
+		TemplateID:    "python-ds",
+		Resources:     domain.ResourceSpec{CPU: 2000, Mem: 2048},
+		NetworkPolicy: domain.NetworkPolicyRef{ID: "lockdown-no-net"},
+		Retention:     domain.RetentionPolicy{MaxAge: 30 * time.Minute},
+	}
+	require.NoError(b, policyRepo.UpsertPolicy(context.Background(), defaultPolicy))
+
+	mockRuntime := tartarus.NewMockRuntime(slogLogger)
+	mockRuntime.SetStartDuration(50 * time.Millisecond)
+
+	agentID := "perf-bench-agent"
+	agent := &hecatoncheir.Agent{
+		NodeID:   domain.NodeID(agentID),
+		Runtime:  mockRuntime,
+		Nyx:      &MockNyx{},
+		Lethe:    &MockLethe{},
+		Styx:     &MockStyx{},
+		Furies:   &MockFury{},
+		Queue:    queue,
+		Registry: registry,
+		Metrics:  metrics,
+		Logger:   logger,
+	}
+
+	registry.UpdateHeartbeat(context.Background(), hades.HeartbeatPayload{
+		Node: domain.NodeInfo{ID: domain.NodeID(agentID), Address: "localhost", Capacity: domain.ResourceCapacity{CPU: 8000, Mem: 16384}},
+		Load: domain.ResourceCapacity{},
+		Time: time.Now(),
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = agent.Run(ctx) }()
+
+	// Different runtime scenarios
+	scenarios := []struct {
+		name          string
+		startDuration time.Duration
+	}{
+		{"Warm_Snapshot", 20 * time.Millisecond},
+		{"Cold_Boot", 100 * time.Millisecond},
+		{"Default", 50 * time.Millisecond},
+	}
+
+	for _, sc := range scenarios {
+		b.Run(sc.name, func(b *testing.B) {
+			mockRuntime.SetStartDuration(sc.startDuration)
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				req := &domain.SandboxRequest{
+					ID:         domain.SandboxID(fmt.Sprintf("bench-%s-%d", sc.name, i)),
+					Template:   "python-ds",
+					NetworkRef: domain.NetworkPolicyRef{ID: "lockdown-no-net"},
+				}
+
+				start := time.Now()
+				err := manager.Submit(ctx, req)
+				require.NoError(b, err)
+
+				success := false
+				for j := 0; j < 100; j++ {
+					run, err := registry.GetRun(ctx, req.ID)
+					if err == nil && run.Status == domain.RunStatusRunning {
+						success = true
+						break
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+				if !success {
+					b.Fatal("Sandbox failed to reach RUNNING state")
+				}
+
+				latency := time.Since(start)
+				b.ReportMetric(float64(latency.Milliseconds()), "ms/op")
+				metrics.ObserveHistogram("bench_cold_start_duration_seconds", latency.Seconds(),
+					hermes.Label{Key: "scenario", Value: sc.name})
+
+				manager.KillSandbox(ctx, req.ID)
+			}
+		})
+	}
 }
