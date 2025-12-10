@@ -33,6 +33,7 @@ import (
 	"github.com/tartarus-sandbox/tartarus/pkg/olympus"
 	"github.com/tartarus-sandbox/tartarus/pkg/persephone"
 	"github.com/tartarus-sandbox/tartarus/pkg/phlegethon"
+	"github.com/tartarus-sandbox/tartarus/pkg/thanatos"
 	"github.com/tartarus-sandbox/tartarus/pkg/themis"
 )
 
@@ -338,6 +339,18 @@ func main() {
 
 	// Persephone API handlers
 	persephoneHandlers := olympus.NewPersephoneHandlers(scaler)
+
+	// Thanatos Graceful Termination
+	thanatosController := thanatos.NewShutdownController(thanatos.ShutdownControllerConfig{
+		Runtime:        nil, // Will be set up when runtime is available
+		Hypnos:         nil, // Will be set up when Hypnos is available per-node
+		PolicyResolver: thanatos.NewStaticPolicyResolver(nil),
+		Metrics:        metrics,
+		Logger:         hermesLogger,
+	})
+	thanatosScheduler := thanatos.NewDeferredScheduler(thanatosController, nil)
+	thanatosHandlers := olympus.NewThanatosHandlers(thanatosScheduler, hermesLogger)
+	logger.Info("Initialized Thanatos graceful termination controller")
 
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
@@ -716,6 +729,9 @@ func main() {
 	})
 	mux.HandleFunc("/persephone/forecast", persephoneHandlers.HandleGetForecast)
 	mux.HandleFunc("/persephone/recommendations", persephoneHandlers.HandleGetRecommendations)
+
+	// Thanatos graceful termination endpoints
+	thanatosHandlers.RegisterRoutes(mux)
 
 	// Setup Cerberus gateway for authentication, authorization, and audit
 	apiKey := os.Getenv("TARTARUS_API_KEY")
