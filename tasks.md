@@ -28,7 +28,7 @@
 - [x] Shell completions (bash/zsh) and config profiles; integration tests for streaming commands.
 
 ### Kubernetes Integration (`pkg/kubernetes`, `tartarus-operator`)
-- [ ] CRI shim or SandboxJob operator wiring to Moirai/Hecatoncheir; CRDs for SandboxJob/SandboxTemplate with status conditions.
+- [x] CRI shim or SandboxJob operator wiring to Moirai/Hecatoncheir; CRDs for SandboxJob/SandboxTemplate with status conditions.
 - [ ] End-to-end K8s conformance (overhead <1s), Helm chart, and multi-tenant network/policy mapping.
 
 ## Phase 6 — The Golden Age (Future Capabilities)

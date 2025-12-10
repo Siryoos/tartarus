@@ -175,6 +175,11 @@ func TestSandboxJobReconciler_Reconcile(t *testing.T) {
 	assert.Equal(t, "k8s-default-test-job", updatedJob.Status.ID)
 	assert.Equal(t, string(domain.RunStatusPending), updatedJob.Status.State)
 
+	// Check Condition
+	require.Len(t, updatedJob.Status.Conditions, 1)
+	assert.Equal(t, string(tartarusv1alpha1.SandboxJobSubmitted), updatedJob.Status.Conditions[0].Type)
+	assert.Equal(t, metav1.ConditionTrue, updatedJob.Status.Conditions[0].Status)
+
 	// 2. Second reconciliation: Should check status and update to Running
 	res, err = r.Reconcile(ctx, req)
 	require.NoError(t, err)
@@ -185,4 +190,19 @@ func TestSandboxJobReconciler_Reconcile(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, string(domain.RunStatusRunning), updatedJob.Status.State)
 	assert.Equal(t, "node-1", updatedJob.Status.NodeID)
+
+	// Check Condition
+	// Depending on implementation, we might have multiple conditions or just the latest one if types differ
+	// Since we use SetStatusCondition with different types, they should accumulate or update existing
+	// Here we expect Running condition to be added/updated.
+	// We might have Submitted still there.
+	found := false
+	for _, cond := range updatedJob.Status.Conditions {
+		if cond.Type == string(tartarusv1alpha1.SandboxJobRunning) {
+			assert.Equal(t, metav1.ConditionTrue, cond.Status)
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "Expected SandboxJobRunning condition")
 }

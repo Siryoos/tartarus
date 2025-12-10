@@ -87,7 +87,26 @@ type SandboxJobStatus struct {
 
 	// Message provides additional details about the status
 	Message string `json:"message,omitempty"`
+
+	// Conditions represents the latest available observations of current state
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,4,rep,name=conditions"`
 }
+
+// SandboxJobConditionType defines the type of condition
+type SandboxJobConditionType string
+
+const (
+	// SandboxJobSubmitted means the job has been submitted to Olympus
+	SandboxJobSubmitted SandboxJobConditionType = "Submitted"
+	// SandboxJobScheduled means the job has been scheduled to a node
+	SandboxJobScheduled SandboxJobConditionType = "Scheduled"
+	// SandboxJobRunning means the sandbox is currently running
+	SandboxJobRunning SandboxJobConditionType = "Running"
+	// SandboxJobCompleted means the sandbox has completed successfully
+	SandboxJobCompleted SandboxJobConditionType = "Completed"
+	// SandboxJobFailed means the sandbox has failed
+	SandboxJobFailed SandboxJobConditionType = "Failed"
+)
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status

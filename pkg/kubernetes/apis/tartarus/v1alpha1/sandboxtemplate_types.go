@@ -51,7 +51,18 @@ type SandboxTemplateStatus struct {
 
 	// Message provides additional details about the status
 	Message string `json:"message,omitempty"`
+
+	// Conditions represents the latest available observations of current state
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,3,rep,name=conditions"`
 }
+
+// SandboxTemplateConditionType defines the type of condition
+type SandboxTemplateConditionType string
+
+const (
+	// SandboxTemplateReady means the template is valid and ready for use
+	SandboxTemplateReady SandboxTemplateConditionType = "Ready"
+)
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status

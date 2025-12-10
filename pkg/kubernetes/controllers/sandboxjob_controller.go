@@ -26,6 +26,8 @@ import (
 	"os"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -113,6 +115,14 @@ func (r *SandboxJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			logger.Error(err, "Failed to submit job to Olympus")
 			job.Status.State = string(domain.RunStatusFailed)
 			job.Status.Message = fmt.Sprintf("Submission failed: %v", err)
+
+			meta.SetStatusCondition(&job.Status.Conditions, metav1.Condition{
+				Type:    string(tartarusv1alpha1.SandboxJobFailed),
+				Status:  metav1.ConditionTrue,
+				Reason:  "SubmissionFailed",
+				Message: err.Error(),
+			})
+
 			if updateErr := r.Status().Update(ctx, &job); updateErr != nil {
 				return ctrl.Result{}, updateErr
 			}
@@ -123,6 +133,14 @@ func (r *SandboxJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		job.Status.ID = string(sandboxReq.ID)
 		job.Status.State = string(domain.RunStatusPending)
 		job.Status.Message = "Submitted to Olympus"
+
+		meta.SetStatusCondition(&job.Status.Conditions, metav1.Condition{
+			Type:    string(tartarusv1alpha1.SandboxJobSubmitted),
+			Status:  metav1.ConditionTrue,
+			Reason:  "Submitted",
+			Message: "Job submitted to Olympus",
+		})
+
 		if err := r.Status().Update(ctx, &job); err != nil {
 			logger.Error(err, "Failed to update SandboxJob status")
 			return ctrl.Result{}, err
@@ -144,6 +162,44 @@ func (r *SandboxJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	job.Status.State = string(status.Status)
 	job.Status.NodeID = string(status.NodeID)
 	job.Status.Message = fmt.Sprintf("Updated at %s", time.Now().Format(time.RFC3339))
+
+	switch status.Status {
+	case domain.RunStatusPending:
+		meta.SetStatusCondition(&job.Status.Conditions, metav1.Condition{
+			Type:    string(tartarusv1alpha1.SandboxJobSubmitted),
+			Status:  metav1.ConditionTrue,
+			Reason:  "Pending",
+			Message: "Waiting for scheduling",
+		})
+	case domain.RunStatusScheduled:
+		meta.SetStatusCondition(&job.Status.Conditions, metav1.Condition{
+			Type:    string(tartarusv1alpha1.SandboxJobScheduled),
+			Status:  metav1.ConditionTrue,
+			Reason:  "Scheduled",
+			Message: fmt.Sprintf("Scheduled to node %s", status.NodeID),
+		})
+	case domain.RunStatusRunning:
+		meta.SetStatusCondition(&job.Status.Conditions, metav1.Condition{
+			Type:    string(tartarusv1alpha1.SandboxJobRunning),
+			Status:  metav1.ConditionTrue,
+			Reason:  "Running",
+			Message: "Sandbox is running",
+		})
+	case domain.RunStatusSucceeded:
+		meta.SetStatusCondition(&job.Status.Conditions, metav1.Condition{
+			Type:    string(tartarusv1alpha1.SandboxJobCompleted),
+			Status:  metav1.ConditionTrue,
+			Reason:  "Succeeded",
+			Message: "Sandbox completed successfully",
+		})
+	case domain.RunStatusFailed, domain.RunStatusCanceled:
+		meta.SetStatusCondition(&job.Status.Conditions, metav1.Condition{
+			Type:    string(tartarusv1alpha1.SandboxJobFailed),
+			Status:  metav1.ConditionTrue,
+			Reason:  "Failed",
+			Message: fmt.Sprintf("Sandbox failed or canceled: %s", status.Status),
+		})
+	}
 
 	if err := r.Status().Update(ctx, &job); err != nil {
 		logger.Error(err, "Failed to update SandboxJob status")

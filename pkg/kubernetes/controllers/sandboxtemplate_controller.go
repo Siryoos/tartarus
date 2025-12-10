@@ -19,6 +19,8 @@ package controllers
 import (
 	"context"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -53,9 +55,23 @@ func (r *SandboxTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		logger.Info("SandboxTemplate has no image specified", "name", template.Name)
 		template.Status.Ready = false
 		template.Status.Message = "Image is required"
+
+		meta.SetStatusCondition(&template.Status.Conditions, metav1.Condition{
+			Type:    string(tartarusv1alpha1.SandboxTemplateReady),
+			Status:  metav1.ConditionFalse,
+			Reason:  "MissingImage",
+			Message: "Image is required",
+		})
 	} else {
 		template.Status.Ready = true
 		template.Status.Message = "Template is valid"
+
+		meta.SetStatusCondition(&template.Status.Conditions, metav1.Condition{
+			Type:    string(tartarusv1alpha1.SandboxTemplateReady),
+			Status:  metav1.ConditionTrue,
+			Reason:  "Valid",
+			Message: "Template is valid",
+		})
 	}
 
 	if err := r.Status().Update(ctx, &template); err != nil {

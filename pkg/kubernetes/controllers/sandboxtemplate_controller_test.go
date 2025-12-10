@@ -80,6 +80,11 @@ func TestSandboxTemplateReconciler_Reconcile(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, updatedTemplate.Status.Ready)
 	assert.Equal(t, "Template is valid", updatedTemplate.Status.Message)
+
+	// Check Condition
+	require.Len(t, updatedTemplate.Status.Conditions, 1)
+	assert.Equal(t, string(tartarusv1alpha1.SandboxTemplateReady), updatedTemplate.Status.Conditions[0].Type)
+	assert.Equal(t, metav1.ConditionTrue, updatedTemplate.Status.Conditions[0].Status)
 }
 
 func TestSandboxTemplateReconciler_Reconcile_Invalid(t *testing.T) {
@@ -129,4 +134,9 @@ func TestSandboxTemplateReconciler_Reconcile_Invalid(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, updatedTemplate.Status.Ready)
 	assert.Equal(t, "Image is required", updatedTemplate.Status.Message)
+
+	// Check Condition
+	require.Len(t, updatedTemplate.Status.Conditions, 1)
+	assert.Equal(t, string(tartarusv1alpha1.SandboxTemplateReady), updatedTemplate.Status.Conditions[0].Type)
+	assert.Equal(t, metav1.ConditionFalse, updatedTemplate.Status.Conditions[0].Status)
 }
