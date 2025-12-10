@@ -189,9 +189,10 @@ func (s *CronScheduler) matchesTimeRange(season *Season, t time.Time) bool {
 
 // SeasonActivator manages automatic season transitions
 type SeasonActivator struct {
-	scheduler *CronScheduler
-	seasons   map[string]*Season
-	current   *Season
+	scheduler             *CronScheduler
+	seasons               map[string]*Season
+	current               *Season
+	hibernationController *HibernationController
 }
 
 // NewSeasonActivator creates an activator with the given scheduler
@@ -200,6 +201,11 @@ func NewSeasonActivator(scheduler *CronScheduler) *SeasonActivator {
 		scheduler: scheduler,
 		seasons:   make(map[string]*Season),
 	}
+}
+
+// SetHibernationController sets the hibernation controller for season transitions
+func (a *SeasonActivator) SetHibernationController(controller *HibernationController) {
+	a.hibernationController = controller
 }
 
 // RegisterSeason adds a season to the activator
@@ -230,6 +236,12 @@ func (a *SeasonActivator) EvaluateSeasons(ctx context.Context, t time.Time) (*Se
 	// Only transition if different from current
 	if bestMatch != nil && (a.current == nil || a.current.ID != bestMatch.ID) {
 		a.current = bestMatch
+
+		// Trigger hibernation controller if transitioning to a hibernation-enabled season
+		if bestMatch.Hibernation.Enabled && a.hibernationController != nil {
+			go a.hibernationController.EvaluateHibernation(ctx, bestMatch)
+		}
+
 		return bestMatch, nil
 	}
 

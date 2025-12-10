@@ -34,7 +34,7 @@
 ## Phase 6 — The Golden Age (Future Capabilities)
 ### Persephone (Seasonal Scaling)
 - [x] Predictive autoscaler that learns historical demand, trains forecasts, and pre-warms node pools; data pipeline plus evaluation harness.
-- [ ] Seasonal schedules with budget caps and Hypnos integration for hibernation cycles.
+- [x] Seasonal schedules with budget caps and Hypnos integration for hibernation cycles.
 
 ### Thanatos (Graceful Termination)
 - [ ] Graceful shutdown controller with checkpoint/export before kill; policy-driven grace windows; integration with Erinyes enforcement and Hermes audit.

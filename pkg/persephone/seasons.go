@@ -47,6 +47,12 @@ type Season struct {
 
 	// Resource class distribution
 	ResourceMix map[string]float64
+
+	// Budget constraints for this season
+	Budget BudgetConfig
+
+	// Hibernation configuration for idle scaling
+	Hibernation HibernationConfig
 }
 
 type SeasonSchedule struct {
