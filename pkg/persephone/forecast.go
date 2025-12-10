@@ -265,8 +265,8 @@ func (f *HybridForecaster) Train(history []*UsageRecord) {
 	f.smoothing.Train(history)
 }
 
-// Forecast generates predictions for a time window
-func (f *HybridForecaster) Forecast(history []*UsageRecord, window time.Duration, stepInterval time.Duration) *Forecast {
+// Forecast generates predictions for a time window starting from startTime
+func (f *HybridForecaster) Forecast(history []*UsageRecord, startTime time.Time, window time.Duration, stepInterval time.Duration) *Forecast {
 	if len(history) == 0 {
 		return &Forecast{
 			GeneratedAt: time.Now(),
@@ -281,11 +281,10 @@ func (f *HybridForecaster) Forecast(history []*UsageRecord, window time.Duration
 
 	// Generate predictions
 	predictions := []Prediction{}
-	now := time.Now()
 	steps := int(window / stepInterval)
 
 	for i := 0; i < steps; i++ {
-		t := now.Add(time.Duration(i) * stepInterval)
+		t := startTime.Add(time.Duration(i) * stepInterval)
 
 		// Get pattern-based prediction
 		patternDemand, patternConf := f.patternDetector.PredictDemand(t)
@@ -312,7 +311,7 @@ func (f *HybridForecaster) Forecast(history []*UsageRecord, window time.Duration
 	analysis := f.patternDetector.AnalyzePatterns(history)
 
 	return &Forecast{
-		GeneratedAt: now,
+		GeneratedAt: time.Now(),
 		Window:      window,
 		Predictions: predictions,
 		Confidence:  analysis.Confidence,

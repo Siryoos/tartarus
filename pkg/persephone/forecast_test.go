@@ -172,12 +172,13 @@ func TestHybridForecaster(t *testing.T) {
 		})
 	}
 
-	// Generate 6-hour forecast
-	forecast := forecaster.Forecast(history, 6*time.Hour, 1*time.Hour)
+	// Test forecast
+	forecast := forecaster.Forecast(history, time.Now(), 24*time.Hour, time.Hour)
 
 	require.NotNil(t, forecast)
-	assert.Equal(t, 6*time.Hour, forecast.Window)
-	assert.Equal(t, 6, len(forecast.Predictions))
+	// The window and number of predictions should reflect the new parameters
+	assert.Equal(t, 24*time.Hour, forecast.Window)
+	assert.Equal(t, 24, len(forecast.Predictions))
 	assert.Greater(t, forecast.Confidence, 0.0)
 
 	// Verify predictions have bounds
@@ -189,13 +190,36 @@ func TestHybridForecaster(t *testing.T) {
 	}
 }
 
-func TestHybridForecaster_EmptyHistory(t *testing.T) {
+func TestForecastWithShortHistory(t *testing.T) {
 	forecaster := NewHybridForecaster()
+	history := make([]*UsageRecord, 5) // Very short history
+	now := time.Now()
 
-	forecast := forecaster.Forecast([]*UsageRecord{}, 24*time.Hour, 1*time.Hour)
+	for i := 0; i < 5; i++ {
+		history[i] = &UsageRecord{
+			Timestamp: now.Add(time.Duration(i-5) * time.Hour),
+			ActiveVMs: 10,
+		}
+	}
 
-	require.NotNil(t, forecast)
-	assert.Equal(t, 0, len(forecast.Predictions))
+	forecast := forecaster.Forecast(history, time.Now(), 5*time.Hour, time.Hour)
+
+	// Should still generate predictions, just with low confidence
+	if len(forecast.Predictions) != 5 {
+		t.Errorf("expected 5 predictions, got %d", len(forecast.Predictions))
+	}
+	assert.Greater(t, forecast.Confidence, 0.0) // Should still have some confidence
+}
+
+func TestForecastWithEmptyHistory(t *testing.T) {
+	forecaster := NewHybridForecaster()
+	history := []*UsageRecord{}
+
+	forecast := forecaster.Forecast(history, time.Now(), 5*time.Hour, time.Hour)
+
+	if len(forecast.Predictions) != 0 {
+		t.Errorf("expected 0 predictions for empty history, got %d", len(forecast.Predictions))
+	}
 	assert.Equal(t, 0.0, forecast.Confidence)
 }
 
@@ -214,6 +238,6 @@ func BenchmarkForecast(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		forecaster.Forecast(history, 24*time.Hour, 5*time.Minute)
+		forecaster.Forecast(history, now, 24*time.Hour, 5*time.Minute)
 	}
 }

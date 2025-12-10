@@ -3,6 +3,7 @@ package persephone
 import (
 	"context"
 	"math"
+	"time"
 )
 
 // CapacityOptimizer calculates optimal resource levels
@@ -39,7 +40,7 @@ func (o *CapacityOptimizer) CalculateRecommendation(
 	currentActive := latest.ActiveVMs
 
 	// Generate short-term forecast (next hour)
-	forecast := o.forecaster.Forecast(history, 1*60*60*1000000000, 15*60*1000000000) // 1 hour, 15-min steps
+	forecast := o.forecaster.Forecast(history, time.Now(), 1*60*60*1000000000, 15*60*1000000000) // 1 hour, 15-min steps
 
 	// Calculate peak predicted demand
 	var peakDemand int

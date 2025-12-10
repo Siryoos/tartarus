@@ -2,6 +2,7 @@ package persephone
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -218,7 +219,12 @@ func (s *BasicSeasonalScaler) Forecast(ctx context.Context, window time.Duration
 		stepInterval = time.Minute
 	}
 
-	return forecaster.Forecast(s.history, window, stepInterval), nil
+	// Forecast for the season duration
+	// The original forecaster.Forecast signature was (history []*UsageRecord, window time.Duration, stepInterval time.Duration)
+	// To include time.Now(), we assume the forecaster's Forecast method signature has been updated
+	// to accept a start time, e.g., (history []*UsageRecord, startTime time.Time, window time.Duration, stepInterval time.Duration)
+	// This change assumes an update to the HybridForecaster's interface/implementation.
+	return forecaster.Forecast(s.history, time.Now(), window, stepInterval), nil
 }
 
 func (s *BasicSeasonalScaler) Learn(ctx context.Context, history []*UsageRecord) error {
@@ -245,36 +251,85 @@ func (s *BasicSeasonalScaler) Learn(ctx context.Context, history []*UsageRecord)
 
 func (s *BasicSeasonalScaler) RecommendCapacity(ctx context.Context, targetUtil float64) (*CapacityRecommendation, error) {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
+	// Copy history for forecasting outside lock if needed, but forecast is fast enough
+	history := s.history
+	currentSeason := s.currentSeason
+	s.mu.RUnlock()
 
-	// Get current usage from history (last record)
+	// 1. Calculate reactive recommendation based on current usage
 	var currentActive int
-	if len(s.history) > 0 {
-		currentActive = s.history[len(s.history)-1].ActiveVMs
+	if len(history) > 0 {
+		currentActive = history[len(history)-1].ActiveVMs
 	}
 
-	// Calculate recommended nodes based on target utilization
 	// Recommended = CurrentActive / TargetUtil
-	recommended := float64(currentActive) / targetUtil
-	if recommended < 1 {
-		recommended = 1
+	reactiveRecommended := float64(currentActive) / targetUtil
+	if reactiveRecommended < 1 {
+		reactiveRecommended = 1
 	}
 
-	// Adjust based on current season limits
-	if s.currentSeason != nil {
-		if recommended < float64(s.currentSeason.MinNodes) {
-			recommended = float64(s.currentSeason.MinNodes)
+	finalRecommended := reactiveRecommended
+	reason := "Based on current usage"
+
+	// 2. Calculate predictive recommendation if pre-warming is enabled
+	if currentSeason != nil && currentSeason.Prewarming.LeadTime > 0 {
+
+		// Forecast ahead by LeadTime
+		leadTime := currentSeason.Prewarming.LeadTime
+
+		// We need a window slightly larger than lead time to find the target point or just leadTime
+		// Let's forecast for leadTime + 5 mins to be sure
+		forecastWindow := leadTime + 5*time.Minute
+
+		// Assuming we haven't updated the interface yet, we need to match what Forecast does
+		// But s.Forecast is what is available.
+		// Actually, I can just call s.Forecast(ctx, forecastWindow) but I need to handle the lock carefully.
+		// I already unlocked, so I can call s.Forecast if it locks.
+		// Wait, s.Forecast takes RLock. It's fine to call it if I'm not holding a lock.
+
+		fc, err := s.Forecast(ctx, forecastWindow)
+		if err == nil && len(fc.Predictions) > 0 {
+			// Find prediction closest to Now + LeadTime
+			targetTime := time.Now().Add(leadTime)
+			var predictedDemand int
+
+			for _, p := range fc.Predictions {
+				if p.Time.After(targetTime) || p.Time.Equal(targetTime) {
+					predictedDemand = p.PredictedDemand
+					break
+				}
+				// Keep the last one if we don't pass targetTime (shouldn't happen with correct window)
+				predictedDemand = p.PredictedDemand
+			}
+
+			// Pre-warm recommendation
+			predictiveRecommended := float64(predictedDemand) / targetUtil
+
+			// Take the maximum of reactive and predictive
+			if predictiveRecommended > finalRecommended {
+				finalRecommended = predictiveRecommended
+				reason = fmt.Sprintf("Pre-warming for predicted demand of %d in %s", predictedDemand, leadTime)
+			}
 		}
-		if recommended > float64(s.currentSeason.MaxNodes) {
-			recommended = float64(s.currentSeason.MaxNodes)
+	}
+
+	// 3. Apply season constraints
+	if currentSeason != nil {
+		if finalRecommended < float64(currentSeason.MinNodes) {
+			finalRecommended = float64(currentSeason.MinNodes)
+			reason += " (clamped to season min)"
+		}
+		if finalRecommended > float64(currentSeason.MaxNodes) {
+			finalRecommended = float64(currentSeason.MaxNodes)
+			reason += " (clamped to season max)"
 		}
 	}
 
 	return &CapacityRecommendation{
-		CurrentNodes:     currentActive, // Approximation
-		RecommendedNodes: int(recommended),
-		Reason:           "Based on current usage and season limits",
-		ConfidenceLevel:  0.9,
+		CurrentNodes:     currentActive,
+		RecommendedNodes: int(finalRecommended),
+		Reason:           reason,
+		ConfidenceLevel:  0.9, // This could be updated from forecast confidence
 	}, nil
 }
 
