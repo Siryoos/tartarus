@@ -561,6 +561,8 @@ func TestPythonDSColdStartWithHarness(t *testing.T) {
 		err := manager.Submit(ctx, req)
 		if err != nil {
 			timer.StopWithError(err)
+			// Best-effort cleanup
+			_ = manager.KillSandbox(ctx, req.ID)
 			continue
 		}
 
@@ -577,6 +579,8 @@ func TestPythonDSColdStartWithHarness(t *testing.T) {
 
 		if !success {
 			timer.StopWithError(fmt.Errorf("sandbox failed to reach RUNNING state"))
+			// Best-effort cleanup
+			_ = manager.KillSandbox(ctx, req.ID)
 			continue
 		}
 
@@ -586,7 +590,7 @@ func TestPythonDSColdStartWithHarness(t *testing.T) {
 		// expose timing hooks. Current end-to-end duration is captured in the harness.
 
 		// Cleanup
-		manager.KillSandbox(ctx, req.ID)
+		_ = manager.KillSandbox(ctx, req.ID)
 	}
 
 	// 6. Generate and verify report

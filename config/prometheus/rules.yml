@@ -164,6 +164,12 @@ groups:
       - record: phase4:hypnos_wake_p99:5m
         expr: histogram_quantile(0.99, rate(perf_hypnos_wake_seconds_bucket[5m]))
 
+      - record: phase4:erebus_warm_cache_p99:5m
+        expr: histogram_quantile(0.99, rate(erebus_warm_cache_duration_seconds_bucket[5m]))
+
+      - record: phase4:hypnos_wake_duration_p99:5m
+        expr: histogram_quantile(0.99, rate(hypnos_wake_duration_seconds_bucket[5m]))
+
       # SLO compliance percentages
       - record: phase4:slo_compliance:python_ds
         expr: |

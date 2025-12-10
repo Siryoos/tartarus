@@ -268,7 +268,7 @@ func (h *PerfHarness) GenerateReport() *SLOReport {
 			targetP = avg
 		}
 
-		passed := targetP <= slo.Target || len(durations) == 0
+		passed := (len(durations) > 0 && targetP <= slo.Target) || (len(durations) == 0 && errors == 0)
 
 		result := SLOResult{
 			Name:        slo.Name,
@@ -331,7 +331,7 @@ type LatencyStats struct {
 // String returns a formatted string representation of the report.
 func (r *SLOReport) String() string {
 	var output string
-	output += fmt.Sprintf("=== Phase 4 SLO Report ===\n")
+	output += "=== Phase 4 SLO Report ===\n"
 	output += fmt.Sprintf("Generated: %s\n\n", r.GeneratedAt.Format(time.RFC3339))
 
 	passCount := 0

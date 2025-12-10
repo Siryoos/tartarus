@@ -366,6 +366,7 @@ func BenchmarkErebusOCIConversion(b *testing.B) {
 				start := time.Now()
 				err = builder.Assemble(context.Background(), img.ref, outDir)
 				duration := time.Since(start)
+				b.StopTimer()
 
 				if err != nil {
 					b.Fatalf("Warm cache assemble failed: %v", err)
@@ -376,6 +377,7 @@ func BenchmarkErebusOCIConversion(b *testing.B) {
 					hermes.Label{Key: "image", Value: img.name})
 
 				os.RemoveAll(outDir)
+				b.StartTimer()
 			}
 		})
 	}
