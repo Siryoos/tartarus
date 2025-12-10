@@ -71,7 +71,7 @@
             },
             "targets": [
                 {
-                    "expr": "sum(perf_python_ds_cold_start_seconds_slo_compliance) / count(perf_python_ds_cold_start_seconds_slo_compliance)",
+                    "expr": "phase4:slo_compliance:python_ds / 100",
                     "legendFormat": "Python-DS SLO",
                     "refId": "A"
                 }
@@ -119,7 +119,7 @@
             },
             "targets": [
                 {
-                    "expr": "sum(perf_erebus_oci_conversion_seconds_slo_compliance) / count(perf_erebus_oci_conversion_seconds_slo_compliance)",
+                    "expr": "phase4:slo_compliance:oci_conversion / 100",
                     "legendFormat": "OCI Conversion SLO",
                     "refId": "A"
                 }
@@ -167,7 +167,7 @@
             },
             "targets": [
                 {
-                    "expr": "sum(perf_typhon_quarantine_overhead_seconds_slo_compliance) / count(perf_typhon_quarantine_overhead_seconds_slo_compliance)",
+                    "expr": "phase4:slo_compliance:typhon_quarantine / 100",
                     "legendFormat": "Typhon Quarantine SLO",
                     "refId": "A"
                 }
@@ -215,7 +215,7 @@
             },
             "targets": [
                 {
-                    "expr": "sum(perf_hypnos_wake_seconds_slo_compliance) / count(perf_hypnos_wake_seconds_slo_compliance)",
+                    "expr": "phase4:slo_compliance:hypnos_wake / 100",
                     "legendFormat": "Hypnos Wake SLO",
                     "refId": "A"
                 }

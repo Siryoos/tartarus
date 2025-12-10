@@ -267,7 +267,7 @@ func TestErebusOCIConversionPerformance(t *testing.T) {
 			passed := timing.TotalDuration <= OCIConversionTarget
 			status := "PASS"
 			if !passed {
-				status := "FAIL"
+				status = "FAIL"
 				t.Errorf("%s: %v - %s", timing.ImageRef, timing.TotalDuration, status)
 			} else {
 				t.Logf("%s: %v - %s", timing.ImageRef, timing.TotalDuration, status)

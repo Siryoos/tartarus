@@ -142,11 +142,9 @@ func (h *PerfHarness) RecordError(metricName string, err error, labels map[strin
 	}
 }
 
-// GetResults returns all recorded results for a metric.
-func (h *PerfHarness) GetResults(metricName string) []PerfResult {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
+// getResultsLocked returns all recorded results for a metric without acquiring the lock.
+// Caller must hold h.mu.
+func (h *PerfHarness) getResultsLocked(metricName string) []PerfResult {
 	var filtered []PerfResult
 	for _, r := range h.results {
 		if r.Name == metricName {
@@ -154,6 +152,13 @@ func (h *PerfHarness) GetResults(metricName string) []PerfResult {
 		}
 	}
 	return filtered
+}
+
+// GetResults returns all recorded results for a metric.
+func (h *PerfHarness) GetResults(metricName string) []PerfResult {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.getResultsLocked(metricName)
 }
 
 // CalculatePercentile calculates the given percentile for a metric.
@@ -216,7 +221,7 @@ func (h *PerfHarness) GenerateReport() *SLOReport {
 	}
 
 	for metricName, slo := range h.sloTargets {
-		results := h.GetResults(metricName)
+		results := h.getResultsLocked(metricName)
 
 		var durations []time.Duration
 		var errors int

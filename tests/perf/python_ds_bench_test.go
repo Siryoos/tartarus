@@ -580,15 +580,10 @@ func TestPythonDSColdStartWithHarness(t *testing.T) {
 			continue
 		}
 
-		duration := timer.Stop()
+		_ = timer.Stop()
 
-		// Record detailed phase metrics
-		metrics.ObserveHistogram("perf_python_ds_queue_to_schedule_seconds", 0.005,
-			hermes.Label{Key: "template", Value: "python-ds"})
-		metrics.ObserveHistogram("perf_python_ds_schedule_to_launch_seconds", duration.Seconds()-0.055,
-			hermes.Label{Key: "template", Value: "python-ds"})
-		metrics.ObserveHistogram("perf_python_ds_launch_to_running_seconds", 0.050,
-			hermes.Label{Key: "template", Value: "python-ds"})
+		// TODO: Implement actual phase timing instrumentation when queue/scheduler
+		// expose timing hooks. Current end-to-end duration is captured in the harness.
 
 		// Cleanup
 		manager.KillSandbox(ctx, req.ID)
