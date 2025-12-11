@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
+	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
 )
 
 // IsolationType defines the type of isolation/runtime to use.
@@ -37,6 +38,9 @@ type UnifiedRuntime struct {
 
 	// Selector implements the auto-selection logic
 	selector *RuntimeSelector
+
+	// Metrics
+	metrics *hermes.PrometheusMetrics
 }
 
 // UnifiedRuntimeConfig configures the unified runtime.
@@ -53,6 +57,8 @@ type UnifiedRuntimeConfig struct {
 	AutoSelect bool
 
 	Logger *slog.Logger
+
+	Metrics *hermes.PrometheusMetrics
 }
 
 // NewUnifiedRuntime creates a new unified runtime instance.
@@ -65,6 +71,7 @@ func NewUnifiedRuntime(cfg UnifiedRuntimeConfig) *UnifiedRuntime {
 		defaultRuntime: cfg.DefaultRuntime,
 		autoSelect:     cfg.AutoSelect,
 		selector:       NewRuntimeSelector(cfg.Logger),
+		metrics:        cfg.Metrics,
 	}
 }
 
@@ -83,7 +90,16 @@ func (u *UnifiedRuntime) selectRuntime(req *domain.SandboxRequest) (SandboxRunti
 	}
 
 	// Use auto-selection logic
+	// Use auto-selection logic
 	selectedType := u.selector.SelectRuntime(req)
+
+	if u.metrics != nil {
+		u.metrics.IncCounter("tartarus_runtime_selection_total", 1,
+			hermes.Label{Key: "source", Value: "auto"},
+			hermes.Label{Key: "selected_runtime", Value: string(selectedType)},
+		)
+	}
+
 	return u.getRuntimeByType(selectedType)
 }
 
@@ -132,6 +148,11 @@ func (u *UnifiedRuntime) Launch(ctx context.Context, req *domain.SandboxRequest,
 	run, err := runtime.Launch(ctx, req, cfg)
 	if err != nil {
 		return nil, err
+	}
+
+	// Record metrics
+	if u.metrics != nil {
+		u.metrics.IncCounter("tartarus_sandbox_count", 1, hermes.Label{Key: "runtime", Value: string(isoType)})
 	}
 
 	// Add runtime type to metadata

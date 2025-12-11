@@ -45,8 +45,8 @@
 - [x] Migration tooling to move running containers to Firecracker VMs with state export/import.
 
 ### Unified Runtime (`pkg/tartarus`)
-- [ ] WASM runtime integration (WasmEdge/Wasmtime) behind `IsolationAuto` selector; routing logic choosing WASM vs microVM based on workload density/cost.
-- [ ] Performance matrix comparing WASM vs microVM vs gVisor; SLO alerts for regression.
+- [x] WASM runtime integration (WasmEdge/Wasmtime) behind `IsolationAuto` selector; routing logic choosing WASM vs microVM based on workload density/cost.
+- [x] Performance matrix comparing WASM vs microVM vs gVisor; SLO alerts for regression.
 
 ## Ecosystem and Integration Plane
 - [ ] GitHub Actions integration (sandboxed runners) and VS Code extension for template/run/debug flows.
