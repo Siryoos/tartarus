@@ -31,7 +31,7 @@ Specific `TODO` and `FIXME` items found in the codebase.
   - `pkg/persephone/forecast.go:132`: `// TODO: Calculate actual confidence`
 - [x] **Erebus (OCI)**: Dynamic init binary location.
   - `pkg/erebus/oci.go:229`: `// TODO: Locate the actual init binary`
-- [ ] **Hecatoncheir (Agent)**: Log streaming improvements.
+- [x] **Hecatoncheir (Agent)**: Log streaming improvements.
   - `pkg/hecatoncheir/agent.go:529`: `// TODO: Runtime.StreamLogs needs to support follow flag or we handle it here?`
 
 ### Performance & Testing

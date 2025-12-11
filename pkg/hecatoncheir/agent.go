@@ -526,14 +526,6 @@ func (a *Agent) streamLogs(ctx context.Context, id domain.SandboxID, follow bool
 	}()
 
 	// Stream from Runtime to Pipe Writer
-	// TODO: Runtime.StreamLogs needs to support follow flag or we handle it here?
-	// If Runtime.StreamLogs just reads file, we need to tail it if follow is true.
-	// Let's assume Runtime.StreamLogs needs update or we pass options.
-	// For now, let's update Runtime interface later, but here we pass it if we can.
-	// Actually, the plan said "If follow is false, read until EOF. If true, stream indefinitely".
-	// The current Runtime.StreamLogs likely just reads the file.
-	// We need to check tartarus/runtime.go.
-	// But assuming we update Runtime.StreamLogs to take follow bool.
 	if err := a.Runtime.StreamLogs(ctx, id, w, follow); err != nil {
 		a.Logger.Error(ctx, "Failed to stream logs from runtime", map[string]any{"sandbox_id": id, "error": err})
 	}

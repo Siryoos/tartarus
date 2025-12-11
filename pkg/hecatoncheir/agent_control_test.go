@@ -85,7 +85,8 @@ func (m *MockRuntime) GetConfig(ctx context.Context, id domain.SandboxID) (tarta
 	return args.Get(0).(tartarus.VMConfig), args.Get(1).(*domain.SandboxRequest), args.Error(2)
 }
 func (m *MockRuntime) StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writer, follow bool) error {
-	return nil
+	args := m.Called(ctx, id, w, follow)
+	return args.Error(0)
 }
 func (m *MockRuntime) Allocation(ctx context.Context) (domain.ResourceCapacity, error) {
 	return domain.ResourceCapacity{}, nil
@@ -127,6 +128,53 @@ func TestAgent_ControlLoop_Exec(t *testing.T) {
 			Type:      ControlMessageExec,
 			SandboxID: sandboxID,
 			Args:      append([]string{"req-1"}, cmd...),
+		}
+		close(ch)
+	}()
+
+	// Run control loop
+	agent.controlLoop(ctx, ch)
+
+	// Wait for goroutines to finish
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify
+	mockRuntime.AssertExpectations(t)
+}
+
+func TestAgent_ControlLoop_Logs(t *testing.T) {
+	// Setup
+	mockRuntime := new(MockRuntime)
+	mockListener := new(MockControlListener)
+	agent := &Agent{
+		Runtime: mockRuntime,
+		Control: mockListener,
+		Logger:  hermes.NewSlogAdapter(),
+	}
+
+	// Expectation
+	ctx := context.Background()
+	sandboxID := domain.SandboxID("test-sandbox")
+
+	// Expect StreamLogs to be called with follow=true
+	mockRuntime.On("StreamLogs", mock.Anything, sandboxID, mock.Anything, true).Return(nil).Run(func(args mock.Arguments) {
+		// Simulate log streaming
+		w := args.Get(2).(io.Writer)
+		w.Write([]byte("mock logs"))
+	})
+
+	// Expect PublishLogs to be called
+	mockListener.On("PublishLogs", mock.Anything, sandboxID, mock.MatchedBy(func(logs []byte) bool {
+		return string(logs) == "mock logs"
+	})).Return(nil)
+
+	// Create channel and send message
+	ch := make(chan ControlMessage)
+	go func() {
+		ch <- ControlMessage{
+			Type:      ControlMessageLogs,
+			SandboxID: sandboxID,
+			Args:      []string{"true"}, // follow=true
 		}
 		close(ch)
 	}()
