@@ -13,19 +13,19 @@ These items appear to be partially implemented or are immediate next steps.
   - [x] Implement `Wait` (poll state)
   - [x] Implement `Exec` (call `runsc exec`)
   - [x] Implement `StreamLogs`
-- [ ] **Enable and Verify Advanced Features**
+- [x] **Enable and Verify Advanced Features**
   - [x] Enable Hypnos (Sleep/Hibernation) by default (currently gated by `EnableHypnos` flag)
   - [x] Enable Thanatos (Graceful Termination) by default (currently gated by `EnableThanatos` flag)
   - [x] Verify full integration of `pkg/hypnos` and `pkg/thanatos` with the main control plane.
-- [ ] **Kampe Legacy Runtime Shim**
-  - [ ] Verify status of `pkg/kampe` (currently listed as "Planned" in Roadmap, needs verification of completeness).
+- [x] **Kampe Legacy Runtime Shim**
+  - [x] Verify status of `pkg/kampe` (currently listed as "Planned" in Roadmap, needs verification of completeness).
 
 ## 🛠 Technical Debt & Code Cleanup
 
 Specific `TODO` and `FIXME` items found in the codebase.
 
 ### Critical
-- [ ] **Erebus (Storage)**: Implement cleanup of files.
+- [x] **Erebus (Storage)**: Implement cleanup of files.
   - `pkg/nyx/local_manager.go:367`: `// TODO: Delete files from Erebus?`
 - [ ] **Persephone (Autoscaling)**: Improve forecast confidence calculation.
   - `pkg/persephone/forecast.go:132`: `// TODO: Calculate actual confidence`

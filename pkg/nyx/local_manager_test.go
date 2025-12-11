@@ -4,6 +4,7 @@ package nyx
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -314,5 +315,67 @@ func TestLocalManager_GetSnapshot_ReadThrough(t *testing.T) {
 	memPath := filepath.Join(snapDir2, "snapshots", string(tplID), string(snap.ID)+".mem")
 	if _, err := os.Stat(memPath); err != nil {
 		t.Errorf("Expected mem file to be downloaded to %s", memPath)
+	}
+}
+
+func TestLocalManager_DeleteSnapshot(t *testing.T) {
+	// Setup
+	tmpDir, err := os.MkdirTemp("", "nyx-test-del-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	storeDir := filepath.Join(tmpDir, "store")
+	snapDir := filepath.Join(tmpDir, "snapshots")
+
+	store, err := erebus.NewLocalStore(storeDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mgr, err := NewLocalManager(store, nil, snapDir, hermes.NewSlogAdapter())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mgr.vmLauncher = func(ctx context.Context, tpl *domain.TemplateSpec, rootfsPath, socketPath string) (SnapshotMachine, error) {
+		return &MockSnapshotMachine{}, nil
+	}
+
+	tplID := domain.TemplateID("tpl-del")
+	tpl := &domain.TemplateSpec{ID: tplID}
+
+	// Prepare snapshot
+	snap, err := mgr.Prepare(context.Background(), tpl)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify it exists
+	list, _ := mgr.ListSnapshots(context.Background(), tplID)
+	if len(list) != 1 {
+		t.Fatal("Expected snapshot to exist")
+	}
+
+	// Delete
+	if err := mgr.DeleteSnapshot(context.Background(), tplID, snap.ID); err != nil {
+		t.Fatalf("DeleteSnapshot failed: %v", err)
+	}
+
+	// Verify removed from list
+	list, _ = mgr.ListSnapshots(context.Background(), tplID)
+	if len(list) != 0 {
+		t.Error("Expected snapshot to be removed from list")
+	}
+
+	// Verify removed from store
+	memKey := fmt.Sprintf("snapshots/%s/%s.mem", tplID, snap.ID)
+	exists, err := store.Exists(context.Background(), memKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exists {
+		t.Error("Expected mem file to be deleted from store")
 	}
 }

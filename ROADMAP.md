@@ -182,7 +182,7 @@ Tartarus implements a three-realm architecture reflecting the Greek cosmological
 | **Erinyes** | `pkg/erinyes` | Enforcement/Punishment (The Furies) | ✅ Implemented |
 | **Tartarus** | `pkg/tartarus` | MicroVM Runtime Interface | ✅ Implemented |
 | **Typhon** | `pkg/typhon` | Quarantine Pool (Monster of Chaos) | ✅ Implemented (Phase 3) |
-| **Kampe** | `pkg/kampe` | Legacy Runtime Shim (Old Jailor) | 🔲 Planned |
+| **Kampe** | `pkg/kampe` | Legacy Runtime Shim (Old Jailor) | ✅ Implemented |
 
 ### New Entities (Phase 4+)
 

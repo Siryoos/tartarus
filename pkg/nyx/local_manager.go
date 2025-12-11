@@ -457,11 +457,26 @@ func (m *LocalManager) DeleteSnapshot(ctx context.Context, tplID domain.Template
 	}
 
 	// Remove from store (Erebus)
-	// We don't have a Delete method in Store interface?
-	// Let's check erebus.Store interface.
-	// If not, we can't delete from store.
-	// Assuming Store has Delete or we just ignore it for now.
-	// Let's check erebus.Store.
+	memKey := fmt.Sprintf("snapshots/%s/%s.mem", tplID, snapID)
+	diskKey := fmt.Sprintf("snapshots/%s/%s.disk", tplID, snapID)
+	jsonKey := fmt.Sprintf("snapshots/%s/%s.json", tplID, snapID)
+
+	// We try to delete all components, logging errors but not stopping
+	if err := m.Store.Delete(ctx, memKey); err != nil {
+		m.Logger.Info(ctx, "Failed to delete mem file from store", map[string]any{"key": memKey, "error": err.Error()})
+	}
+	if err := m.Store.Delete(ctx, diskKey); err != nil {
+		m.Logger.Info(ctx, "Failed to delete disk file from store", map[string]any{"key": diskKey, "error": err.Error()})
+	}
+	if err := m.Store.Delete(ctx, jsonKey); err != nil {
+		m.Logger.Info(ctx, "Failed to delete json file from store", map[string]any{"key": jsonKey, "error": err.Error()})
+	}
+
+	// Also remove from local cache dir if present
+	localDir := filepath.Join(m.SnapshotDir, "snapshots", string(tplID))
+	_ = os.Remove(filepath.Join(localDir, string(snapID)+".mem"))
+	_ = os.Remove(filepath.Join(localDir, string(snapID)+".disk"))
+	_ = os.Remove(filepath.Join(localDir, string(snapID)+".json"))
 
 	return nil
 }
