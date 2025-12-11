@@ -553,41 +553,63 @@ func TestPythonDSColdStartWithHarness(t *testing.T) {
 			},
 		}
 
-		timer := harness.StartTimer("perf_python_ds_cold_start_seconds", map[string]string{
+		phaseTimer := harness.StartPhaseTimer("perf_python_ds_cold_start_seconds", map[string]string{
 			"template":  "python-ds",
 			"iteration": fmt.Sprintf("%d", i),
 		})
 
+		// Phase 1: Submit (API call time)
+		phaseTimer.StartPhase("submit")
 		err := manager.Submit(ctx, req)
+		phaseTimer.EndPhase()
+
 		if err != nil {
-			timer.StopWithError(err)
+			phaseTimer.CompleteWithError(err)
 			// Best-effort cleanup
 			_ = manager.KillSandbox(ctx, req.ID)
 			continue
 		}
+
+		// Phase 2: Queue wait + Scheduling (time from submit to picked up by agent)
+		phaseTimer.StartPhase("queue_schedule")
 
 		// Wait for Running status
 		success := false
 		for j := 0; j < 100; j++ {
 			run, err := registry.GetRun(ctx, req.ID)
-			if err == nil && run.Status == domain.RunStatusRunning {
-				success = true
-				break
+			if err == nil {
+				// Track when it transitions from Pending to Scheduled
+				if run.Status == domain.RunStatusScheduled && phaseTimer.GetPhaseDuration("queue_schedule") > 0 {
+					// Transition to runtime launch phase
+					phaseTimer.StartPhase("runtime_launch")
+				}
+				if run.Status == domain.RunStatusRunning {
+					success = true
+					break
+				}
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
 
 		if !success {
-			timer.StopWithError(fmt.Errorf("sandbox failed to reach RUNNING state"))
+			phaseTimer.CompleteWithError(fmt.Errorf("sandbox failed to reach RUNNING state"))
 			// Best-effort cleanup
 			_ = manager.KillSandbox(ctx, req.ID)
 			continue
 		}
 
-		_ = timer.Stop()
+		// Complete phase timing and log results
+		overallDuration, phases := phaseTimer.Complete()
 
-		// TODO: Implement actual phase timing instrumentation when queue/scheduler
-		// expose timing hooks. Current end-to-end duration is captured in the harness.
+		// Log phase breakdown for this iteration (helpful for debugging)
+		if i == 0 || i == iterations-1 {
+			t.Logf("Iteration %d phases: submit=%v, queue_schedule=%v, runtime_launch=%v, total=%v",
+				i,
+				phases["submit"],
+				phases["queue_schedule"],
+				phases["runtime_launch"],
+				overallDuration)
+		}
 
 		// Cleanup
 		_ = manager.KillSandbox(ctx, req.ID)

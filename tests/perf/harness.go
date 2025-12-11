@@ -392,3 +392,82 @@ func (t *Timer) Stop() time.Duration {
 func (t *Timer) StopWithError(err error) {
 	t.harness.RecordError(t.metricName, err, t.labels)
 }
+
+// PhaseTimer tracks individual phases within a single operation for detailed instrumentation.
+type PhaseTimer struct {
+	harness        *PerfHarness
+	baseMetricName string
+	labels         map[string]string
+	phases         map[string]time.Duration
+	currentPhase   string
+	phaseStart     time.Time
+	overallStart   time.Time
+}
+
+// StartPhaseTimer creates a new PhaseTimer for tracking operation phases.
+func (h *PerfHarness) StartPhaseTimer(baseMetricName string, labels map[string]string) *PhaseTimer {
+	return &PhaseTimer{
+		harness:        h,
+		baseMetricName: baseMetricName,
+		labels:         labels,
+		phases:         make(map[string]time.Duration),
+		overallStart:   time.Now(),
+	}
+}
+
+// StartPhase begins timing a new phase. If another phase is in progress, it's automatically ended.
+func (p *PhaseTimer) StartPhase(phaseName string) {
+	if p.currentPhase != "" {
+		p.EndPhase()
+	}
+	p.currentPhase = phaseName
+	p.phaseStart = time.Now()
+}
+
+// EndPhase ends the current phase and records its duration.
+func (p *PhaseTimer) EndPhase() time.Duration {
+	if p.currentPhase == "" {
+		return 0
+	}
+
+	duration := time.Since(p.phaseStart)
+	p.phases[p.currentPhase] = duration
+
+	// Record as a separate metric for granular analysis
+	phaseLabels := make(map[string]string, len(p.labels)+1)
+	for k, v := range p.labels {
+		phaseLabels[k] = v
+	}
+	phaseLabels["phase"] = p.currentPhase
+
+	p.harness.RecordResult(p.baseMetricName+"_phase_"+p.currentPhase, duration, phaseLabels)
+	p.currentPhase = ""
+
+	return duration
+}
+
+// Complete ends any in-progress phase, records the overall duration, and returns all phase durations.
+func (p *PhaseTimer) Complete() (time.Duration, map[string]time.Duration) {
+	if p.currentPhase != "" {
+		p.EndPhase()
+	}
+
+	overallDuration := time.Since(p.overallStart)
+	p.harness.RecordResult(p.baseMetricName, overallDuration, p.labels)
+
+	return overallDuration, p.phases
+}
+
+// CompleteWithError records an error and returns partial phase data.
+func (p *PhaseTimer) CompleteWithError(err error) map[string]time.Duration {
+	if p.currentPhase != "" {
+		p.phases[p.currentPhase+"_partial"] = time.Since(p.phaseStart)
+	}
+	p.harness.RecordError(p.baseMetricName, err, p.labels)
+	return p.phases
+}
+
+// GetPhaseDuration returns the duration of a specific phase, or 0 if not found.
+func (p *PhaseTimer) GetPhaseDuration(phaseName string) time.Duration {
+	return p.phases[phaseName]
+}

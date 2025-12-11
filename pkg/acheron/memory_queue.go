@@ -99,3 +99,10 @@ func (q *MemoryQueue) Nack(ctx context.Context, receipt string, reason string) e
 
 	return nil
 }
+
+// Len returns the current queue depth (pending + processing).
+func (q *MemoryQueue) Len(ctx context.Context) int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return len(q.items) + len(q.processing)
+}

@@ -73,18 +73,67 @@ func (s *Scaler) tick(ctx context.Context) error {
 	}
 
 	activeCount := 0
+	launchCount := 0
+	errorCount := 0
 	for _, run := range runs {
-		if run.Status == domain.RunStatusRunning || run.Status == domain.RunStatusScheduled {
+		switch run.Status {
+		case domain.RunStatusRunning, domain.RunStatusScheduled:
 			activeCount++
+		case domain.RunStatusPending:
+			launchCount++ // Jobs waiting to be launched
+		case domain.RunStatusFailed:
+			errorCount++
 		}
 	}
 
-	// 2. Learn
-	record := &persephone.UsageRecord{
-		Timestamp: time.Now(),
-		ActiveVMs: activeCount,
-		// TODO: Add more metrics like CPU/Mem util if available from Hades/Hermes
+	// Gather CPU/Memory utilization from node heartbeats
+	var totalCPUUtil, totalMemUtil float64
+	var nodeCount int
+	nodes, err := s.Hades.ListNodes(ctx)
+	if err == nil && len(nodes) > 0 {
+		for _, node := range nodes {
+			// Calculate utilization as allocated/capacity
+			if node.Capacity.CPU > 0 {
+				cpuUtil := float64(node.Allocated.CPU) / float64(node.Capacity.CPU)
+				totalCPUUtil += cpuUtil
+			}
+			if node.Capacity.Mem > 0 {
+				memUtil := float64(node.Allocated.Mem) / float64(node.Capacity.Mem)
+				totalMemUtil += memUtil
+			}
+			nodeCount++
+		}
+		if nodeCount > 0 {
+			totalCPUUtil /= float64(nodeCount)
+			totalMemUtil /= float64(nodeCount)
+		}
 	}
+
+	// Get queue depth
+	queueDepth := 0
+	if s.Manager != nil && s.Manager.Queue != nil {
+		queueDepth = s.Manager.Queue.Len(ctx)
+	}
+
+	// 2. Learn with comprehensive metrics
+	record := &persephone.UsageRecord{
+		Timestamp:   time.Now(),
+		ActiveVMs:   activeCount,
+		QueueDepth:  queueDepth,
+		CPUUtil:     totalCPUUtil,
+		MemoryUtil:  totalMemUtil,
+		LaunchCount: launchCount,
+		ErrorCount:  errorCount,
+	}
+
+	// Emit metrics for observability
+	s.Metrics.SetGauge("scaler_active_vms", float64(activeCount))
+	s.Metrics.SetGauge("scaler_queue_depth", float64(queueDepth))
+	s.Metrics.SetGauge("scaler_cpu_utilization", totalCPUUtil)
+	s.Metrics.SetGauge("scaler_memory_utilization", totalMemUtil)
+	s.Metrics.SetGauge("scaler_pending_launches", float64(launchCount))
+	s.Metrics.SetGauge("scaler_error_count", float64(errorCount))
+
 	if err := s.Persephone.Learn(ctx, []*persephone.UsageRecord{record}); err != nil {
 		s.Logger.Error(ctx, "Failed to update Persephone model", map[string]any{"error": err})
 	}

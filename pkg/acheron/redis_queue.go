@@ -315,3 +315,12 @@ func (q *RedisQueue) Nack(ctx context.Context, receipt string, reason string) er
 	q.metrics.IncCounter("queue_nack_total", 1, hermes.Label{Key: "queue", Value: q.streamKey})
 	return nil
 }
+
+// Len returns the current queue depth using XLEN.
+func (q *RedisQueue) Len(ctx context.Context) int {
+	depth, err := q.client.XLen(ctx, q.streamKey).Result()
+	if err != nil {
+		return 0
+	}
+	return int(depth)
+}

@@ -111,6 +111,7 @@ func TestScaler_Tick(t *testing.T) {
 
 	// Mock Hades ListRuns
 	mockHades.On("ListRuns", mock.Anything).Return([]domain.SandboxRun{}, nil)
+	mockHades.On("ListNodes", mock.Anything).Return([]domain.NodeStatus{}, nil)
 
 	// Mock Persephone Learn
 	mockPersephone.On("Learn", mock.Anything, mock.Anything).Return(nil)
@@ -169,6 +170,7 @@ func TestScaler_Prewarm(t *testing.T) {
 
 	// Mock Hades ListRuns - return 0 runs
 	mockHades.On("ListRuns", mock.Anything).Return([]domain.SandboxRun{}, nil)
+	mockHades.On("ListNodes", mock.Anything).Return([]domain.NodeStatus{}, nil)
 
 	// Mock Persephone Learn
 	mockPersephone.On("Learn", mock.Anything, mock.Anything).Return(nil)
@@ -218,6 +220,9 @@ func TestScaler_Prewarm_Enough(t *testing.T) {
 		{Template: "test-tpl", Status: domain.RunStatusRunning, Metadata: map[string]string{"warm": "true"}},
 		{Template: "test-tpl", Status: domain.RunStatusRunning, Metadata: map[string]string{"warm": "true"}},
 	}, nil)
+	mockHades.On("ListNodes", mock.Anything).Return([]domain.NodeStatus{
+		{NodeInfo: domain.NodeInfo{ID: "node-1", Capacity: domain.ResourceCapacity{CPU: 8000, Mem: 16384}}, Allocated: domain.ResourceCapacity{CPU: 4000, Mem: 8192}},
+	}, nil)
 
 	// Mock Persephone Learn
 	mockPersephone.On("Learn", mock.Anything, mock.Anything).Return(nil)
@@ -266,6 +271,11 @@ func (m *MockQueue) Ack(ctx context.Context, id string) error {
 func (m *MockQueue) Nack(ctx context.Context, id string, reason string) error {
 	args := m.Called(ctx, id, reason)
 	return args.Error(0)
+}
+
+func (m *MockQueue) Len(ctx context.Context) int {
+	args := m.Called(ctx)
+	return args.Int(0)
 }
 
 // MockTemplateManager

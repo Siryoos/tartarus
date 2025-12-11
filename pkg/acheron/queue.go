@@ -13,4 +13,6 @@ type Queue interface {
 	Dequeue(ctx context.Context) (*domain.SandboxRequest, string, error)
 	Ack(ctx context.Context, receipt string) error
 	Nack(ctx context.Context, receipt string, reason string) error
+	// Len returns the current queue depth for metrics/scaling decisions.
+	Len(ctx context.Context) int
 }

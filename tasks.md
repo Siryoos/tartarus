@@ -35,9 +35,9 @@ Specific `TODO` and `FIXME` items found in the codebase.
   - `pkg/hecatoncheir/agent.go:529`: `// TODO: Runtime.StreamLogs needs to support follow flag or we handle it here?`
 
 ### Performance & Testing
-- [ ] **Olympus (Scaler)**: Add more metrics for scaling decisions.
+- [x] **Olympus (Scaler)**: Add more metrics for scaling decisions.
   - `pkg/olympus/scaler.go:86`: `// TODO: Add more metrics like CPU/Mem util`
-- [ ] **Tests**: Instrumentation for actual phase timing.
+- [x] **Tests**: Instrumentation for actual phase timing.
   - `tests/perf/python_ds_bench_test.go:589`: `// TODO: Implement actual phase timing instrumentation`
 
 ## 🔮 Future Phases (Roadmap)
