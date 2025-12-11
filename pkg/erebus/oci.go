@@ -228,20 +228,51 @@ func (b *OCIBuilder) Assemble(ctx context.Context, ref string, outputDir string)
 
 // InjectInit injects the init binary into the rootfs.
 func (b *OCIBuilder) InjectInit(ctx context.Context, outputDir string) error {
-	initPath := b.InitPath
-	if initPath == "" {
-		initPath = "init" // Fallback
+	// List of potential paths to check
+	candidates := []string{}
+
+	// 1. Configured path (or default "init")
+	if b.InitPath != "" {
+		candidates = append(candidates, b.InitPath)
+	} else {
+		candidates = append(candidates, "init")
 	}
 
-	if _, err := os.Stat(initPath); os.IsNotExist(err) {
+	// 2. Path relative to the current executable
+	if exe, err := os.Executable(); err == nil {
+		candidates = append(candidates, filepath.Join(filepath.Dir(exe), "init"))
+		candidates = append(candidates, filepath.Join(filepath.Dir(exe), "tartarus-init"))
+	}
+
+	// 3. Common system paths
+	candidates = append(candidates, "/usr/local/bin/tartarus-init")
+	candidates = append(candidates, "/opt/tartarus/bin/init")
+
+	// 4. LookPath
+	if path, err := exec.LookPath("tartarus-init"); err == nil {
+		candidates = append(candidates, path)
+	}
+
+	var foundPath string
+	for _, path := range candidates {
+		if _, err := os.Stat(path); err == nil {
+			foundPath = path
+			if b.Logger != nil {
+				b.Logger.Info(ctx, "Found init binary", map[string]any{"path": path})
+			}
+			break
+		}
+	}
+
+	if foundPath == "" {
 		if b.Logger != nil {
-			b.Logger.Info(ctx, "Init binary not found, skipping injection", map[string]any{"path": initPath, "level": "warn"})
+			b.Logger.Info(ctx, "Init binary not found in any candidate locations, skipping injection", map[string]any{"candidates": candidates, "level": "warn"})
 		}
 		return nil
 	}
 
 	dest := filepath.Join(outputDir, "init")
-	srcFile, err := os.Open(initPath)
+	srcFile, err := os.Open(foundPath)
 	if err != nil {
 		return err
 	}

@@ -295,3 +295,38 @@ func TestOCIBuilder_Assemble_Scan(t *testing.T) {
 
 	scanner.AssertExpectations(t)
 }
+
+func TestOCIBuilder_InjectInit_DynamicLookup(t *testing.T) {
+	// 1. Setup: Create a mock init binary next to the current executable (the test binary)
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	exeDir := filepath.Dir(exe)
+
+	// We use "tartarus-init" which is one of the fallback candidates
+	mockInitPath := filepath.Join(exeDir, "tartarus-init")
+	err = os.WriteFile(mockInitPath, []byte("#!/bin/sh\necho dynamic init"), 0755)
+	require.NoError(t, err)
+	defer os.Remove(mockInitPath) // Cleanup
+
+	// 2. Setup: Builder with non-existent primary path
+	cacheDir := t.TempDir()
+	store, err := NewLocalStore(cacheDir)
+	require.NoError(t, err)
+
+	builder := NewOCIBuilder(store, nil)
+	builder.InitPath = "/non/existent/path/to/init"
+
+	outputDir := t.TempDir()
+
+	// 3. Action
+	err = builder.InjectInit(context.Background(), outputDir)
+	require.NoError(t, err)
+
+	// 4. Verify
+	injectedPath := filepath.Join(outputDir, "init")
+	require.FileExists(t, injectedPath)
+
+	content, err := os.ReadFile(injectedPath)
+	require.NoError(t, err)
+	assert.Equal(t, "#!/bin/sh\necho dynamic init", string(content))
+}
