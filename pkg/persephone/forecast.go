@@ -10,6 +10,7 @@ type PatternDetector struct {
 	hourlyBuckets  [24]float64 // Average demand per hour of day
 	dailyBuckets   [7]float64  // Average demand per day of week
 	weeklyBaseline float64     // Overall weekly average
+	hourlyMSE      [24]float64 // Mean Squared Error per hour
 }
 
 // NewPatternDetector creates a pattern detector
@@ -26,6 +27,7 @@ func (p *PatternDetector) AnalyzePatterns(history []*UsageRecord) *PatternAnalys
 	// Reset buckets
 	p.hourlyBuckets = [24]float64{}
 	p.dailyBuckets = [7]float64{}
+	p.hourlyMSE = [24]float64{}
 	p.weeklyBaseline = 0
 
 	hourlyCounts := make([]int, 24)
@@ -63,6 +65,31 @@ func (p *PatternDetector) AnalyzePatterns(history []*UsageRecord) *PatternAnalys
 		p.weeklyBaseline = totalDemand / float64(count)
 	}
 
+	// Calculate MSE per hour
+	hourlyErrors := make([]float64, 24)
+	for _, record := range history {
+		hour := record.Timestamp.Hour()
+		weekday := int(record.Timestamp.Weekday())
+		actual := float64(record.ActiveVMs)
+
+		// Prediction logic mirrors PredictDemand
+		hourlyWeight := 0.7
+		dailyWeight := 0.3
+		predicted := (p.hourlyBuckets[hour] * hourlyWeight) + (p.dailyBuckets[weekday] * dailyWeight)
+		if predicted < p.weeklyBaseline*0.5 {
+			predicted = p.weeklyBaseline
+		}
+
+		err := actual - predicted
+		hourlyErrors[hour] += err * err
+	}
+
+	for i := 0; i < 24; i++ {
+		if hourlyCounts[i] > 0 {
+			p.hourlyMSE[i] = hourlyErrors[i] / float64(hourlyCounts[i])
+		}
+	}
+
 	// Detect peaks and confidence
 	analysis := &PatternAnalysis{
 		HourlyPattern: p.hourlyBuckets[:],
@@ -89,7 +116,7 @@ func (p *PatternDetector) calculateConfidence(history []*UsageRecord) float64 {
 		return 0.3 // Low confidence with little data
 	}
 
-	// Calculate variance from predicted pattern
+	// Calculate overall variance from predicted pattern
 	var squaredErrors float64
 	for _, record := range history {
 		hour := record.Timestamp.Hour()
@@ -129,7 +156,14 @@ func (p *PatternDetector) PredictDemand(t time.Time) (demand float64, confidence
 		predicted = p.weeklyBaseline
 	}
 
-	return predicted, 0.8 // TODO: Calculate actual confidence
+	// Calculate confidence based on hourly MSE
+	mse := p.hourlyMSE[hour]
+	confidence = 1.0 / (1.0 + math.Sqrt(mse))
+	if math.IsNaN(confidence) {
+		confidence = 0.5
+	}
+
+	return predicted, math.Min(confidence, 0.95)
 }
 
 // PatternAnalysis contains detected patterns

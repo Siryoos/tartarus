@@ -28,18 +28,20 @@ var ErrToolNotFound = errors.New("tool not found")
 
 // OCIBuilder handles pulling and extracting OCI images.
 type OCIBuilder struct {
-	Store   Store
-	Logger  hermes.Logger
-	Fetcher ImageFetcher
-	Scanner Scanner
+	Store    Store
+	Logger   hermes.Logger
+	Fetcher  ImageFetcher
+	Scanner  Scanner
+	InitPath string
 }
 
 // NewOCIBuilder creates a new OCIBuilder.
 func NewOCIBuilder(store Store, logger hermes.Logger) *OCIBuilder {
 	return &OCIBuilder{
-		Store:   store,
-		Logger:  logger,
-		Scanner: NewTrivyScanner(),
+		Store:    store,
+		Logger:   logger,
+		Scanner:  NewTrivyScanner(),
+		InitPath: "init", // Default
 		Fetcher: func(ctx context.Context, ref string) (v1.Image, error) {
 			nameRef, err := name.ParseReference(ref)
 			if err != nil {
@@ -226,11 +228,11 @@ func (b *OCIBuilder) Assemble(ctx context.Context, ref string, outputDir string)
 
 // InjectInit injects the init binary into the rootfs.
 func (b *OCIBuilder) InjectInit(ctx context.Context, outputDir string) error {
-	// TODO: Locate the actual init binary. For now, we'll look for "init" in the current directory
-	// or just skip if not found, but log it.
-	// In production, this should come from a configured path or embedded asset.
+	initPath := b.InitPath
+	if initPath == "" {
+		initPath = "init" // Fallback
+	}
 
-	initPath := "init" // Placeholder
 	if _, err := os.Stat(initPath); os.IsNotExist(err) {
 		if b.Logger != nil {
 			b.Logger.Info(ctx, "Init binary not found, skipping injection", map[string]any{"path": initPath, "level": "warn"})

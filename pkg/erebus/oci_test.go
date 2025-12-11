@@ -14,7 +14,39 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
+
+func TestOCIBuilder_InjectInit_CustomPath(t *testing.T) {
+	// Create a temporary init binary
+	tempDir := t.TempDir()
+	customInitPath := filepath.Join(tempDir, "custom-init")
+	err := os.WriteFile(customInitPath, []byte("#!/bin/sh\necho custom init"), 0755)
+	require.NoError(t, err)
+
+	// Create output directory
+	outputDir := t.TempDir()
+
+	// Initialize builder with custom init path
+	cacheDir := t.TempDir()
+	store, err := NewLocalStore(cacheDir)
+	require.NoError(t, err)
+
+	builder := NewOCIBuilder(store, nil)
+	builder.InitPath = customInitPath
+
+	// Inject
+	err = builder.InjectInit(context.Background(), outputDir)
+	require.NoError(t, err)
+
+	// Verify content
+	injectedPath := filepath.Join(outputDir, "init")
+	require.FileExists(t, injectedPath)
+
+	content, err := os.ReadFile(injectedPath)
+	require.NoError(t, err)
+	assert.Equal(t, "#!/bin/sh\necho custom init", string(content))
+}
 
 // MockStore is a mock implementation of Store.
 type MockStore struct {

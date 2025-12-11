@@ -50,6 +50,9 @@ type Config struct {
 	RuntimeAutoSelect bool   // Enable automatic runtime selection
 	WasmEngine        string // "wazero" (future: "wasmtime", "wasmer")
 	GVisorRunscPath   string // Path to runsc binary
+
+	// Erebus Configuration
+	InitBinaryPath string // Path to the init binary for OCI images
 }
 
 func Load() *Config {
@@ -97,6 +100,9 @@ func Load() *Config {
 		RuntimeAutoSelect: GetEnvBool("RUNTIME_AUTO_SELECT", false),
 		WasmEngine:        getEnv("WASM_ENGINE", "wazero"),
 		GVisorRunscPath:   getEnv("GVISOR_RUNSC_PATH", "/usr/local/bin/runsc"),
+
+		// Erebus Configuration
+		InitBinaryPath: getEnv("INIT_BINARY_PATH", "init"),
 	}
 }
 

@@ -241,3 +241,54 @@ func BenchmarkForecast(b *testing.B) {
 		forecaster.Forecast(history, now, 24*time.Hour, 5*time.Minute)
 	}
 }
+
+func TestPatternDetector_DynamicConfidence(t *testing.T) {
+	detector := NewPatternDetector()
+	now := time.Now().Truncate(time.Hour)
+
+	// Case 1: Stable history (low variance) -> High confidence
+	stableHistory := []*UsageRecord{}
+	for i := 0; i < 24*7; i++ {
+		ts := now.Add(time.Duration(-i) * time.Hour)
+		hour := ts.Hour()
+		demand := 10
+		if hour == 12 {
+			demand = 20
+		}
+		stableHistory = append(stableHistory, &UsageRecord{
+			Timestamp: ts,
+			ActiveVMs: demand,
+		})
+	}
+
+	detector.AnalyzePatterns(stableHistory)
+	_, stableConf := detector.PredictDemand(now.Add(time.Hour))
+
+	// Case 2: Noisy history (high variance) -> Lower confidence
+	noisyHistory := []*UsageRecord{}
+	for i := 0; i < 24*7; i++ {
+		ts := now.Add(time.Duration(-i) * time.Hour)
+		hour := ts.Hour()
+		demand := 10
+		if hour == 12 {
+			demand = 20
+		}
+		// Add noise
+		if i%2 == 0 {
+			demand += 5
+		} else {
+			demand -= 5
+		}
+		noisyHistory = append(noisyHistory, &UsageRecord{
+			Timestamp: ts,
+			ActiveVMs: demand,
+		})
+	}
+
+	detector.AnalyzePatterns(noisyHistory)
+	_, noisyConf := detector.PredictDemand(now.Add(time.Hour))
+
+	// Stable confidence should be higher than noisy confidence
+	assert.Greater(t, stableConf, noisyConf, "Stable history should produce higher confidence than noisy history")
+	assert.Greater(t, stableConf, 0.8, "Stable history confidence should be high")
+}

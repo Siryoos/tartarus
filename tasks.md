@@ -27,9 +27,9 @@ Specific `TODO` and `FIXME` items found in the codebase.
 ### Critical
 - [x] **Erebus (Storage)**: Implement cleanup of files.
   - `pkg/nyx/local_manager.go:367`: `// TODO: Delete files from Erebus?`
-- [ ] **Persephone (Autoscaling)**: Improve forecast confidence calculation.
+- [x] **Persephone (Autoscaling)**: Improve forecast confidence calculation.
   - `pkg/persephone/forecast.go:132`: `// TODO: Calculate actual confidence`
-- [ ] **Erebus (OCI)**: Dynamic init binary location.
+- [x] **Erebus (OCI)**: Dynamic init binary location.
   - `pkg/erebus/oci.go:229`: `// TODO: Locate the actual init binary`
 - [ ] **Hecatoncheir (Agent)**: Log streaming improvements.
   - `pkg/hecatoncheir/agent.go:529`: `// TODO: Runtime.StreamLogs needs to support follow flag or we handle it here?`

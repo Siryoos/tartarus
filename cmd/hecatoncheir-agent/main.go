@@ -208,6 +208,7 @@ func main() {
 
 	// OCI Builder
 	ociBuilder := erebus.NewOCIBuilder(store, hermesLogger)
+	ociBuilder.InitPath = cfg.InitBinaryPath
 
 	// Nyx Local Manager
 	nyxManager, err := nyx.NewLocalManager(store, ociBuilder, cfg.SnapshotPath, hermesLogger)
