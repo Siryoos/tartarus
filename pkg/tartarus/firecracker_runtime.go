@@ -33,6 +33,9 @@ type FirecrackerRuntime struct {
 
 	// State tracking: SandboxID -> *vmState
 	vms sync.Map
+
+	// Secrets
+	Secrets cerberus.SecretProvider
 }
 
 type vmState struct {
@@ -57,12 +60,13 @@ func (r *FirecrackerRuntime) getState(id domain.SandboxID) (*vmState, error) {
 }
 
 // NewFirecrackerRuntime creates a new runtime instance.
-func NewFirecrackerRuntime(logger *slog.Logger, socketDir, kernelImage, rootFSBase string) *FirecrackerRuntime {
+func NewFirecrackerRuntime(logger *slog.Logger, socketDir, kernelImage, rootFSBase string, secrets cerberus.SecretProvider) *FirecrackerRuntime {
 	return &FirecrackerRuntime{
 		Logger:      logger,
 		SocketDir:   socketDir,
 		KernelImage: kernelImage,
 		RootFSBase:  rootFSBase,
+		Secrets:     secrets,
 	}
 }
 
@@ -111,7 +115,8 @@ func (r *FirecrackerRuntime) Launch(ctx context.Context, req *domain.SandboxRequ
 		"slub_debug=P page_poison=1 pti=on slab_nomerge " +
 		"init_on_alloc=1 init_on_free=1 " +
 		"mds=full,nosmt l1tf=full,force spec_store_bypass_disable=on " +
-		"tsx=off vsyscall=none debugfs=off oops=panic"
+		"tsx=off vsyscall=none debugfs=off oops=panic " +
+		"lockdown=confidentiality module.sig_enforce=1"
 
 	kernelArgs := standardKernelArgs
 	if req.Hardened {
@@ -142,12 +147,11 @@ func (r *FirecrackerRuntime) Launch(ctx context.Context, req *domain.SandboxRequ
 
 		// 1. Export Environment Variables
 		// Resolve secrets
-		kmsProvider, _ := cerberus.NewKMSSecretProvider(ctx, "us-east-1") // Default region, should be configurable
-		secretProvider := cerberus.NewCompositeSecretProvider(
-			cerberus.NewEnvSecretProvider(),
-			cerberus.NewVaultSecretProvider(),
-			kmsProvider,
-		)
+		// Use injected provider or fallback to Env
+		secretProvider := r.Secrets
+		if secretProvider == nil {
+			secretProvider = cerberus.NewEnvSecretProvider()
+		}
 
 		for k, v := range req.Env {
 			// Resolve potential secret references

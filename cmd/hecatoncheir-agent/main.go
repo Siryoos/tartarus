@@ -15,6 +15,7 @@ import (
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/tartarus-sandbox/tartarus/pkg/acheron"
+	"github.com/tartarus-sandbox/tartarus/pkg/cerberus"
 	"github.com/tartarus-sandbox/tartarus/pkg/cocytus"
 	"github.com/tartarus-sandbox/tartarus/pkg/config"
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
@@ -104,6 +105,35 @@ func main() {
 	var wasmRuntime tartarus.SandboxRuntime
 	var gvisorRuntime tartarus.SandboxRuntime
 
+	// Secrets Provider Initialization
+	var secretProviders []cerberus.SecretProvider
+	secretProviders = append(secretProviders, cerberus.NewEnvSecretProvider()) // Always supported
+
+	if cfg.VaultAddress != "" {
+		vaultCfg := cerberus.VaultConfig{
+			Address:   cfg.VaultAddress,
+			Token:     cfg.VaultToken,
+			Namespace: cfg.VaultNamespace,
+			Timeout:   10 * time.Second,
+		}
+		vaultProvider := cerberus.NewRealVaultSecretProvider(vaultCfg)
+		secretProviders = append(secretProviders, vaultProvider)
+		logger.Info("Enabled Vault secret provider", "address", cfg.VaultAddress)
+	}
+
+	// Always try to init KMS if region is available (defaulted in config)
+	if cfg.KMSRegion != "" {
+		kmsProvider, err := cerberus.NewKMSSecretProvider(context.Background(), cfg.KMSRegion)
+		if err != nil {
+			logger.Warn("Failed to initialize KMS secret provider", "error", err)
+		} else {
+			secretProviders = append(secretProviders, kmsProvider)
+			logger.Info("Enabled AWS KMS secret provider", "region", cfg.KMSRegion)
+		}
+	}
+
+	compositeSecrets := cerberus.NewCompositeSecretProvider(secretProviders...)
+
 	// Firecracker Runtime
 	fcKernel := os.Getenv("FC_KERNEL_IMAGE")
 	fcRootFS := os.Getenv("FC_ROOTFS_BASE")
@@ -114,7 +144,7 @@ func main() {
 
 	if fcKernel != "" && fcRootFS != "" {
 		logger.Info("Initializing Firecracker Runtime", "kernel", fcKernel, "rootfs", fcRootFS)
-		firecrackerRuntime = tartarus.NewFirecrackerRuntime(logger, fcSocketDir, fcKernel, fcRootFS)
+		firecrackerRuntime = tartarus.NewFirecrackerRuntime(logger, fcSocketDir, fcKernel, fcRootFS, compositeSecrets)
 	} else {
 		logger.Warn("Firecracker config missing, using Mock Runtime for microVM")
 		firecrackerRuntime = tartarus.NewMockRuntime(logger)

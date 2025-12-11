@@ -53,13 +53,19 @@ Items from the Roadmap/Vision that appear unimplemented.
   - [x] Implement `AnalyzeStrace` to learn syscalls from strace output.
   - [x] Add `tartarus seccomp generate` CLI command.
   - [x] Verify with unit tests and a manual run.
-- [ ] **Tartarus CLI v2.0**: Missing commands.
-  - `tartarus init template`
-  - `tartarus snapshot` management commands
-  - `tartarus exec` implementation
-- [ ] **Security Hardening**:
-  - Guest kernel hardening (grsecurity-inspired).
-  - Secrets injection via Vault/KMS integration (check `pkg/cerberus` for this).
+- [x] **Tartarus CLI v2.0**: All commands implemented.
+  - [x] `tartarus init template` - Scaffold templates from Dockerfile or OCI images (`init.go`)
+  - [x] `tartarus snapshot create/list/delete` - Snapshot management (`snapshot.go`)
+  - [x] `tartarus exec` - Execute commands with interactive mode (`exec.go`)
+  - [x] `tartarus logs --follow` - Stream logs with follow flag (`logs.go`)
+  - [x] `tartarus inspect` - Detailed sandbox info (`inspect.go`)
+  - [x] `tartarus config` - Configuration management (`config.go`)
+  - [x] `tartarus completion` - Tab completion for bash/zsh/fish/powershell (`completion.go`)
+  - [x] `tartarus resume` - Resume from checkpoint (`resume.go`)
+  - [x] `tartarus checkpoints` - List checkpoints (`checkpoints.go`)
+- [x] **Security Hardening**:
+  - [x] Guest kernel hardening (grsecurity-inspired).
+  - [x] Secrets injection via Vault/KMS integration (check `pkg/cerberus` for this).
 
 ## 📦 Ecosystem
 

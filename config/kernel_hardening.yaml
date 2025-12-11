@@ -19,6 +19,8 @@ This document describes the comprehensive kernel security hardening parameters u
 - **l1tf=full,force**: Full L1TF (L1 Terminal Fault) mitigation
 - **spec_store_bypass_disable=on**: Mitigates Spectre Variant 4 (CVE-2018-3639)
 - **tsx=off**: Disables Intel TSX to mitigate TAA (TSX Asynchronous Abort)
+- **lockdown=confidentiality**: Restricts kernel features that allow arbitrary code execution
+- **module.sig_enforce=1**: Only allow signed kernel modules to be loaded
 
 ### Attack Surface Reduction
 - **pci=off**: Disables PCI bus enumeration (not needed in microVMs)
