@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: TartarusPlugin
+metadata:
+  name: cost-aware-fury
+  version: 1.0.0
+  author: Tartarus Team
+  description: Monitors sandbox resource costs and terminates expensive sandboxes
+spec:
+  type: fury
+  entryPoint: cost-aware-fury.so
+  config:
+    maxCostPerHour: 10.00
+    cpuCostPerCore: 0.05
+    memoryCostPerGB: 0.01
+    checkInterval: "30s"

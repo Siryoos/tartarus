@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: python-ml
+  version: "1.1.0"
+  author: "Tartarus Team"
+  description: "Python Machine Learning environment with PyTorch and TensorFlow"
+  category: data-science
+  tags:
+    - python
+    - pytorch
+    - tensorflow
+    - deep-learning
+    - gpu
+spec:
+  baseImage: python:3.11-slim
+  packages:
+    - torch
+    - tensorflow
+    - transformers
+    - numpy
+    - pandas
+    - matplotlib
+    - jupyter
+  resources:
+    cpu: 4
+    memory: 8192
+  env:
+    PYTHONUNBUFFERED: "1"

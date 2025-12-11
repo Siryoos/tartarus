@@ -5,10 +5,23 @@ inputs:
     description: 'Tartarus version'
     required: false
     default: 'latest'
+  api-url:
+    description: 'Tartarus API URL'
+    required: false
+  api-token:
+    description: 'Tartarus API Token'
+    required: false
 runs:
   using: 'composite'
   steps:
     - run: |
         curl -sL https://get.tartarus.io/install.sh | bash -s -- ${{ inputs.version }}
         echo "/usr/local/bin" >> $GITHUB_PATH
+        
+        if [ -n "${{ inputs.api-url }}" ]; then
+          tartarus config set api-url ${{ inputs.api-url }}
+        fi
+        if [ -n "${{ inputs.api-token }}" ]; then
+          tartarus config set api-token ${{ inputs.api-token }}
+        fi
       shell: bash

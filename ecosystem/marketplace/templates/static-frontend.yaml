@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: static-frontend
+  version: "2.0.0"
+  author: "Community"
+  description: "Static frontend with Vite, React, and TailwindCSS"
+  category: web
+  tags:
+    - react
+    - vite
+    - tailwindcss
+    - frontend
+spec:
+  baseImage: node:20-slim
+  packages:
+    - vite
+    - react
+    - react-dom
+    - tailwindcss
+    - postcss
+    - autoprefixer
+  resources:
+    cpu: 2
+    memory: 2048
+  env:
+    NODE_ENV: development
+  ports:
+    - 5173

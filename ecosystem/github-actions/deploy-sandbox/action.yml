@@ -7,9 +7,26 @@ inputs:
   image:
     description: 'Sandbox image'
     required: true
+  timeout:
+    description: 'Execution timeout'
+    required: false
+    default: '30s'
+  cpu:
+    description: 'CPU limit'
+    required: false
+  memory:
+    description: 'Memory limit'
+    required: false
 runs:
   using: 'composite'
   steps:
     - run: |
-        tartarus run --name ${{ inputs.name }} --image ${{ inputs.image }}
+        CMD="tartarus run --name ${{ inputs.name }} --image ${{ inputs.image }} --timeout ${{ inputs.timeout }}"
+        if [ -n "${{ inputs.cpu }}" ]; then
+          CMD="$CMD --cpu ${{ inputs.cpu }}"
+        fi
+        if [ -n "${{ inputs.memory }}" ]; then
+          CMD="$CMD --memory ${{ inputs.memory }}"
+        fi
+        $CMD
       shell: bash

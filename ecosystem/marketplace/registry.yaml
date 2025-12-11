@@ -3,9 +3,102 @@ templates:
     description: "Python Data Science environment with NumPy, Pandas, and Scikit-learn"
     version: "1.0.0"
     author: "Tartarus Team"
+    category: data-science
+    tags:
+      - python
+      - data-science
+      - ml
+      - jupyter
+    downloads: 1250
+    rating: 4.8
+    verified: true
     url: "https://github.com/tartarus/templates/python-ds"
+    
   - name: node-api
-    description: "Node.js API server with Express"
+    description: "Node.js API server with Express and TypeScript"
     version: "1.2.0"
     author: "Community"
+    category: web
+    tags:
+      - nodejs
+      - express
+      - typescript
+      - api
+    downloads: 890
+    rating: 4.5
+    verified: true
     url: "https://github.com/tartarus/templates/node-api"
+    
+  - name: python-ml
+    description: "Python Machine Learning environment with PyTorch and TensorFlow"
+    version: "1.1.0"
+    author: "Tartarus Team"
+    category: data-science
+    tags:
+      - python
+      - pytorch
+      - tensorflow
+      - deep-learning
+      - gpu
+    downloads: 720
+    rating: 4.7
+    verified: true
+    url: "https://github.com/tartarus/templates/python-ml"
+    
+  - name: go-microservice
+    description: "Go microservice with gRPC, health checks, and Prometheus metrics"
+    version: "1.0.0"
+    author: "Tartarus Team"
+    category: backend
+    tags:
+      - go
+      - grpc
+      - microservice
+      - prometheus
+    downloads: 450
+    rating: 4.6
+    verified: true
+    url: "https://github.com/tartarus/templates/go-microservice"
+    
+  - name: rust-cli
+    description: "Rust CLI application template with clap and tokio"
+    version: "0.9.0"
+    author: "Community"
+    category: tools
+    tags:
+      - rust
+      - cli
+      - async
+    downloads: 180
+    rating: 4.3
+    verified: false
+    url: "https://github.com/tartarus/templates/rust-cli"
+    
+  - name: static-frontend
+    description: "Static frontend with Vite, React, and TailwindCSS"
+    version: "2.0.0"
+    author: "Community"
+    category: web
+    tags:
+      - react
+      - vite
+      - tailwindcss
+      - frontend
+    downloads: 560
+    rating: 4.4
+    verified: true
+    url: "https://github.com/tartarus/templates/static-frontend"
+
+categories:
+  - name: data-science
+    description: "Data science and machine learning environments"
+    icon: "📊"
+  - name: web
+    description: "Web applications and APIs"
+    icon: "🌐"
+  - name: backend
+    description: "Backend services and microservices"
+    icon: "⚙️"
+  - name: tools
+    description: "CLI tools and utilities"
+    icon: "🔧"

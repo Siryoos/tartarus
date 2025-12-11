@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: TartarusPlugin
+metadata:
+  name: rate-limit-judge
+  version: 1.0.0
+  author: Tartarus Team
+  description: Enforces per-tenant request rate limits before sandbox creation
+spec:
+  type: judge
+  entryPoint: rate-limit-judge.so
+  config:
+    maxRequestsPerMinute: 60
+    burstSize: 10
+    lookbackWindow: "1m"

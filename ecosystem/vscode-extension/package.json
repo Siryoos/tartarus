@@ -10,22 +10,92 @@
         "Other"
     ],
     "activationEvents": [
-        "onCommand:tartarus.helloWorld"
+        "onCommand:tartarus.initTemplate",
+        "onCommand:tartarus.run",
+        "onView:tartarus.sandboxes"
     ],
     "main": "./out/extension.js",
     "contributes": {
         "commands": [
             {
-                "command": "tartarus.helloWorld",
-                "title": "Hello Tartarus"
+                "command": "tartarus.initTemplate",
+                "title": "Tartarus: Init Template"
+            },
+            {
+                "command": "tartarus.run",
+                "title": "Tartarus: Run Sandbox"
+            },
+            {
+                "command": "tartarus.logs",
+                "title": "Tartarus: Stream Logs",
+                "icon": "$(output)"
+            },
+            {
+                "command": "tartarus.exec",
+                "title": "Tartarus: Exec Shell",
+                "icon": "$(terminal)"
+            },
+            {
+                "command": "tartarus.refresh",
+                "title": "Refresh",
+                "icon": "$(refresh)"
             }
-        ]
+        ],
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "tartarus-explorer",
+                    "title": "Tartarus",
+                    "icon": "$(server)"
+                }
+            ]
+        },
+        "views": {
+            "tartarus-explorer": [
+                {
+                    "id": "tartarus.sandboxes",
+                    "name": "Sandboxes"
+                }
+            ]
+        },
+        "menus": {
+            "view/title": [
+                {
+                    "command": "tartarus.refresh",
+                    "when": "view == tartarus.sandboxes",
+                    "group": "navigation"
+                }
+            ],
+            "view/item/context": [
+                {
+                    "command": "tartarus.logs",
+                    "when": "view == tartarus.sandboxes",
+                    "group": "inline"
+                },
+                {
+                    "command": "tartarus.exec",
+                    "when": "view == tartarus.sandboxes",
+                    "group": "inline"
+                }
+            ]
+        },
+        "configuration": {
+            "title": "Tartarus",
+            "properties": {
+                "tartarus.executablePath": {
+                    "type": "string",
+                    "default": "tartarus",
+                    "description": "Path to the Tartarus CLI executable"
+                }
+            }
+        }
     },
     "scripts": {
         "vscode:prepublish": "npm run compile",
         "compile": "tsc -p ./"
     },
     "devDependencies": {
+        "@types/node": "^25.0.0",
         "@types/vscode": "^1.60.0",
         "typescript": "^4.0.0"
     }

@@ -49,5 +49,5 @@
 - [x] Performance matrix comparing WASM vs microVM vs gVisor; SLO alerts for regression.
 
 ## Ecosystem and Integration Plane
-- [ ] GitHub Actions integration (sandboxed runners) and VS Code extension for template/run/debug flows.
-- [ ] Template marketplace and docs site refresh with tutorials; plugin system for custom judges/furies.
+- [x] GitHub Actions integration (sandboxed runners) and VS Code extension for template/run/debug flows.
+- [x] Template marketplace and docs site refresh with tutorials; plugin system for custom judges/furies.

@@ -1,0 +1,85 @@
+site_name: Tartarus Documentation
+site_description: High-performance, secure microVM orchestration platform
+site_author: Tartarus Team
+site_url: https://docs.tartarus.io
+
+repo_name: tartarus-sandbox/tartarus
+repo_url: https://github.com/tartarus-sandbox/tartarus
+
+theme:
+  name: material
+  palette:
+    - scheme: slate
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - scheme: default
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+  - tags
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Concepts:
+    - Architecture: concepts/architecture.md
+    - Configuration: concepts/configuration.md
+    - Persistence: concepts/persistence.md
+    - Dev Stack: concepts/dev-stack.md
+  - Tutorials:
+    - Creating Templates: tutorials/creating-templates.md
+    - Custom Judges: tutorials/custom-judges.md
+    - Custom Furies: tutorials/custom-furies.md
+    - Kubernetes Deployment: tutorials/kubernetes-deployment.md
+  - API Reference:
+    - Overview: api/index.md
+    - Sandbox API: api/sandbox.md
+    - Template API: api/template.md
+  - Plugin System: plugins/index.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/tartarus-sandbox/tartarus
+  generator: false
+
+copyright: Copyright &copy; 2024 Tartarus Team

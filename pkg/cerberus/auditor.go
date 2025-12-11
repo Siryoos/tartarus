@@ -2,6 +2,7 @@ package cerberus
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/tartarus-sandbox/tartarus/pkg/hermes"
@@ -142,5 +143,46 @@ func NewNoopAuditor() *NoopAuditor {
 
 // RecordAccess does nothing.
 func (n *NoopAuditor) RecordAccess(ctx context.Context, entry *AuditEntry) error {
+	return nil
+}
+
+// LogAuditor logs audit entries using slog.
+type LogAuditor struct {
+	logger *slog.Logger
+}
+
+// NewLogAuditor creates an auditor that logs entries to the provided slog.Logger.
+func NewLogAuditor(logger *slog.Logger) *LogAuditor {
+	return &LogAuditor{
+		logger: logger,
+	}
+}
+
+// RecordAccess logs the audit entry.
+func (l *LogAuditor) RecordAccess(ctx context.Context, entry *AuditEntry) error {
+	identityID := ""
+	identityType := ""
+	tenantID := ""
+	if entry.Identity != nil {
+		identityID = entry.Identity.ID
+		identityType = string(entry.Identity.Type)
+		tenantID = entry.Identity.TenantID
+	}
+
+	l.logger.Info("access audit",
+		"request_id", entry.RequestID,
+		"action", entry.Action,
+		"result", entry.Result,
+		"resource_type", entry.Resource.Type,
+		"resource_id", entry.Resource.ID,
+		"resource_namespace", entry.Resource.Namespace,
+		"identity_id", identityID,
+		"identity_type", identityType,
+		"tenant_id", tenantID,
+		"source_ip", entry.SourceIP,
+		"latency_ms", entry.Latency.Milliseconds(),
+		"error", entry.ErrorMessage,
+	)
+
 	return nil
 }

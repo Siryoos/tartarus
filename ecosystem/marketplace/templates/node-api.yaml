@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: node-api
+  version: "1.2.0"
+  author: "Community"
+  description: "Node.js API server with Express and TypeScript"
+  category: web
+  tags:
+    - nodejs
+    - express
+    - typescript
+    - api
+spec:
+  baseImage: node:20-slim
+  packages:
+    - express
+    - typescript
+    - ts-node
+    - "@types/express"
+    - "@types/node"
+  resources:
+    cpu: 2
+    memory: 2048
+  env:
+    NODE_ENV: development
+  ports:
+    - 3000

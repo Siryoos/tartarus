@@ -69,6 +69,10 @@ func (r *FirecrackerRuntime) Wait(ctx context.Context, id domain.SandboxID) erro
 	return fmt.Errorf("Firecracker runtime not supported on non-Linux platforms")
 }
 
-func (r *FirecrackerRuntime) Exec(ctx context.Context, id domain.SandboxID, cmd []string) error {
+func (r *FirecrackerRuntime) Exec(ctx context.Context, id domain.SandboxID, cmd []string, stdout, stderr io.Writer) error {
+	return fmt.Errorf("Firecracker runtime not supported on non-Linux platforms")
+}
+
+func (r *FirecrackerRuntime) ExecInteractive(ctx context.Context, id domain.SandboxID, cmd []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	return fmt.Errorf("Firecracker runtime not supported on non-Linux platforms")
 }
