@@ -225,8 +225,18 @@ func TestLocalManager_Invalidate(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	store, _ := erebus.NewLocalStore(filepath.Join(tmpDir, "store"))
-	mgr, _ := NewLocalManager(store, nil, filepath.Join(tmpDir, "snapshots"), hermes.NewSlogAdapter())
+	storeDir := filepath.Join(tmpDir, "store")
+	snapDir := filepath.Join(tmpDir, "snapshots")
+
+	store, err := erebus.NewLocalStore(storeDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mgr, err := NewLocalManager(store, nil, snapDir, hermes.NewSlogAdapter())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	mgr.vmLauncher = func(ctx context.Context, tpl *domain.TemplateSpec, rootfsPath, socketPath string) (SnapshotMachine, error) {
 		return &MockSnapshotMachine{}, nil
@@ -236,9 +246,36 @@ func TestLocalManager_Invalidate(t *testing.T) {
 	tpl := &domain.TemplateSpec{ID: tplID}
 
 	// Prepare
-	_, err = mgr.Prepare(context.Background(), tpl)
+	snap, err := mgr.Prepare(context.Background(), tpl)
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	// Verify files exist in store before invalidation
+	memKey := fmt.Sprintf("snapshots/%s/%s.mem", tplID, snap.ID)
+	diskKey := fmt.Sprintf("snapshots/%s/%s.disk", tplID, snap.ID)
+	latestKey := fmt.Sprintf("snapshots/%s/latest", tplID)
+
+	exists, err := store.Exists(context.Background(), memKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !exists {
+		t.Error("Expected mem file to exist before invalidation")
+	}
+
+	exists, err = store.Exists(context.Background(), diskKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !exists {
+		t.Error("Expected disk file to exist before invalidation")
+	}
+
+	// Verify local cache files exist
+	localMemPath := filepath.Join(snapDir, "snapshots", string(tplID), string(snap.ID)+".mem")
+	if _, err := os.Stat(localMemPath); err != nil {
+		t.Errorf("Expected local mem file to exist: %v", err)
 	}
 
 	// Invalidate
@@ -249,7 +286,37 @@ func TestLocalManager_Invalidate(t *testing.T) {
 	// Verify list is empty
 	list, _ := mgr.ListSnapshots(context.Background(), tplID)
 	if len(list) != 0 {
-		t.Error("Expected snapshots to be cleared")
+		t.Error("Expected snapshots to be cleared from cache")
+	}
+
+	// Verify files are deleted from store
+	exists, err = store.Exists(context.Background(), memKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exists {
+		t.Error("Expected mem file to be deleted from store")
+	}
+
+	exists, err = store.Exists(context.Background(), diskKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exists {
+		t.Error("Expected disk file to be deleted from store")
+	}
+
+	exists, err = store.Exists(context.Background(), latestKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exists {
+		t.Error("Expected latest pointer to be deleted from store")
+	}
+
+	// Verify local cache files are deleted
+	if _, err := os.Stat(localMemPath); !os.IsNotExist(err) {
+		t.Error("Expected local mem file to be deleted")
 	}
 }
 

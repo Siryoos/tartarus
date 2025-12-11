@@ -2,55 +2,61 @@
 
 This document outlines the remaining work for the Tartarus project, based on an analysis of `ROADMAP.md` and the current codebase state.
 
-## 🚨 High Priority / Work In Progress
+## � Critical Technical Debt
 
-These items appear to be partially implemented or are immediate next steps.
+These items are marked as TODO in the codebase and need immediate attention.
 
-- [x] **Complete gVisor Runtime Integration** (`pkg/tartarus/gvisor_runtime.go`)
-  - [x] Implement `Launch` (convert `SandboxRequest` to OCI spec, create/start container)
-  - [x] Implement `Kill`, `Pause`, `Resume` (call `runsc`)
-  - [x] Implement `CreateSnapshot` (call `runsc checkpoint`)
-  - [x] Implement `Wait` (poll state)
-  - [x] Implement `Exec` (call `runsc exec`)
-  - [x] Implement `StreamLogs`
-- [x] **Enable and Verify Advanced Features**
-  - [x] Enable Hypnos (Sleep/Hibernation) by default (currently gated by `EnableHypnos` flag)
-  - [x] Enable Thanatos (Graceful Termination) by default (currently gated by `EnableThanatos` flag)
-  - [x] Verify full integration of `pkg/hypnos` and `pkg/thanatos` with the main control plane.
-- [x] **Kampe Legacy Runtime Shim**
-  - [x] Verify status of `pkg/kampe` (currently listed as "Planned" in Roadmap, needs verification of completeness).
+- [x] **Erebus (Storage)**: Implement cleanup of files when snapshots are deleted.
+  - Location: `pkg/nyx/local_manager.go` (`// TODO: Delete files from Erebus?`)
+- [ ] **Olympus (Scaler)**: Add more metrics for scaling decisions (CPU/Memory utilization).
+  - Location: `pkg/olympus/scaler.go` (`// TODO: Add more metrics like CPU/Mem util`)
+- [ ] **Hecatoncheir (Agent)**: Runtime.StreamLogs support for follow flag.
+  - Location: `pkg/hecatoncheir/agent.go`
+- [ ] **Erebus (OCI)**: Dynamic init binary location.
+  - Location: `pkg/erebus/oci.go`
+- [ ] **Persephone**: Calculate actual forecast confidence.
+  - Location: `pkg/persephone/forecast.go`
+- [ ] **Tests**: Instrumentation for actual phase timing in benchmarks.
+  - Location: `tests/perf/python_ds_bench_test.go`
 
-## 🛠 Technical Debt & Code Cleanup
+## 🛠 Feature Verification (Phase 5: Ascension to Olympus)
 
-Specific `TODO` and `FIXME` items found in the codebase.
+Code exists for these components, but they need verification and integration testing to be considered "Done".
 
-### Critical
-- [x] **Erebus (Storage)**: Implement cleanup of files.
-  - `pkg/nyx/local_manager.go:367`: `// TODO: Delete files from Erebus?`
-- [x] **Persephone (Autoscaling)**: Improve forecast confidence calculation.
-  - `pkg/persephone/forecast.go:132`: `// TODO: Calculate actual confidence`
-- [x] **Erebus (OCI)**: Dynamic init binary location.
-  - `pkg/erebus/oci.go:229`: `// TODO: Locate the actual init binary`
-- [x] **Hecatoncheir (Agent)**: Log streaming improvements.
-  - `pkg/hecatoncheir/agent.go:529`: `// TODO: Runtime.StreamLogs needs to support follow flag or we handle it here?`
+- [ ] **Cerberus (Auth Gateway)**: Verify API key/OAuth2 implementation and RBAC enforcement.
+  - Pkg: `pkg/cerberus`
+- [ ] **Charon (Load Balancer)**: Verify request routing, rate limiting, and circuit breaker logic.
+  - Pkg: `pkg/charon`
+- [ ] **Kubernetes Operator**: Verify CRD reconciliation (`SandboxJob`) and full lifecycle in K8s.
+  - Pkg: `pkg/kubernetes`
+- [ ] **Observability Dashboard**: Finalize Grafana templates and dashboards.
+  - Current: `docker-compose.observability.yml` exists, verify dashboard JSONs in `config/grafana/dashboards`.
 
-### Performance & Testing
-- [x] **Olympus (Scaler)**: Add more metrics for scaling decisions.
-  - `pkg/olympus/scaler.go:86`: `// TODO: Add more metrics like CPU/Mem util`
-- [x] **Tests**: Instrumentation for actual phase timing.
-  - `tests/perf/python_ds_bench_test.go:589`: `// TODO: Implement actual phase timing instrumentation`
+## 🛠 Feature Verification (Phase 6: The Golden Age)
 
-## 🔮 Future Phases (Roadmap)
+Advanced features that have implementation but need hardening.
 
-### Phase 5: Ascension to Olympus (Multi-Region & Federation)
-- [ ] **Unified Runtime Interface**: Abstract over Firecracker, gVisor, and Containers.
-- [ ] **Charon (Load Balancer)**: Global request routing and load balancing.
-- [ ] **Cerberus (Auth Gateway)**: Unified authentication and authorization.
+- [ ] **Unified Runtime**: Verify automatic selection logic (WASM vs MicroVM vs gVisor).
+  - Pkg: `pkg/tartarus/unified_runtime.go`
+  - [ ] Verify WASM Runtime (`pkg/tartarus/wasm_runtime.go`) execution.
+- [ ] **Persephone (Seasonal Scaling)**: Verify predictive scaling and pre-warming logic.
+  - Pkg: `pkg/persephone`
+- [ ] **Thanatos (Graceful Termination)**: Verify checkpoint creation and graceful signal handling.
+  - Pkg: `pkg/thanatos`
 
-### Phase 6: The Golden Age (Ecosystem)
-- [ ] **Marketplace**: Template registry and sharing platform.
-- [ ] **Federation**: Connecting multiple Tartarus clusters.
-- [ ] **Advanced Billing**: Cost analysis and granular billing.
+## 🔮 Future / Missing Features
+
+Items from the Roadmap/Vision that appear unimplemented.
+
+- [ ] **Seccomp Profile Generator**: Automated profile generation for guest kernels (Roadmap 5.5).
+- [ ] **Tartarus CLI v2.0**: Missing commands.
+  - `tartarus init template`
+  - `tartarus snapshot` management commands
+  - `tartarus exec` implementation
+- [ ] **Security Hardening**:
+  - Guest kernel hardening (grsecurity-inspired).
+  - Secrets injection via Vault/KMS integration (check `pkg/cerberus` for this).
 
 ## 📦 Ecosystem
-- [ ] **VS Code Extension**: Address TypeScript definition issues in `node_modules` (low priority, likely dependency related).
+
+- [ ] **VS Code Extension**: Address TypeScript definition issues.

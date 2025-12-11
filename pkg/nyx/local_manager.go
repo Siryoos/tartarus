@@ -363,8 +363,48 @@ func (m *LocalManager) Invalidate(ctx context.Context, tplID domain.TemplateID) 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// Get the snapshots to delete before clearing the cache
+	snaps := m.byTemplate[tplID]
+
+	// Delete all snapshot files from Erebus and local cache
+	for _, snap := range snaps {
+		snapID := snap.ID
+
+		// Delete from Erebus store
+		memKey := fmt.Sprintf("snapshots/%s/%s.mem", tplID, snapID)
+		diskKey := fmt.Sprintf("snapshots/%s/%s.disk", tplID, snapID)
+		jsonKey := fmt.Sprintf("snapshots/%s/%s.json", tplID, snapID)
+
+		if err := m.Store.Delete(ctx, memKey); err != nil {
+			m.Logger.Info(ctx, "Failed to delete mem file from store during invalidation", map[string]any{"key": memKey, "error": err.Error()})
+		}
+		if err := m.Store.Delete(ctx, diskKey); err != nil {
+			m.Logger.Info(ctx, "Failed to delete disk file from store during invalidation", map[string]any{"key": diskKey, "error": err.Error()})
+		}
+		if err := m.Store.Delete(ctx, jsonKey); err != nil {
+			m.Logger.Info(ctx, "Failed to delete json file from store during invalidation", map[string]any{"key": jsonKey, "error": err.Error()})
+		}
+
+		// Delete from local cache
+		localDir := filepath.Join(m.SnapshotDir, "snapshots", string(tplID))
+		_ = os.Remove(filepath.Join(localDir, string(snapID)+".mem"))
+		_ = os.Remove(filepath.Join(localDir, string(snapID)+".disk"))
+		_ = os.Remove(filepath.Join(localDir, string(snapID)+".json"))
+	}
+
+	// Delete the 'latest' pointer from Erebus
+	latestKey := fmt.Sprintf("snapshots/%s/latest", tplID)
+	if err := m.Store.Delete(ctx, latestKey); err != nil {
+		m.Logger.Info(ctx, "Failed to delete latest pointer from store during invalidation", map[string]any{"key": latestKey, "error": err.Error()})
+	}
+
+	// Try to remove the template directory if empty
+	localDir := filepath.Join(m.SnapshotDir, "snapshots", string(tplID))
+	_ = os.Remove(localDir) // Will fail if not empty, which is fine
+
+	// Clear the in-memory cache
 	delete(m.byTemplate, tplID)
-	// TODO: Delete files from Erebus?
+
 	return nil
 }
 
