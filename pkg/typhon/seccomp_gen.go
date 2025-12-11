@@ -64,15 +64,13 @@ func NewSeccompProfileGenerator() *SeccompProfileGenerator {
 		},
 		templateSyscalls: map[string][]string{
 			"python-ds": {
-				// Python Data Science specific needs (e.g. numpy, pandas might need specific ops)
-				// Usually the base set covers most, but maybe some specialized ones
+				"epoll_create1", "getrandom", "memfd_create", "eventfd2",
 			},
 			"nodejs": {
-				// Node.js specific
+				"epoll_create1", "getrandom", "eventfd2", "pipe2",
 			},
 			"static": {
-				// Static binaries might need less?
-				// For now we just use base.
+				// Static binaries might still need exit_group and write
 			},
 			"minimal": {
 				// Very restricted set

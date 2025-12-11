@@ -48,7 +48,11 @@ Advanced features that have implementation but need hardening.
 
 Items from the Roadmap/Vision that appear unimplemented.
 
-- [ ] **Seccomp Profile Generator**: Automated profile generation for guest kernels (Roadmap 5.5).
+- [x] **Seccomp Profile Generator**: Automated profile generation for guest kernels (Roadmap 5.5).
+  - [x] Implement `SeccompProfileGenerator` in `pkg/typhon` to support template-based generation.
+  - [x] Implement `AnalyzeStrace` to learn syscalls from strace output.
+  - [x] Add `tartarus seccomp generate` CLI command.
+  - [x] Verify with unit tests and a manual run.
 - [ ] **Tartarus CLI v2.0**: Missing commands.
   - `tartarus init template`
   - `tartarus snapshot` management commands
