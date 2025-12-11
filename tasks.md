@@ -41,7 +41,7 @@
 - [x] User/API surface for deferred termination and resume-from-checkpoint flows.
 
 ### Kampe (Legacy Runtime)
-- [ ] Docker/containerd/gVisor adapters completing `pkg/kampe`; parity tests ensuring OCI workload behavior matches microVM runtime.
+- [x] Docker/containerd/gVisor adapters completing `pkg/kampe`; parity tests ensuring OCI workload behavior matches microVM runtime.
 - [ ] Migration tooling to move running containers to Firecracker VMs with state export/import.
 
 ### Unified Runtime (`pkg/tartarus`)
