@@ -42,7 +42,7 @@
 
 ### Kampe (Legacy Runtime)
 - [x] Docker/containerd/gVisor adapters completing `pkg/kampe`; parity tests ensuring OCI workload behavior matches microVM runtime.
-- [ ] Migration tooling to move running containers to Firecracker VMs with state export/import.
+- [x] Migration tooling to move running containers to Firecracker VMs with state export/import.
 
 ### Unified Runtime (`pkg/tartarus`)
 - [ ] WASM runtime integration (WasmEdge/Wasmtime) behind `IsolationAuto` selector; routing logic choosing WASM vs microVM based on workload density/cost.

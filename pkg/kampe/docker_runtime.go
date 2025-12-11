@@ -11,6 +11,7 @@ import (
 
 	"github.com/docker/docker/api/types/checkpoint"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 	"github.com/tartarus-sandbox/tartarus/pkg/domain"
@@ -99,6 +100,11 @@ func (d *DockerAdapter) Launch(ctx context.Context, req *domain.SandboxRequest, 
 	// Create volume mounts if overlay is specified
 	if cfg.OverlayFS != "" {
 		hostCfg.Binds = append(hostCfg.Binds, fmt.Sprintf("%s:/overlay:rw", cfg.OverlayFS))
+	}
+
+	// Ensure image exists
+	if err := d.ensureImage(ctx, string(req.Template)); err != nil {
+		return nil, fmt.Errorf("failed to ensure image: %w", err)
 	}
 
 	// Create the container
@@ -598,6 +604,28 @@ func (d *DockerAdapter) ExportState(ctx context.Context, containerID string) (*C
 	}
 
 	return state, nil
+}
+
+func (d *DockerAdapter) ensureImage(ctx context.Context, imageName string) error {
+	_, _, err := d.client.ImageInspectWithRaw(ctx, imageName)
+	if err == nil {
+		return nil
+	}
+
+	if !client.IsErrNotFound(err) {
+		return fmt.Errorf("failed to inspect image: %w", err)
+	}
+
+	// Image not found, pull it
+	reader, err := d.client.ImagePull(ctx, imageName, image.PullOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to pull image: %w", err)
+	}
+	defer reader.Close()
+
+	// Drain output to wait for pull to completion
+	_, err = io.Copy(io.Discard, reader)
+	return err
 }
 
 // Ensure DockerAdapter implements LegacyRuntime

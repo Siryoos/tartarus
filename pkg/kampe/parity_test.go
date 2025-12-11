@@ -20,22 +20,25 @@ func TestParitySuite(t *testing.T) {
 		t.Skip("No runtimes available for testing")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
+	t.Run("suite", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		// Use t.Cleanup to ensure cancel is called after all parallel tests in this group finish
+		t.Cleanup(cancel)
 
-	for _, tc := range StandardParityTests() {
-		tc := tc // capture range variable
-		t.Run(tc.Name, func(t *testing.T) {
-			t.Parallel()
+		for _, tc := range StandardParityTests() {
+			tc := tc // capture range variable
+			t.Run(tc.Name, func(t *testing.T) {
+				t.Parallel()
 
-			results, err := harness.RunTest(ctx, tc)
-			if err != nil {
-				t.Fatalf("Failed to run test: %v", err)
-			}
+				results, err := harness.RunTest(ctx, tc)
+				if err != nil {
+					t.Fatalf("Failed to run test: %v", err)
+				}
 
-			harness.Compare(t, results, tc.ExpectedBehavior)
-		})
-	}
+				harness.Compare(t, results, tc.ExpectedBehavior)
+			})
+		}
+	})
 }
 
 // TestDockerAdapter_Lifecycle tests Docker adapter lifecycle operations
@@ -358,29 +361,4 @@ func setupParityHarness(t *testing.T) *ParityHarness {
 	}
 
 	return harness
-}
-
-func dockerAvailable() bool {
-	// Check if Docker socket exists
-	if _, err := os.Stat("/var/run/docker.sock"); err == nil {
-		return true
-	}
-	// Check DOCKER_HOST environment variable
-	return os.Getenv("DOCKER_HOST") != ""
-}
-
-func containerdAvailable() bool {
-	_, err := os.Stat("/run/containerd/containerd.sock")
-	return err == nil
-}
-
-func gvisorAvailable() bool {
-	// Check if runsc is in PATH
-	_, err := os.Stat("/usr/local/bin/runsc")
-	if err == nil {
-		return true
-	}
-	// Check in standard locations
-	_, err = os.Stat("/usr/bin/runsc")
-	return err == nil
 }
