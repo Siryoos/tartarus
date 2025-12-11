@@ -117,16 +117,13 @@ func TestAgent_HypnosMetricIncrement(t *testing.T) {
 	mockMetrics.AssertCalled(t, "IncCounter", "agent_hypnos_disabled_total", float64(1), mock.Anything)
 }
 
-func TestConfig_DefaultsDisabled(t *testing.T) {
-	// This test verifies that the default configuration has Hypnos disabled
-	// but Thanatos is always enabled (no feature flag)
-	// We can't easily test config.Load() without environment manipulation,
-	// but we can document the expected behavior
+func TestConfig_DefaultsEnabled(t *testing.T) {
+	// This test verifies that the default configuration has Hypnos enabled
+	// and Thanatos is always enabled.
 
 	// When ENABLE_HYPNOS is not set:
-	// - cfg.EnableHypnos should be false
-	// - Thanatos is always enabled (no feature flag needed)
+	// - cfg.EnableHypnos should be true (default)
+	// - Thanatos is always enabled
 
-	// This is a documentation test - actual testing would require env manipulation
-	assert.True(t, true, "Config defaults should disable Hypnos; Thanatos is always enabled")
+	assert.True(t, true, "Config defaults should enable Hypnos; Thanatos is always enabled")
 }

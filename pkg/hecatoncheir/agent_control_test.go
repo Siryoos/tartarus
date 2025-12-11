@@ -48,21 +48,41 @@ type MockRuntime struct {
 }
 
 func (m *MockRuntime) Launch(ctx context.Context, req *domain.SandboxRequest, cfg tartarus.VMConfig) (*domain.SandboxRun, error) {
-	return nil, nil
+	args := m.Called(ctx, req, cfg)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.SandboxRun), args.Error(1)
 }
 func (m *MockRuntime) Inspect(ctx context.Context, id domain.SandboxID) (*domain.SandboxRun, error) {
-	return nil, nil
+	args := m.Called(ctx, id)
+	// Handle nil return safely if needed, but for now strict casting
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.SandboxRun), args.Error(1)
 }
 func (m *MockRuntime) List(ctx context.Context) ([]domain.SandboxRun, error) { return nil, nil }
-func (m *MockRuntime) Kill(ctx context.Context, id domain.SandboxID) error   { return nil }
-func (m *MockRuntime) Pause(ctx context.Context, id domain.SandboxID) error  { return nil }
+func (m *MockRuntime) Kill(ctx context.Context, id domain.SandboxID) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+func (m *MockRuntime) Pause(ctx context.Context, id domain.SandboxID) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
 func (m *MockRuntime) Resume(ctx context.Context, id domain.SandboxID) error { return nil }
 func (m *MockRuntime) CreateSnapshot(ctx context.Context, id domain.SandboxID, memPath, diskPath string) error {
-	return nil
+	args := m.Called(ctx, id, memPath, diskPath)
+	return args.Error(0)
 }
-func (m *MockRuntime) Shutdown(ctx context.Context, id domain.SandboxID) error { return nil }
+func (m *MockRuntime) Shutdown(ctx context.Context, id domain.SandboxID) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
 func (m *MockRuntime) GetConfig(ctx context.Context, id domain.SandboxID) (tartarus.VMConfig, *domain.SandboxRequest, error) {
-	return tartarus.VMConfig{}, nil, nil
+	args := m.Called(ctx, id)
+	return args.Get(0).(tartarus.VMConfig), args.Get(1).(*domain.SandboxRequest), args.Error(2)
 }
 func (m *MockRuntime) StreamLogs(ctx context.Context, id domain.SandboxID, w io.Writer, follow bool) error {
 	return nil
@@ -70,7 +90,10 @@ func (m *MockRuntime) StreamLogs(ctx context.Context, id domain.SandboxID, w io.
 func (m *MockRuntime) Allocation(ctx context.Context) (domain.ResourceCapacity, error) {
 	return domain.ResourceCapacity{}, nil
 }
-func (m *MockRuntime) Wait(ctx context.Context, id domain.SandboxID) error { return nil }
+func (m *MockRuntime) Wait(ctx context.Context, id domain.SandboxID) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
 func (m *MockRuntime) Exec(ctx context.Context, id domain.SandboxID, cmd []string, stdout, stderr io.Writer) error {
 	args := m.Called(ctx, id, cmd, stdout, stderr)
 	return args.Error(0)

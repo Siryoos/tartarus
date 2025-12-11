@@ -73,8 +73,8 @@ func Load() *Config {
 
 		AllowedNetworks: strings.Split(getEnv("ALLOWED_NETWORKS", "no-net,lockdown"), ","),
 
-		// Phase 4 feature flags (disabled by default for v1.0 stability)
-		EnableHypnos: GetEnvBool("ENABLE_HYPNOS", false),
+		// Phase 4 feature flags
+		EnableHypnos: GetEnvBool("ENABLE_HYPNOS", true),
 		// Thanatos is now always enabled - no feature flag needed
 
 		// Cerberus Auth Config

@@ -1,53 +1,56 @@
-# Technical Debt and Remaining Tasks
+# Tartarus Project: Remaining Tasks & Technical Debt
 
-## Phase 4 Debt — Verification of the Titans
-- [x] Bench `python-ds` cold starts to prove <200ms target; add repeatable perf harness under `tests/perf` with Hermes metrics and regression alerts.
-- [x] Time OCI image -> rootfs conversion (<30s) in `pkg/erebus` using representative large images; profile extraction/dedupe/init injection and document cache hit behavior.
-- [x] Measure Typhon quarantine routing overhead (<50ms) with normal vs quarantine comparison; add integration test that exercises seccomp isolation and reports added latency.
-- [x] Validate Hypnos wake-from-sleep (<100ms); enable feature flags in staging, capture hibernation/resume traces, and gate releases on SLO.
-- [x] Publish a Phase 4 performance report and dashboards (Grafana/Prometheus) covering the above SLOs to prevent regression.
+This document outlines the remaining work for the Tartarus project, based on an analysis of `ROADMAP.md` and the current codebase state.
 
-## Phase 5 — Ascension to Olympus (Production Hardening)
-### Cerberus (Auth Gateway)
-- [x] Implement the three heads: API keys (signed/rotatable), OAuth2/OIDC (code + client creds), and mutual TLS for agents with automated cert rotation.
-- [x] Enforce RBAC/tenant scoping in `pkg/cerberus` gateway/middleware and thread identity through `cmd/olympus-api` handlers.
-- [x] Centralize audit logging and anomaly hooks to `pkg/hermes` with tamper-evident storage.
-- [x] Secrets retrieval via Vault/KMS providers for tokens, client secrets, and signing keys.
+## 🚨 High Priority / Work In Progress
 
-### Charon (Request Ferry)
-- [x] Production load balancer for Olympus instances with health checks, weighted/least-conn strategies, and consistent hashing for sticky sessions.
-- [x] Circuit breaker + retry + backoff middleware; tenant-aware rate limiting; end-to-end failover tests in `tests/integration/charon`.
-- [x] Telemetry for ferry decisions (success/fail/latency) exported to Hermes/Grafana.
+These items appear to be partially implemented or are immediate next steps.
 
-### Observability and Security
-- [x] Grafana dashboards: real-time sandbox topology, resource usage heatmaps, error/latency SLOs; bundle with `docker-compose.observability.yml`.
-- [x] Security hardening: hardened guest kernel option, seccomp profile generator with per-template defaults, automated template vulnerability scanning, and Vault/KMS-backed secret injection flow.
+- [x] **Complete gVisor Runtime Integration** (`pkg/tartarus/gvisor_runtime.go`)
+  - [x] Implement `Launch` (convert `SandboxRequest` to OCI spec, create/start container)
+  - [x] Implement `Kill`, `Pause`, `Resume` (call `runsc`)
+  - [x] Implement `CreateSnapshot` (call `runsc checkpoint`)
+  - [x] Implement `Wait` (poll state)
+  - [x] Implement `Exec` (call `runsc exec`)
+  - [x] Implement `StreamLogs`
+- [ ] **Enable and Verify Advanced Features**
+  - [x] Enable Hypnos (Sleep/Hibernation) by default (currently gated by `EnableHypnos` flag)
+  - [x] Enable Thanatos (Graceful Termination) by default (currently gated by `EnableThanatos` flag)
+  - [x] Verify full integration of `pkg/hypnos` and `pkg/thanatos` with the main control plane.
+- [ ] **Kampe Legacy Runtime Shim**
+  - [ ] Verify status of `pkg/kampe` (currently listed as "Planned" in Roadmap, needs verification of completeness).
 
-### CLI v2.0 (`cmd/tartarus`)
-- [x] Implement interactive commands: `logs --follow` streaming from Hermes, `exec` attaching to running sandboxes, `inspect` detail view, snapshot create/list/delete, `init template`.
-- [x] Shell completions (bash/zsh) and config profiles; integration tests for streaming commands.
+## 🛠 Technical Debt & Code Cleanup
 
-### Kubernetes Integration (`pkg/kubernetes`, `tartarus-operator`)
-- [x] CRI shim or SandboxJob operator wiring to Moirai/Hecatoncheir; CRDs for SandboxJob/SandboxTemplate with status conditions.
-- [x] End-to-end K8s conformance (overhead <1s), Helm chart, and multi-tenant network/policy mapping.
+Specific `TODO` and `FIXME` items found in the codebase.
 
-## Phase 6 — The Golden Age (Future Capabilities)
-### Persephone (Seasonal Scaling)
-- [x] Predictive autoscaler that learns historical demand, trains forecasts, and pre-warms node pools; data pipeline plus evaluation harness.
-- [x] Seasonal schedules with budget caps and Hypnos integration for hibernation cycles.
+### Critical
+- [ ] **Erebus (Storage)**: Implement cleanup of files.
+  - `pkg/nyx/local_manager.go:367`: `// TODO: Delete files from Erebus?`
+- [ ] **Persephone (Autoscaling)**: Improve forecast confidence calculation.
+  - `pkg/persephone/forecast.go:132`: `// TODO: Calculate actual confidence`
+- [ ] **Erebus (OCI)**: Dynamic init binary location.
+  - `pkg/erebus/oci.go:229`: `// TODO: Locate the actual init binary`
+- [ ] **Hecatoncheir (Agent)**: Log streaming improvements.
+  - `pkg/hecatoncheir/agent.go:529`: `// TODO: Runtime.StreamLogs needs to support follow flag or we handle it here?`
 
-### Thanatos (Graceful Termination)
-- [x] Graceful shutdown controller with checkpoint/export before kill; policy-driven grace windows; integration with Erinyes enforcement and Hermes audit.
-- [x] User/API surface for deferred termination and resume-from-checkpoint flows.
+### Performance & Testing
+- [ ] **Olympus (Scaler)**: Add more metrics for scaling decisions.
+  - `pkg/olympus/scaler.go:86`: `// TODO: Add more metrics like CPU/Mem util`
+- [ ] **Tests**: Instrumentation for actual phase timing.
+  - `tests/perf/python_ds_bench_test.go:589`: `// TODO: Implement actual phase timing instrumentation`
 
-### Kampe (Legacy Runtime)
-- [x] Docker/containerd/gVisor adapters completing `pkg/kampe`; parity tests ensuring OCI workload behavior matches microVM runtime.
-- [x] Migration tooling to move running containers to Firecracker VMs with state export/import.
+## 🔮 Future Phases (Roadmap)
 
-### Unified Runtime (`pkg/tartarus`)
-- [x] WASM runtime integration (WasmEdge/Wasmtime) behind `IsolationAuto` selector; routing logic choosing WASM vs microVM based on workload density/cost.
-- [x] Performance matrix comparing WASM vs microVM vs gVisor; SLO alerts for regression.
+### Phase 5: Ascension to Olympus (Multi-Region & Federation)
+- [ ] **Unified Runtime Interface**: Abstract over Firecracker, gVisor, and Containers.
+- [ ] **Charon (Load Balancer)**: Global request routing and load balancing.
+- [ ] **Cerberus (Auth Gateway)**: Unified authentication and authorization.
 
-## Ecosystem and Integration Plane
-- [x] GitHub Actions integration (sandboxed runners) and VS Code extension for template/run/debug flows.
-- [x] Template marketplace and docs site refresh with tutorials; plugin system for custom judges/furies.
+### Phase 6: The Golden Age (Ecosystem)
+- [ ] **Marketplace**: Template registry and sharing platform.
+- [ ] **Federation**: Connecting multiple Tartarus clusters.
+- [ ] **Advanced Billing**: Cost analysis and granular billing.
+
+## 📦 Ecosystem
+- [ ] **VS Code Extension**: Address TypeScript definition issues in `node_modules` (low priority, likely dependency related).
