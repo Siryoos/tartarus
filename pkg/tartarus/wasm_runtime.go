@@ -204,17 +204,18 @@ func (w *WasmRuntime) Inspect(ctx context.Context, id domain.SandboxID) (*domain
 	}
 
 	return &domain.SandboxRun{
-		ID:         inst.ID,
-		RequestID:  inst.Request.ID,
-		NodeID:     inst.Request.NodeID,
-		Template:   inst.Request.Template,
-		Status:     status,
-		ExitCode:   inst.ExitCode,
-		StartedAt:  inst.StartedAt,
-		FinishedAt: inst.FinishedAt,
-		CreatedAt:  inst.StartedAt,
-		UpdatedAt:  time.Now(),
-		Metadata:   inst.Request.Metadata,
+		ID:                inst.ID,
+		RequestID:         inst.Request.ID,
+		NodeID:            inst.Request.NodeID,
+		Template:          inst.Request.Template,
+		Status:            status,
+		ExitCode:          inst.ExitCode,
+		StartedAt:         inst.StartedAt,
+		FinishedAt:        inst.FinishedAt,
+		CreatedAt:         inst.StartedAt,
+		UpdatedAt:         time.Now(),
+		MemoryUsageSource: domain.MemorySourceNotAvailable,
+		Metadata:          inst.Request.Metadata,
 	}, nil
 }
 

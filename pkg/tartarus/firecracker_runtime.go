@@ -380,13 +380,14 @@ func (r *FirecrackerRuntime) Inspect(ctx context.Context, id domain.SandboxID) (
 	}
 
 	return &domain.SandboxRun{
-		ID:          state.Request.ID,
-		RequestID:   state.Request.ID,
-		Status:      status,
-		ExitCode:    state.ExitCode,
-		StartedAt:   state.StartedAt,
-		UpdatedAt:   time.Now(),
-		MemoryUsage: memUsage,
+		ID:                state.Request.ID,
+		RequestID:         state.Request.ID,
+		Status:            status,
+		ExitCode:          state.ExitCode,
+		StartedAt:         state.StartedAt,
+		UpdatedAt:         time.Now(),
+		MemoryUsage:       memUsage,
+		MemoryUsageSource: domain.MemorySourceHostProc,
 	}, nil
 }
 

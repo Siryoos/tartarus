@@ -12,10 +12,17 @@
 //     Hecatoncheir via Acheron.
 //
 //   - [SandboxRun]: The lifecycle record of a running or completed sandbox.
-//     Written by Hecatoncheir and read by Olympus and Hades.
+//     Written by Hecatoncheir and read by Olympus and Hades. Includes a
+//     [MemorySource] annotation indicating how memory usage was tracked.
 //
 //   - [NodeStatus]: The snapshot of a worker node's capacity and health,
 //     maintained by Hades and read by Moirai for scheduling decisions.
+//
+//   - [Profile]: A strongly-typed instance profile (e.g. "phlegethon.large")
+//     with validation and component accessors.
+//
+//   - [Envelope]: A versioned wrapper for JSON serialised structs to support
+//     schema evolution in Redis and over the wire.
 //
 // # ID Types
 //
@@ -37,15 +44,8 @@
 //
 // # Known Technical Debt
 //
-//   - [ResourceSpec.Profile] (Phlegethon profile string) is parsed at the
-//     call site in multiple packages. A dedicated Profile type with
-//     parsing/validation logic should live here.
-//
-//   - [SandboxRun.MemoryUsage] is a best-effort field: only gVisor
-//     populates it. Firecracker and WASM runtimes leave it zero.
-//
-//   - There is no versioning or schema evolution strategy for these types.
-//     As the system grows, adding fields to JSON-serialised structs stored
-//     in Redis (via Hades) must be done carefully to avoid decode failures
-//     in mixed-version rollouts.
+//   - The scope of `Profile` tier constants. While the `Profile` type is here,
+//     specific tier constants (e.g. `ProfileEmber`) are currently defined in
+//     `pkg/phlegethon` to mirror `HeatLevel`. As the system grows, we may need
+//     to re-evaluate if these should move to `domain`.
 package domain

@@ -3,6 +3,8 @@ package phlegethon
 import (
 	"context"
 	"time"
+
+	"github.com/tartarus-sandbox/tartarus/pkg/domain"
 )
 
 // HeatLevel represents workload intensity
@@ -20,6 +22,13 @@ const (
 
 	// Inferno: Long-running, high-resource (unlimited duration, GPU possible)
 	HeatInferno HeatLevel = "inferno"
+)
+
+const (
+	ProfileEmber   domain.Profile = "phlegethon.ember"
+	ProfileFlame   domain.Profile = "phlegethon.flame"
+	ProfileBlaze   domain.Profile = "phlegethon.blaze"
+	ProfileInferno domain.Profile = "phlegethon.inferno"
 )
 
 // ResourceClass defines resource allocation for a heat level

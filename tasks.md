@@ -52,9 +52,9 @@ Catalogued from Go doc review and source-code audit (May 2026).
 
 ### `pkg/domain` — Core Types
 
-- [ ] **No `Profile` type**: `ResourceSpec.Profile` is parsed by multiple packages via string conventions. A dedicated `Profile` type with validation should live in `domain`.
-- [ ] **`SandboxRun.MemoryUsage` is best-effort**: Only gVisor populates it; Firecracker and WASM leave it zero.
-- [ ] **No schema evolution strategy**: JSON-serialised structs in Redis (via Hades) have no versioning. Mixed-version rollouts risk decode failures.
+- [x] **No `Profile` type**: Added a dedicated `Profile` type with parsing and validation, while keeping canonical constants in `pkg/phlegethon`.
+- [x] **`SandboxRun.MemoryUsage` is best-effort**: Added `MemoryUsageSource` (with `MemorySource` enum) to `SandboxRun` to explicitly state if the metric is from host proc, runsc stats, or unavailable.
+- [x] **No schema evolution strategy**: Implemented `Envelope[T]` for generic JSON versioning, updated Hades `RedisRegistry` to use it with version-0 fallbacks, and added a `MigrateSchema` one-shot job.
 
 ### `pkg/erebus` — OCI / Artifact Store
 

@@ -1,6 +1,9 @@
 package domain
 
 import (
+	"errors"
+	"fmt"
+	"strings"
 	"time"
 )
 
@@ -53,7 +56,7 @@ type ResourceSpec struct {
 	Mem     Megabytes     `json:"mem_mb"`
 	GPU     GPURequest    `json:"gpu,omitempty"`
 	TTL     time.Duration `json:"ttl"`
-	Profile string        `json:"profile"` // e.g. "phlegethon.large"
+	Profile Profile       `json:"profile"` // e.g. "phlegethon.large"
 }
 
 type MilliCPU int64
@@ -62,6 +65,48 @@ type Megabytes int64
 type GPURequest struct {
 	Count int    `json:"count"`
 	Type  string `json:"type"` // vendor/model hint
+}
+
+// Profile represents a strongly-typed instance profile (e.g. "phlegethon.large").
+type Profile string
+
+// ParseProfile validates and parses a profile string.
+func ParseProfile(s string) (Profile, error) {
+	if s == "" {
+		return "", errors.New("profile cannot be empty")
+	}
+	parts := strings.Split(s, ".")
+	if len(parts) != 2 {
+		return "", fmt.Errorf("invalid profile format: %q (expected namespace.tier)", s)
+	}
+	if parts[0] == "" || parts[1] == "" {
+		return "", fmt.Errorf("invalid profile format: %q", s)
+	}
+	return Profile(s), nil
+}
+
+// Namespace returns the namespace part of the profile (e.g., "phlegethon" from "phlegethon.large").
+func (p Profile) Namespace() string {
+	parts := strings.Split(string(p), ".")
+	if len(parts) >= 1 {
+		return parts[0]
+	}
+	return ""
+}
+
+// Tier returns the tier part of the profile (e.g., "large" from "phlegethon.large").
+func (p Profile) Tier() string {
+	parts := strings.Split(string(p), ".")
+	if len(parts) == 2 {
+		return parts[1]
+	}
+	return ""
+}
+
+// Valid checks if the profile is correctly formatted.
+func (p Profile) Valid() bool {
+	_, err := ParseProfile(string(p))
+	return err == nil
 }
 
 // Network
@@ -103,11 +148,23 @@ type SandboxRun struct {
 	Error       string            `json:"error,omitempty"`
 	StartedAt   time.Time         `json:"started_at"`
 	FinishedAt  time.Time         `json:"finished_at"`
-	CreatedAt   time.Time         `json:"created_at"`
-	UpdatedAt   time.Time         `json:"updated_at"`
-	MemoryUsage Megabytes         `json:"memory_usage,omitempty"`
-	Metadata    map[string]string `json:"metadata,omitempty"`
+	CreatedAt         time.Time         `json:"created_at"`
+	UpdatedAt         time.Time         `json:"updated_at"`
+	MemoryUsage       Megabytes         `json:"memory_usage,omitempty"`
+	MemoryUsageSource MemorySource      `json:"memory_source,omitempty"`
+	Metadata          map[string]string `json:"metadata,omitempty"`
 }
+
+// MemorySource defines where the MemoryUsage metric came from.
+type MemorySource string
+
+const (
+	MemorySourceUnknown      MemorySource = ""
+	MemorySourceHostProc     MemorySource = "host_proc"    // RSS from /proc/<pid>/statm
+	MemorySourceCgroupV2     MemorySource = "cgroup_v2"    // cgroup memory.current
+	MemorySourceRunscStats   MemorySource = "runsc_stats"  // gVisor runsc events
+	MemorySourceNotAvailable MemorySource = "not_available"// WASM or unsupported
+)
 
 // Node & capacity
 

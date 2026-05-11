@@ -2,7 +2,6 @@ package hades
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -46,8 +45,8 @@ func (r *RedisRegistry) ListNodes(ctx context.Context) ([]domain.NodeStatus, err
 			return nil, fmt.Errorf("failed to get node key %s: %w", key, err)
 		}
 
-		var status domain.NodeStatus
-		if err := json.Unmarshal([]byte(val), &status); err != nil {
+		status, _, err := domain.UnmarshalEnvelope[domain.NodeStatus]([]byte(val), "NodeStatus")
+		if err != nil {
 			// Log error but continue? For now, maybe skip corrupt entries
 			continue
 		}
@@ -71,9 +70,9 @@ func (r *RedisRegistry) GetNode(ctx context.Context, id domain.NodeID) (*domain.
 		return nil, fmt.Errorf("failed to get node: %w", err)
 	}
 
-	var status domain.NodeStatus
-	if err := json.Unmarshal([]byte(val), &status); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal node status: %w", err)
+	status, _, err := domain.UnmarshalEnvelope[domain.NodeStatus]([]byte(val), "NodeStatus")
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal node status envelope: %w", err)
 	}
 
 	return &status, nil
@@ -87,9 +86,9 @@ func (r *RedisRegistry) UpdateHeartbeat(ctx context.Context, payload HeartbeatPa
 		Heartbeat:       payload.Time,
 	}
 
-	data, err := json.Marshal(status)
+	data, err := domain.MarshalEnvelope("NodeStatus", domain.SchemaVersionNodeStatus, status)
 	if err != nil {
-		return fmt.Errorf("failed to marshal node status: %w", err)
+		return fmt.Errorf("failed to marshal node status envelope: %w", err)
 	}
 
 	key := fmt.Sprintf("tartarus:node:%s", status.ID)
@@ -120,8 +119,8 @@ func (r *RedisRegistry) MarkDraining(ctx context.Context, id domain.NodeID) erro
 			return err
 		}
 
-		var status domain.NodeStatus
-		if err := json.Unmarshal([]byte(val), &status); err != nil {
+		status, _, err := domain.UnmarshalEnvelope[domain.NodeStatus]([]byte(val), "NodeStatus")
+		if err != nil {
 			return err
 		}
 
@@ -130,7 +129,7 @@ func (r *RedisRegistry) MarkDraining(ctx context.Context, id domain.NodeID) erro
 		}
 		status.Labels["status"] = "draining"
 
-		data, err := json.Marshal(status)
+		data, err := domain.MarshalEnvelope("NodeStatus", domain.SchemaVersionNodeStatus, status)
 		if err != nil {
 			return err
 		}
@@ -151,9 +150,9 @@ func (r *RedisRegistry) MarkDraining(ctx context.Context, id domain.NodeID) erro
 }
 
 func (r *RedisRegistry) UpdateRun(ctx context.Context, run domain.SandboxRun) error {
-	data, err := json.Marshal(run)
+	data, err := domain.MarshalEnvelope("SandboxRun", domain.SchemaVersionSandboxRun, run)
 	if err != nil {
-		return fmt.Errorf("failed to marshal run: %w", err)
+		return fmt.Errorf("failed to marshal run envelope: %w", err)
 	}
 
 	key := fmt.Sprintf("tartarus:run:%s", run.ID)
@@ -175,9 +174,9 @@ func (r *RedisRegistry) GetRun(ctx context.Context, id domain.SandboxID) (*domai
 		return nil, fmt.Errorf("failed to get run: %w", err)
 	}
 
-	var run domain.SandboxRun
-	if err := json.Unmarshal([]byte(val), &run); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal run: %w", err)
+	run, _, err := domain.UnmarshalEnvelope[domain.SandboxRun]([]byte(val), "SandboxRun")
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal run envelope: %w", err)
 	}
 
 	return &run, nil
@@ -197,8 +196,8 @@ func (r *RedisRegistry) ListRuns(ctx context.Context) ([]domain.SandboxRun, erro
 			return nil, fmt.Errorf("failed to get run key %s: %w", key, err)
 		}
 
-		var run domain.SandboxRun
-		if err := json.Unmarshal([]byte(val), &run); err != nil {
+		run, _, err := domain.UnmarshalEnvelope[domain.SandboxRun]([]byte(val), "SandboxRun")
+		if err != nil {
 			// Log error but continue? For now, maybe skip corrupt entries
 			continue
 		}
@@ -210,4 +209,53 @@ func (r *RedisRegistry) ListRuns(ctx context.Context) ([]domain.SandboxRun, erro
 	}
 
 	return runs, nil
+}
+
+// MigrateSchema iterates over all node and run keys, and upgrades them to the latest schema envelope.
+func (r *RedisRegistry) MigrateSchema(ctx context.Context) error {
+	// Migrate Nodes
+	nodeIter := r.client.Scan(ctx, 0, "tartarus:node:*", 0).Iterator()
+	for nodeIter.Next(ctx) {
+		key := nodeIter.Val()
+		val, err := r.client.Get(ctx, key).Result()
+		if err != nil {
+			continue // Skip
+		}
+
+		status, version, err := domain.UnmarshalEnvelope[domain.NodeStatus]([]byte(val), "NodeStatus")
+		if err != nil {
+			continue // Skip
+		}
+
+		if version < domain.SchemaVersionNodeStatus {
+			data, err := domain.MarshalEnvelope("NodeStatus", domain.SchemaVersionNodeStatus, status)
+			if err == nil {
+				r.client.Set(ctx, key, data, redis.KeepTTL)
+			}
+		}
+	}
+
+	// Migrate Runs
+	runIter := r.client.Scan(ctx, 0, "tartarus:run:*", 0).Iterator()
+	for runIter.Next(ctx) {
+		key := runIter.Val()
+		val, err := r.client.Get(ctx, key).Result()
+		if err != nil {
+			continue // Skip
+		}
+
+		run, version, err := domain.UnmarshalEnvelope[domain.SandboxRun]([]byte(val), "SandboxRun")
+		if err != nil {
+			continue // Skip
+		}
+
+		if version < domain.SchemaVersionSandboxRun {
+			data, err := domain.MarshalEnvelope("SandboxRun", domain.SchemaVersionSandboxRun, run)
+			if err == nil {
+				r.client.Set(ctx, key, data, redis.KeepTTL)
+			}
+		}
+	}
+
+	return nil
 }

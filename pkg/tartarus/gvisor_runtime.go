@@ -264,21 +264,23 @@ func (g *GVisorRuntime) Inspect(ctx context.Context, id domain.SandboxID) (*doma
 		finishedAt = time.Now() // Approximate, ideally we capture this in the goroutine
 	}
 
-	// Try to get memory usage if possible (not implemented here)
+	// TODO: Get memory usage via `runsc events --stats`.
+	// Currently not implemented, leaving MemoryUsage at 0 and tagging source as NotAvailable.
 	var memUsage domain.Megabytes
 
 	return &domain.SandboxRun{
-		ID:          container.ID,
-		RequestID:   container.Request.ID,
-		NodeID:      container.Request.NodeID,
-		Template:    container.Request.Template,
-		Status:      status,
-		ExitCode:    container.ExitCode,
-		StartedAt:   container.StartedAt,
-		FinishedAt:  finishedAt,
-		UpdatedAt:   time.Now(),
-		Metadata:    container.Request.Metadata,
-		MemoryUsage: memUsage,
+		ID:                container.ID,
+		RequestID:         container.Request.ID,
+		NodeID:            container.Request.NodeID,
+		Template:          container.Request.Template,
+		Status:            status,
+		ExitCode:          container.ExitCode,
+		StartedAt:         container.StartedAt,
+		FinishedAt:        finishedAt,
+		UpdatedAt:         time.Now(),
+		Metadata:          container.Request.Metadata,
+		MemoryUsage:       memUsage,
+		MemoryUsageSource: domain.MemorySourceNotAvailable,
 	}, nil
 }
 
