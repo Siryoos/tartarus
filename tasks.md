@@ -38,11 +38,11 @@ Catalogued from Go doc review and source-code audit (May 2026).
 
 ### `pkg/charon` — Load Balancer / Ferry
 
-- [ ] **Consistent-hash sticky sessions**: Removing a shore causes a full re-hash, breaking in-flight sessions. Sticky session support after deregistration is unimplemented.
-- [ ] **In-memory rate limiting only**: `TokenBucketLimiter` is per-process. A Redis-backed distributed rate limiter is required for true global enforcement across multiple Charon instances.
-- [ ] **No mTLS health check probes**: The health checker does not support TLS client certificates for backend probes.
-- [ ] **No WebSocket/streaming proxy**: Only standard HTTP request-response is supported.
-- [ ] **Zone-aware routing is parsed but not used**: `Shore.Zone` is stored but no strategy uses it for zone-preferential routing.
+- [x] **Consistent-hash sticky sessions**: Added `StickySessionTable` (`sticky_session.go`) that pins `sessionKey → shoreID` on first hash selection. `DeregisterShore` calls `Drain(shoreID)` to mark entries as draining (not deleted); a background sweeper evicts them after `StickySessionDrainTimeout` (default 5 min). `selectConsistentHash` checks the table first and re-pins on re-selection.
+- [x] **In-memory rate limiting only**: Added `RedisRateLimiter` (`rate_limiter_redis.go`) using a sliding-window Lua script on `redis/go-redis/v9`. Auto-selected in `NewBoatFerry` when `RateLimitConfig.RedisAddr` is non-empty; falls back to `TokenBucketLimiter` otherwise.
+- [x] **No mTLS health check probes**: `HealthCheck` gains `TLSConfig *tls.Config`; `AddShore` builds a per-shore `http.Client` with a custom TLS transport when set. `NewMTLSHealthCheck(certFile, keyFile, caFile, path)` provides ergonomic construction.
+- [x] **No WebSocket/streaming proxy**: Added `websocket_proxy.go` with bidirectional gorilla WS tunnel (`proxyWebSocket`) and SSE/long-poll streaming (`proxyStream`). `FerryMiddleware` stores the `ResponseWriter` in context; `forwardRequest` detects `Upgrade: websocket` / `Accept: text/event-stream` and routes to the appropriate helper.
+- [x] **Zone-aware routing is parsed but not used**: Implemented `selectZoneAware` in `load_balancer.go`. Prefers shores matching `X-Zone` header or `FerryConfig.LocalZone`; falls back to global round-robin. `StrategyZoneAware` case wired into `selectShore`.
 
 ### `pkg/cocytus` — Error Stream
 

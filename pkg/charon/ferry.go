@@ -5,7 +5,11 @@ package charon
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"fmt"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -46,6 +50,54 @@ type HealthCheck struct {
 	Timeout   time.Duration // Request timeout
 	Healthy   int           // Consecutive successes to mark healthy
 	Unhealthy int           // Consecutive failures to mark unhealthy
+
+	// TLSConfig, when non-nil, enables mTLS for health-check probes. The
+	// HealthChecker will create a dedicated http.Client for this shore using
+	// the supplied tls.Config, allowing client-certificate authentication
+	// against backends that require mutual TLS.
+	TLSConfig *tls.Config
+}
+
+// NewMTLSHealthCheck constructs a HealthCheck with an mTLS configuration
+// loaded from the given certificate, key, and CA files.
+//
+//   - certFile — path to the PEM-encoded client certificate.
+//   - keyFile  — path to the PEM-encoded private key.
+//   - caFile   — path to the PEM-encoded CA certificate (for server verification).
+//   - path     — HTTP path to probe (e.g. "/health").
+//
+// The returned HealthCheck uses library-default values for Interval/Timeout;
+// override those fields after construction as needed.
+func NewMTLSHealthCheck(certFile, keyFile, caFile, path string) (*HealthCheck, error) {
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return nil, fmt.Errorf("charon: loading mTLS cert/key: %w", err)
+	}
+
+	tlsCfg := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+	}
+
+	if caFile != "" {
+		caPEM, err := os.ReadFile(caFile)
+		if err != nil {
+			return nil, fmt.Errorf("charon: reading CA file: %w", err)
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(caPEM) {
+			return nil, fmt.Errorf("charon: no valid CA certificates in %s", caFile)
+		}
+		tlsCfg.RootCAs = pool
+	}
+
+	return &HealthCheck{
+		Path:      path,
+		Interval:  10 * time.Second,
+		Timeout:   5 * time.Second,
+		Healthy:   2,
+		Unhealthy: 3,
+		TLSConfig: tlsCfg,
+	}, nil
 }
 
 // FerryHealth reports overall system health.
@@ -85,6 +137,11 @@ type FerryConfig struct {
 	// If empty, defaults to "ip"
 	SessionAffinityKey string
 
+	// LocalZone is the availability zone this Charon instance belongs to.
+	// Used by StrategyZoneAware to prefer backends in the same zone.
+	// May also be overridden per-request via the "X-Zone" header.
+	LocalZone string
+
 	// Circuit breaker settings
 	CircuitBreaker CircuitBreakerConfig
 
@@ -96,6 +153,10 @@ type FerryConfig struct {
 
 	// Timeout for crossing
 	CrossingTimeout time.Duration
+
+	// StickySessionDrainTimeout controls how long sticky-session affinity
+	// is preserved for a shore after it is deregistered. Defaults to 5 minutes.
+	StickySessionDrainTimeout time.Duration
 
 	// Metrics for telemetry (optional)
 	Metrics interface{}

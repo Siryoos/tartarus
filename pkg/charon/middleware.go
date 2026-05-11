@@ -7,6 +7,12 @@ import (
 	"time"
 )
 
+// contextKeyResponseWriter is an unexported type used to store the original
+// http.ResponseWriter in the request context. This allows forwardRequest to
+// retrieve the writer for WebSocket and SSE streaming paths that must write
+// directly to the connection rather than buffering into a responseRecorder.
+type contextKeyResponseWriter struct{}
+
 // FerryMiddleware wraps an HTTP handler with Charon ferry logic.
 type FerryMiddleware struct {
 	ferry Ferry
@@ -36,6 +42,11 @@ func (m *FerryMiddleware) Handler(next http.Handler) http.Handler {
 			ctx = context.WithValue(ctx, "identity_id", identityID)
 		}
 
+		// Store the ResponseWriter so that forwardRequest can access it for
+		// WebSocket upgrade and SSE streaming paths that must write directly
+		// to the client connection rather than through a buffer.
+		ctx = context.WithValue(ctx, contextKeyResponseWriter{}, w)
+
 		// Ferry the request
 		start := time.Now()
 		resp, err := m.ferry.Cross(ctx, r.WithContext(ctx))
@@ -45,6 +56,14 @@ func (m *FerryMiddleware) Handler(next http.Handler) http.Handler {
 			// Handle ferry errors
 			httpErr := ToHTTPError(err)
 			http.Error(w, httpErr.Message, httpErr.HTTPStatusCode())
+			return
+		}
+
+		// For streaming paths (WebSocket / SSE), forwardRequest writes
+		// directly to the ResponseWriter and returns a sentinel response.
+		// We must not attempt to write headers/body again.
+		if resp.Trailer.Get("X-Charon-Streamed") == "true" {
+			_ = duration // still tracked by telemetry inside forwardRequest
 			return
 		}
 

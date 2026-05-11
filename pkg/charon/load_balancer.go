@@ -35,6 +35,7 @@ type BoatFerry struct {
 	activeConns    map[string]*int32
 	reverseProxies map[string]*httputil.ReverseProxy
 	hashRing       *ConsistentHashRing
+	stickyTable    *StickySessionTable
 	telemetry      *Telemetry
 
 	mu sync.RWMutex
@@ -86,16 +87,29 @@ func NewBoatFerry(config *FerryConfig) (*BoatFerry, error) {
 		reverseProxies: make(map[string]*httputil.ReverseProxy),
 		healthChecker:  NewHealthChecker(),
 		hashRing:       NewConsistentHashRing(150),
+		stickyTable:    NewStickySessionTable(config.StickySessionDrainTimeout),
 	}
 
-	// Initialize rate limiter
+	// Initialize rate limiter: prefer Redis when an address is configured so
+	// that limits are enforced globally across all Charon instances.
 	if config.RateLimiting.Enabled {
 		keyFunc := GetKeyFunc(config.RateLimiting.KeyFunc)
-		ferry.rateLimiter = NewTokenBucketLimiter(
-			config.RateLimiting.RequestsPerSecond,
-			config.RateLimiting.Burst,
-			keyFunc,
-		)
+		if config.RateLimiting.RedisAddr != "" {
+			client := NewRedisClientFromAddr(config.RateLimiting.RedisAddr)
+			ferry.rateLimiter = NewRedisRateLimiter(
+				client,
+				config.RateLimiting.RequestsPerSecond,
+				config.RateLimiting.Burst,
+				"charon:rl",
+				keyFunc,
+			)
+		} else {
+			ferry.rateLimiter = NewTokenBucketLimiter(
+				config.RateLimiting.RequestsPerSecond,
+				config.RateLimiting.Burst,
+				keyFunc,
+			)
+		}
 	} else {
 		ferry.rateLimiter = NewNoOpLimiter()
 	}
@@ -213,6 +227,11 @@ func (f *BoatFerry) DeregisterShore(shoreID string) error {
 
 	// Remove from hash ring
 	f.hashRing.Remove(shoreID)
+
+	// Mark sticky-session entries for this shore as draining rather than
+	// deleting them immediately, giving in-flight sessions a grace period
+	// (StickySessionDrainTimeout) to complete before being re-hashed.
+	f.stickyTable.Drain(shoreID)
 
 	// Remove from collections
 	delete(f.shoreMap, shoreID)
@@ -400,6 +419,9 @@ func (f *BoatFerry) selectShore(ctx context.Context, req *http.Request) (*Shore,
 	case StrategyConsistentHash:
 		return f.selectConsistentHash(healthy, req), nil
 
+	case StrategyZoneAware:
+		return f.selectZoneAware(healthy, req), nil
+
 	default:
 		return healthy[rand.Intn(len(healthy))], nil
 	}
@@ -460,36 +482,95 @@ func (f *BoatFerry) selectIPHash(shores []*Shore, req *http.Request) *Shore {
 }
 
 // selectConsistentHash uses consistent hashing ring for sticky sessions.
+// It first checks the StickySessionTable so that existing sessions continue
+// to be routed to the same shore even if the ring has re-hashed since the
+// session was established. When the pinned shore is draining (deregistered)
+// or unhealthy, the request falls through to the ring and the new mapping is
+// pinned so future requests follow without consulting the (now-stale) entry.
 func (f *BoatFerry) selectConsistentHash(shores []*Shore, req *http.Request) *Shore {
 	// Extract session key based on configuration
 	key := f.extractSessionKey(req)
 
-	// Get primary shore from hash ring
+	// Build a quick lookup of healthy shore IDs.
+	healthySet := make(map[string]bool, len(shores))
+	for _, s := range shores {
+		healthySet[s.ID] = true
+	}
+
+	// 1. Check the sticky-session table first.
+	if pinnedID, draining, ok := f.stickyTable.Get(key); ok && !draining {
+		for _, shore := range shores {
+			if shore.ID == pinnedID {
+				// Pinned shore is still healthy — honour the affinity.
+				return shore
+			}
+		}
+		// Pinned shore is no longer healthy; fall through to re-select.
+	}
+
+	// 2. Get primary shore from hash ring.
 	primaryID := f.hashRing.Get(key)
 	if primaryID == "" {
 		// Ring is empty, fallback to random
 		return shores[rand.Intn(len(shores))]
 	}
 
-	// Check if primary is healthy
+	// 3. Check if primary is healthy
 	for _, shore := range shores {
 		if shore.ID == primaryID {
+			// Pin and return.
+			f.stickyTable.Pin(key, shore.ID)
 			return shore
 		}
 	}
 
-	// Primary is not healthy, get fallback shores
+	// 4. Primary is not healthy; walk ring for a fallback.
 	fallbacks := f.hashRing.GetN(key, 3)
 	for _, fallbackID := range fallbacks {
 		for _, shore := range shores {
 			if shore.ID == fallbackID {
+				f.stickyTable.Pin(key, shore.ID)
 				return shore
 			}
 		}
 	}
 
-	// No consistent hash match found (shouldn't happen), use first healthy
+	// 5. No consistent hash match found (shouldn't happen), use first healthy.
+	f.stickyTable.Pin(key, shores[0].ID)
 	return shores[0]
+}
+
+// selectZoneAware prefers shores in the same availability zone as the request
+// origin. The local zone is determined in priority order:
+//  1. The "X-Zone" HTTP header sent by the client / upstream proxy.
+//  2. The FerryConfig.LocalZone configured at startup.
+//
+// When no same-zone shores are healthy the selector falls back to round-robin
+// across all healthy shores so traffic is never dropped due to zone affinity.
+func (f *BoatFerry) selectZoneAware(shores []*Shore, req *http.Request) *Shore {
+	// Determine the preferred zone.
+	zone := req.Header.Get("X-Zone")
+	if zone == "" {
+		zone = f.config.LocalZone
+	}
+
+	if zone != "" {
+		// Partition shores by zone membership.
+		sameZone := make([]*Shore, 0, len(shores))
+		for _, shore := range shores {
+			if shore.Zone == zone {
+				sameZone = append(sameZone, shore)
+			}
+		}
+		if len(sameZone) > 0 {
+			// Round-robin within the local zone.
+			idx := atomic.AddUint64(&f.rrCounter, 1) % uint64(len(sameZone))
+			return sameZone[idx]
+		}
+	}
+
+	// No zone preference or no same-zone shores — fall back to global round-robin.
+	return f.selectRoundRobin(shores)
 }
 
 // extractSessionKey extracts the session affinity key from the request.
@@ -534,6 +615,9 @@ func (f *BoatFerry) extractSessionKey(req *http.Request) string {
 }
 
 // forwardRequest forwards the request to the selected shore.
+// For WebSocket upgrade requests and Server-Sent Events streams, it proxies
+// the connection directly to the ResponseWriter (obtained from the request
+// context) rather than buffering into a responseRecorder.
 func (f *BoatFerry) forwardRequest(ctx context.Context, req *http.Request, shore *Shore) (*http.Response, error) {
 	// Increment active connections
 	newCount := atomic.AddInt32(f.activeConns[shore.ID], 1)
@@ -543,6 +627,35 @@ func (f *BoatFerry) forwardRequest(ctx context.Context, req *http.Request, shore
 		f.telemetry.RecordActiveConnections(shore.ID, int(newCount))
 	}()
 
+	targetURL, err := url.Parse(shore.Address)
+	if err != nil {
+		return nil, fmt.Errorf("invalid shore address: %w", err)
+	}
+
+	// --- WebSocket upgrade path ---
+	if isWebSocketUpgrade(req) {
+		// Retrieve the original http.ResponseWriter stored in context by
+		// FerryMiddleware. If unavailable, fall through to the buffered path
+		// (will fail the WS handshake but avoids a panic).
+		if w, ok := ctx.Value(contextKeyResponseWriter{}).(http.ResponseWriter); ok {
+			if wsErr := proxyWebSocket(w, req, targetURL); wsErr != nil {
+				return nil, wsErr
+			}
+			return streamingResponse(), nil
+		}
+	}
+
+	// --- SSE / long-polling stream path ---
+	if isEventStream(req) {
+		if w, ok := ctx.Value(contextKeyResponseWriter{}).(http.ResponseWriter); ok {
+			if streamErr := proxyStream(w, req, targetURL); streamErr != nil {
+				return nil, streamErr
+			}
+			return streamingResponse(), nil
+		}
+	}
+
+	// --- Standard HTTP request-response path ---
 	// Get reverse proxy for this shore
 	proxy := f.reverseProxies[shore.ID]
 
@@ -648,6 +761,7 @@ func (f *BoatFerry) Start(ctx context.Context) {
 // Close gracefully shuts down the ferry.
 func (f *BoatFerry) Close() error {
 	f.healthChecker.Stop()
+	f.stickyTable.Close()
 	return f.rateLimiter.Close()
 }
 

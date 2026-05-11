@@ -31,6 +31,11 @@ type shoreHealthState struct {
 	errorRate          float64
 	totalRequests      int64
 	failedRequests     int64
+
+	// client is a per-shore HTTP client configured with TLS when the shore's
+	// HealthCheck specifies a TLSConfig (mTLS). When nil, the HealthChecker's
+	// shared default client is used.
+	client *http.Client
 }
 
 // NewHealthChecker creates a new health checker.
@@ -50,10 +55,23 @@ func (hc *HealthChecker) AddShore(shore *Shore) {
 	hc.mu.Lock()
 	defer hc.mu.Unlock()
 
-	hc.shores[shore.ID] = &shoreHealthState{
+	state := &shoreHealthState{
 		shore:  shore,
 		status: HealthStatusHealthy, // Assume healthy initially
 	}
+
+	// Build a dedicated mTLS client when the shore requests it.
+	if shore.HealthCheck != nil && shore.HealthCheck.TLSConfig != nil {
+		transport := &http.Transport{
+			TLSClientConfig: shore.HealthCheck.TLSConfig.Clone(),
+		}
+		state.client = &http.Client{
+			Timeout:   5 * time.Second,
+			Transport: transport,
+		}
+	}
+
+	hc.shores[shore.ID] = state
 }
 
 // RemoveShore removes a shore from monitoring.
@@ -148,9 +166,16 @@ func (hc *HealthChecker) performCheck(ctx context.Context, state *shoreHealthSta
 		return
 	}
 
+	// Use the per-shore client (mTLS) when available, falling back to the
+	// shared default plain client.
+	client := state.client
+	if client == nil {
+		client = hc.client
+	}
+
 	// Perform check and measure latency
 	start := time.Now()
-	resp, err := hc.client.Do(req)
+	resp, err := client.Do(req)
 	latency := time.Since(start)
 
 	if err != nil {
