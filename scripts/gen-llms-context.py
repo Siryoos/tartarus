@@ -28,6 +28,7 @@ def generate_llms_txt():
         f.write("\n## Core Interfaces\n\n")
         # Extract interfaces using go doc or regex
         # We'll use a regex to find exported interfaces in all .go files in pkg/
+        interfaces = []
         for root, dirs, files in os.walk(pkg_dir):
             for file in files:
                 if file.endswith(".go") and not file.endswith("_test.go"):
@@ -39,12 +40,18 @@ def generate_llms_txt():
                             interface_name = match.group(1)
                             body = match.group(2).strip()
                             pkg_name = os.path.basename(root)
-                            f.write(f"### `{pkg_name}.{interface_name}`\n")
-                            f.write("```go\n")
-                            f.write(f"type {interface_name} interface {{\n")
-                            for line in body.split("\n"):
-                                f.write(f"    {line.strip()}\n")
-                            f.write("}\n```\n\n")
+                            interfaces.append((pkg_name, interface_name, body))
+        
+        # Sort interfaces to ensure deterministic output
+        interfaces.sort(key=lambda x: (x[0], x[1]))
+        
+        for pkg_name, interface_name, body in interfaces:
+            f.write(f"### `{pkg_name}.{interface_name}`\n")
+            f.write("```go\n")
+            f.write(f"type {interface_name} interface {{\n")
+            for line in body.split("\n"):
+                f.write(f"    {line.strip()}\n")
+            f.write("}\n```\n\n")
 
         f.write("## Build Tags & Stub Pattern\n\n")
         f.write("The repository uses a pervasive `*_stub.go` pattern (e.g., `firecracker_runtime_stub.go`). ")
@@ -55,6 +62,7 @@ def generate_llms_txt():
         # Extract CRD Types from pkg/kubernetes/apis/tartarus/v1alpha1
         crd_dir = os.path.join(PROJECT_ROOT, "pkg", "kubernetes", "apis", "tartarus", "v1alpha1")
         if os.path.exists(crd_dir):
+            crd_structs = []
             for file in ["sandboxjob_types.go", "sandboxtemplate_types.go", "tenantnetworkpolicy_types.go"]:
                 file_path = os.path.join(crd_dir, file)
                 if os.path.exists(file_path):
@@ -64,12 +72,16 @@ def generate_llms_txt():
                         for match in matches:
                             struct_name = match.group(1)
                             body = match.group(2).strip()
-                            f.write(f"### `{struct_name}`\n")
-                            f.write("```go\n")
-                            f.write(f"type {struct_name} struct {{\n")
-                            for line in body.split("\n"):
-                                f.write(f"    {line.strip()}\n")
-                            f.write("}\n```\n\n")
+                            crd_structs.append((struct_name, body))
+            
+            crd_structs.sort(key=lambda x: x[0])
+            for struct_name, body in crd_structs:
+                f.write(f"### `{struct_name}`\n")
+                f.write("```go\n")
+                f.write(f"type {struct_name} struct {{\n")
+                for line in body.split("\n"):
+                    f.write(f"    {line.strip()}\n")
+                f.write("}\n```\n\n")
 
         f.write("## Plugin Manifest Format\n\n")
         f.write("Plugins are defined using a manifest format (typically `manifest.yaml`). The extensibility framework uses adapters like `FuryAdapter` and `JudgeAdapter` to load custom components.\n")

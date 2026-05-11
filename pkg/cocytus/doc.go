@@ -3,30 +3,54 @@
 //
 // Named after the river of wailing in Hades, Cocytus acts as the error
 // pipeline for the Tartarus platform. It exposes a [Sink] interface that
-// receives failed [domain.SandboxRun] records and routes them to one or
-// more downstream handlers (logging, alerting, dead-letter storage).
+// receives failed [Record] objects and routes them to one or more downstream
+// handlers (logging, alerting, dead-letter storage).
 //
 // # Implementations
 //
-//   - [LogSink]: Writes JSON-encoded failure records to a structured logger.
+//   - [LogSink]: Writes structured failure records to a [log/slog] logger.
 //     Suitable for development and low-volume deployments.
+//
+//   - [AcheronSink]: Durable sink that persists records to a Redis Stream
+//     (the Acheron DLQ). Survives process restarts; suitable for production.
+//
+//   - [WebhookSink]: Alert sink that HTTP-POSTs records as JSON to any
+//     webhook URL. Compatible with Slack incoming webhooks and the
+//     PagerDuty Events v2 API.
+//
+//   - [MultiSink]: Fan-out wrapper that delivers each record to every
+//     registered sink simultaneously. Errors are joined via [errors.Join].
+//
+//   - [ReplaySink]: Retry decorator that wraps any Sink with bounded
+//     retry logic and an optional dead-letter fallback Sink.
 //
 // # Basic Usage
 //
-//	sink := cocytus.NewLogSink(logger)
+//	logger := slog.Default()
+//	logSink := cocytus.NewLogSink(logger)
+//
+//	dlq, _ := cocytus.NewAcheronSink(cocytus.AcheronSinkConfig{
+//	    Addr:      "redis:6379",
+//	    StreamKey: "cocytus:dlq",
+//	})
+//
+//	webhook, _ := cocytus.NewWebhookSink(cocytus.WebhookSinkConfig{
+//	    URL: "https://hooks.slack.com/services/...",
+//	})
+//
+//	multi, _ := cocytus.NewMultiSink(logSink, dlq, webhook)
+//
+//	sink, _ := cocytus.NewReplaySink(cocytus.ReplayConfig{
+//	    Inner:       multi,
+//	    MaxAttempts: 3,
+//	    Backoff:     500 * time.Millisecond,
+//	    Fallback:    logSink,
+//	})
+//
 //	// On failure:
-//	sink.Record(ctx, &domain.SandboxRun{...}, "timeout exceeded")
-//
-// # Known Technical Debt
-//
-//   - Only a [LogSink] is provided. Production deployments typically require
-//     a durable sink (e.g., persisting to the Acheron DLQ stream or sending
-//     to a Slack/PagerDuty webhook). These are not yet implemented.
-//
-//   - There is no fan-out (multi-sink) implementation. The interface accepts
-//     a single Sink, but many systems need simultaneous logging + alerting.
-//     A MultiSink wrapper should be added.
-//
-//   - Failed-record replay is entirely external. Cocytus only records
-//     failures; it does not provide any retry or replay capability.
+//	sink.Write(ctx, &cocytus.Record{
+//	    RunID:     runID,
+//	    Reason:    "timeout exceeded",
+//	    CreatedAt: time.Now(),
+//	})
 package cocytus

@@ -46,9 +46,9 @@ Catalogued from Go doc review and source-code audit (May 2026).
 
 ### `pkg/cocytus` — Error Stream
 
-- [ ] **No durable sink**: Only a `LogSink` is provided. Production deployments need a sink that persists to Acheron DLQ or sends alerts (Slack/PagerDuty).
-- [ ] **No fan-out (multi-sink)**: The interface accepts a single Sink. A `MultiSink` wrapper is needed.
-- [ ] **No replay capability**: Failed records are logged only; no retry or replay mechanism exists.
+- [x] **No durable sink**: Added `AcheronSink` (`acheron_sink.go`) that persists records to a Redis Stream (`cocytus:dlq`) and `WebhookSink` (`webhook_sink.go`) for Slack/PagerDuty alert delivery.
+- [x] **No fan-out (multi-sink)**: Added `MultiSink` (`multi_sink.go`) that fans out `Write` to every registered sink; errors are collected with `errors.Join`.
+- [x] **No replay capability**: Added `ReplaySink` (`replay_sink.go`) decorator with bounded retry (`MaxAttempts`/`Backoff`) and an optional dead-letter `Fallback` sink.
 
 ### `pkg/domain` — Core Types
 

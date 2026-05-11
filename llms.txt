@@ -7,7 +7,7 @@ Tartarus is a hyperscale microVM sandbox orchestrator designed to execute untrus
 - **`acheron`**: Package acheron implements the durable job queue — the River of Pain that every sandbox request must cross before reaching the execution layer.  Named after the river that souls must cross to enter the Underworld, Acheron provides at-least-once delivery semantics with a dead-letter queue (DLQ) for failed or poison-pill messages.  # Implementations  Three Queue implementations are provided:  - [RedisQueue]: Production implementation backed by a Redis Stream. Supports consumer groups, automatic re-delivery on timeout (PEL), configurable retry limits, and DLQ promotion via atomic Lua scripts.  - [RedisClusterQueue]: Redis Cluster-aware variant of RedisQueue. Keys are automatically hash-tagged so the stream and its DLQ always reside on the same shard, satisfying the cross-key Lua script constraint.  - [MemoryQueue]: In-process implementation for unit tests and single-node development deployments. Does not persist across restarts. Dequeue fully respects context cancellation via a channel-based notify.  - [PriorityQueue]: Multi-tier fan-in queue backed by one [MemoryQueue] per [domain.Priority] level. Higher-priority items are always dequeued first. Dequeue respects context cancellation.  # Basic Usage  	q := acheron.NewRedisQueue(redisAddr, 0, "tartarus:jobs", "workers", "node-1", false, metrics, nil)  	// Producer side 	q.Enqueue(ctx, &domain.SandboxRequest{Priority: domain.PriorityHigh, ...})  	// Consumer side 	req, receipt, err := q.Dequeue(ctx) 	if err != nil { ... } 	if err := process(req); err != nil { 	    q.Nack(ctx, receipt, err.Error()) // re-enqueue or move to DLQ 	} else { 	    q.Ack(ctx, receipt) 	}  # Dead-Letter Queue  When a message exceeds [RedisQueue]'s MaxRetries, it is atomically moved to a separate DLQ stream ("<stream>:dlq") with the original payload and an error annotation. Operators can inspect and replay DLQ entries out-of-band.  # Telemetry  All implementations emit the same Prometheus-compatible metric names via a [hermes.Metrics] sink:  - queue_enqueue_total / queue_enqueue_errors_total - queue_dequeue_total - queue_nack_total / queue_nack_errors_total - queue_depth (gauge) - queue_dlq_depth (gauge, RedisQueue / RedisClusterQueue only)  Use [NewInstrumentedQueue] to wrap any [Queue] with the shared metrics layer.  # Priority Scheduling  Use [domain.Priority] constants (PriorityLow, PriorityNormal, PriorityHigh) to annotate [domain.SandboxRequest] before enqueueing. [PriorityQueue] routes each request to the appropriate tier and always dequeues the highest non-empty tier first.
 - **`cerberus`**: Package cerberus provides authentication, authorization, and audit capabilities for the Tartarus platform.  Cerberus is the three-headed guardian of the Underworld, and this package implements the three heads of access control: - Head 1 (Authentication): Verifies identity - Head 2 (Authorization): Checks permissions - Head 3 (Audit): Records all access attempts  # Basic Usage  Create a simple API key authenticator:  	auth := cerberus.NewSimpleAPIKeyAuthenticator("your-secret-key") 	authz := cerberus.NewAllowAllAuthorizer() 	audit := cerberus.NewLogAuditor(logger) 	gateway := cerberus.NewGateway(auth, authz, audit)  Wrap your HTTP handlers:  	middleware := cerberus.NewHTTPMiddleware( 	    gateway, 	    cerberus.NewBearerTokenExtractor(), 	    cerberus.NewDefaultResourceMapper(), 	) 	handler := middleware.Wrap(yourHandler)  # Advanced Usage with RBAC  Define role-based access control policies:  	policies := map[string]*cerberus.RBACPolicy{ 	    "admin": { 	        Role: "admin", 	        Permissions: []cerberus.Permission{ 	            {AllowAll: true}, 	        }, 	    }, 	    "user": { 	        Role: "user", 	        Permissions: []cerberus.Permission{ 	            { 	                Actions:   []cerberus.Action{cerberus.ActionCreate, cerberus.ActionRead}, 	                Resources: []cerberus.ResourceType{cerberus.ResourceTypeSandbox}, 	            }, 	        }, 	    }, 	} 	authz := cerberus.NewRBACAuthorizer(policies)  # Retrieving Identity  Get the authenticated identity in your handlers:  	func myHandler(w http.ResponseWriter, r *http.Request) { 	    identity, ok := cerberus.GetIdentity(r.Context()) 	    if !ok { 	        http.Error(w, "Unauthorized", http.StatusUnauthorized) 	        return 	    } 	    // Use identity.ID, identity.Roles, etc. 	}
 - **`charon`**: Package charon implements the request ferry and load balancer — the Ferryman of the Underworld who transports every API request to a healthy backend shore.  Charon sits in front of the Olympus API tier and provides: - Five load-balancing strategies: round-robin, least-connections, weighted, IP-hash, consistent-hash with sticky-session draining, and zone-aware routing. - Per-process token-bucket rate limiting ([TokenBucketLimiter]) and a globally-consistent sliding-window limiter backed by Redis ([RedisRateLimiter]). The Redis limiter is selected automatically when [RateLimitConfig.RedisAddr] is non-empty. - A three-state circuit breaker (closed → open → half-open) per backend. - Active health checking with configurable intervals and thresholds. Backends that require mutual TLS can supply a [HealthCheck.TLSConfig] so the prober presents a client certificate on every probe. - Transparent WebSocket upgrade proxying via a bidirectional gorilla tunnel. - Server-Sent Events (SSE) and long-polling streaming via incremental io.Copy with flushing. - Zone-aware routing ([StrategyZoneAware]) that prefers same-zone backends and falls back globally when no local backends are healthy. - Prometheus telemetry for latency, error rates, and circuit-breaker states.  # Core Concepts  A [Ferry] transports HTTP requests across a pool of [Shore] backends. The caller registers shores and then calls [Ferry.Cross] for each request.  A [RateLimiter] gates requests per-key before they reach any backend. Use [NewRedisRateLimiter] for multi-instance deployments.  A [CircuitBreakerInterface] wraps each shore and opens when failure thresholds are exceeded, preventing the caller from hammering a degraded backend.  A [StickySessionTable] is maintained internally by [BoatFerry]. It pins session-key → shore-ID affinity established via consistent-hash routing. When a shore is deregistered, its entries transition to a draining state and are honoured for a configurable [FerryConfig.StickySessionDrainTimeout] before being evicted, ensuring in-flight sessions complete on their original backend.  # Basic Usage  	cfg := &charon.FerryConfig{ 	    Strategy:  charon.StrategyConsistentHash, 	    LocalZone: "us-east-1a", 	    RateLimiting: charon.RateLimitConfig{ 	        Enabled:           true, 	        RequestsPerSecond: 1000, 	        Burst:             2000, 	        RedisAddr:         "redis:6379", // omit for in-process limiting 	    }, 	    CircuitBreaker: charon.CircuitBreakerConfig{ 	        Enabled:          true, 	        Threshold:        5, 	        Timeout:          10 * time.Second, 	        HalfOpenRequests: 2, 	    }, 	} 	ferry, err := charon.NewBoatFerry(cfg)  	ferry.RegisterShore(&charon.Shore{ 	    ID:      "olympus-1", 	    Address: "http://olympus-1:8080", 	    Weight:  10, 	    Zone:    "us-east-1a", 	})  	// Wrap your HTTP mux with Charon middleware to enable streaming support: 	mw := charon.NewFerryMiddleware(ferry) 	http.Handle("/", mw.Handler(yourMux))  # mTLS Health Probes  	hc, err := charon.NewMTLSHealthCheck("client.crt", "client.key", "ca.crt", "/health") 	ferry.RegisterShore(&charon.Shore{ 	    ID:          "secure-backend", 	    Address:     "https://backend:8443", 	    HealthCheck: hc, 	})
-- **`cocytus`**: Package cocytus implements the error stream — the River of Wailing that collects, categorises, and routes system-wide failures.  Named after the river of wailing in Hades, Cocytus acts as the error pipeline for the Tartarus platform. It exposes a [Sink] interface that receives failed [domain.SandboxRun] records and routes them to one or more downstream handlers (logging, alerting, dead-letter storage).  # Implementations  - [LogSink]: Writes JSON-encoded failure records to a structured logger. Suitable for development and low-volume deployments.  # Basic Usage  	sink := cocytus.NewLogSink(logger) 	// On failure: 	sink.Record(ctx, &domain.SandboxRun{...}, "timeout exceeded")  # Known Technical Debt  - Only a [LogSink] is provided. Production deployments typically require a durable sink (e.g., persisting to the Acheron DLQ stream or sending to a Slack/PagerDuty webhook). These are not yet implemented.  - There is no fan-out (multi-sink) implementation. The interface accepts a single Sink, but many systems need simultaneous logging + alerting. A MultiSink wrapper should be added.  - Failed-record replay is entirely external. Cocytus only records failures; it does not provide any retry or replay capability.
+- **`cocytus`**: Package cocytus implements the error stream — the River of Wailing that collects, categorises, and routes system-wide failures.  Named after the river of wailing in Hades, Cocytus acts as the error pipeline for the Tartarus platform. It exposes a [Sink] interface that receives failed [Record] objects and routes them to one or more downstream handlers (logging, alerting, dead-letter storage).  # Implementations  - [LogSink]: Writes structured failure records to a [log/slog] logger. Suitable for development and low-volume deployments.  - [AcheronSink]: Durable sink that persists records to a Redis Stream (the Acheron DLQ). Survives process restarts; suitable for production.  - [WebhookSink]: Alert sink that HTTP-POSTs records as JSON to any webhook URL. Compatible with Slack incoming webhooks and the PagerDuty Events v2 API.  - [MultiSink]: Fan-out wrapper that delivers each record to every registered sink simultaneously. Errors are joined via [errors.Join].  - [ReplaySink]: Retry decorator that wraps any Sink with bounded retry logic and an optional dead-letter fallback Sink.  # Basic Usage  	logger := slog.Default() 	logSink := cocytus.NewLogSink(logger)  	dlq, _ := cocytus.NewAcheronSink(cocytus.AcheronSinkConfig{ 	    Addr:      "redis:6379", 	    StreamKey: "cocytus:dlq", 	})  	webhook, _ := cocytus.NewWebhookSink(cocytus.WebhookSinkConfig{ 	    URL: "https://hooks.slack.com/services/...", 	})  	multi, _ := cocytus.NewMultiSink(logSink, dlq, webhook)  	sink, _ := cocytus.NewReplaySink(cocytus.ReplayConfig{ 	    Inner:       multi, 	    MaxAttempts: 3, 	    Backoff:     500 * time.Millisecond, 	    Fallback:    logSink, 	})  	// On failure: 	sink.Write(ctx, &cocytus.Record{ 	    RunID:     runID, 	    Reason:    "timeout exceeded", 	    CreatedAt: time.Now(), 	})
 - **`domain`**: Package domain defines the canonical data model for the Tartarus platform.  This package is the single source of truth for all shared types, IDs, and status constants. It has no external dependencies within this repository; all other packages import from domain, not the reverse.  # Core Types  - [SandboxRequest]: The unit of work that flows through the system. It encapsulates the template to run, resource requirements, environment, secrets, and scheduling metadata. Produced by Olympus and consumed by Hecatoncheir via Acheron.  - [SandboxRun]: The lifecycle record of a running or completed sandbox. Written by Hecatoncheir and read by Olympus and Hades.  - [NodeStatus]: The snapshot of a worker node's capacity and health, maintained by Hades and read by Moirai for scheduling decisions.  # ID Types  Strongly typed ID aliases prevent accidental interchange of different identifier namespaces: - [SandboxID]  — uniquely identifies a sandbox request and its run - [TemplateID] — identifies an execution template - [NodeID]     — identifies a worker node - [SnapshotID] — identifies a VM/WASM snapshot - [PolicyID]   — identifies a Themis policy  # Isolation Types  [IsolationType] selects the runtime backend: - [IsolationMicroVM]  — Firecracker MicroVM - [IsolationWASM]     — WebAssembly via wazero - [IsolationGVisor]   — gVisor (runsc) - [IsolationAuto]     — automatic selection by the Unified Runtime  # Known Technical Debt  - [ResourceSpec.Profile] (Phlegethon profile string) is parsed at the call site in multiple packages. A dedicated Profile type with parsing/validation logic should live here.  - [SandboxRun.MemoryUsage] is a best-effort field: only gVisor populates it. Firecracker and WASM runtimes leave it zero.  - There is no versioning or schema evolution strategy for these types. As the system grows, adding fields to JSON-serialised structs stored in Redis (via Hades) must be done carefully to avoid decode failures in mixed-version rollouts.
 - **`erebus`**: Package erebus implements the deep artifact store — the Primordial Darkness that holds every container image and WASM module before it descends into the execution runtime.  Erebus pulls OCI images from a registry, extracts their layers into a local content-addressable cache, and exposes a read-only root filesystem to Firecracker/gVisor/WASM runtimes. It also supports pushing snapshots to remote object storage for cross-node sharing.  # Implementations  - [LocalStore]: Content-addressable cache on the node's local filesystem. Used as the primary cache for extracted image layers.  - [S3Store]: Remote store backed by any S3-compatible API (AWS S3, MinIO, GCS via compatibility layer). Used to share snapshots across nodes and as long-term artifact archival.  - [OCIStore]: Pulls images from an OCI registry, verifies digests, and populates the LocalStore. Performs a dynamic search for the tartarus init binary with configurable fallback paths.  - [Scanner]: Scans an extracted rootfs for known CVEs using Trivy or a compatible vulnerability database.  # Basic Usage  	local, err := erebus.NewLocalStore("/var/lib/tartarus/layers") 	oci := erebus.NewOCIStore(local, erebus.OCIConfig{ 	    Registry: "registry.example.com", 	    Auth:     credentials, 	})  	// Pull an image and get the local layer path: 	path, err := oci.Pull(ctx, "my-sandbox:latest")  # Known Technical Debt  - The [Scanner] integration is a stub; it shells out to `trivy` if available but has no fallback and no policy engine to act on results. A proper advisory-database client and enforcement hook are needed.  - [S3Store] does not implement multipart upload, limiting single-object uploads to 5 GB. Large root-filesystem snapshots may fail silently.  - Layer de-duplication relies on sha256 digest matching. There is no garbage collection for orphaned layers; disk usage will grow unboundedly without an external pruning job.  - The OCI pull path does not support image index (multi-arch) manifests; it always fetches the first manifest in the list. ARM/multi-arch images require explicit digest pinning.
 - **`erinyes`**: Package erinyes implements active policy enforcement — the Furies that hunt down sandboxes which violate their resource contracts.  Named after the three Furies (Alecto, Megaera, Tisiphone) who punished transgressors, this package continuously monitors running sandboxes and enforces CPU, memory, timeout, and network policies.  # Core Types  - [Fury]: The main monitoring loop interface. Implementations periodically poll sandbox metrics and invoke policy callbacks on violations.  - [NetworkStats]: Collects per-sandbox ingress/egress byte counters from the kernel's netlink interface. Used by [PollFury] to feed network traffic data to classifiers and violators.  - [PollFury]: A polling-based implementation of [Fury] that samples resource usage at a fixed interval and calls registered handlers.  # Basic Usage  	fury := erinyes.NewPollFury(runtime, erinyes.Config{ 	    Interval:       5 * time.Second, 	    CPUThreshold:   90.0,  // % of allotted 	    MemThreshold:   95.0, 	    NetworkEgress:  1 << 30, // 1 GiB/s 	}) 	fury.OnViolation(func(id domain.SandboxID, reason string) { 	    olympus.Terminate(ctx, id) 	}) 	go fury.Run(ctx)  # Known Technical Debt  - [NetworkStats] reads from the host's netlink socket. Inside containerised deployments (Docker-in-Docker, K8s pods) the netlink namespace may be the host's, causing incorrect per-sandbox accounting. Per-namespace netlink connections are needed.  - CPU accounting is currently approximated from the runtime's process list. Firecracker VMs report the host-side jailer process CPU, not the guest vCPU time. True guest CPU metering requires Firecracker's balloon device or a guest agent.  - There is no exponential back-off on consecutive violations. A sandbox that oscillates around a threshold can generate a storm of violation events. A dampening/debounce mechanism is needed.  - erinyes depends on [tartarus.SandboxRuntime] for status polling, creating a circular concern when the runtime is the subject of enforcement. Consider a read-only metrics interface to decouple them.
@@ -33,6 +33,327 @@ Tartarus is a hyperscale microVM sandbox orchestrator designed to execute untrus
 
 ## Core Interfaces
 
+### `acheron.Queue`
+```go
+type Queue interface {
+    Enqueue(ctx context.Context, req *domain.SandboxRequest) error
+    Dequeue(ctx context.Context) (*domain.SandboxRequest, string, error)
+    Ack(ctx context.Context, receipt string) error
+    Nack(ctx context.Context, receipt string, reason string) error
+    // Len returns the current queue depth for metrics/scaling decisions.
+    Len(ctx context.Context) int
+}
+```
+
+### `audit.AnomalyDetector`
+```go
+type AnomalyDetector interface {
+    Analyze(ctx context.Context, event *Event) error
+}
+```
+
+### `audit.Auditor`
+```go
+type Auditor interface {
+    Record(ctx context.Context, event *Event) error
+}
+```
+
+### `audit.Store`
+```go
+type Store interface {
+    Write(ctx context.Context, event *Event) error
+    // Read is a placeholder for future retrieval logic
+    // Read(ctx context.Context, filter Filter) ([]Event, error)
+}
+```
+
+### `cerberus.Auditor`
+```go
+type Auditor interface {
+    RecordAccess(ctx context.Context, entry *AuditEntry) error
+}
+```
+
+### `cerberus.Authenticator`
+```go
+type Authenticator interface {
+    Authenticate(ctx context.Context, creds Credentials) (*Identity, error)
+}
+```
+
+### `cerberus.Authorizer`
+```go
+type Authorizer interface {
+    Authorize(ctx context.Context, identity *Identity, action Action, resource Resource) error
+}
+```
+
+### `cerberus.CredentialExtractor`
+```go
+type CredentialExtractor interface {
+    Extract(r *http.Request) (Credentials, error)
+}
+```
+
+### `cerberus.Credentials`
+```go
+type Credentials interface {
+    Type() CredentialType
+}
+```
+
+### `cerberus.Gateway`
+```go
+type Gateway interface {
+    // Authenticate verifies credentials and returns an identity.
+    // Returns AuthenticationError if credentials are invalid.
+    Authenticate(ctx context.Context, creds Credentials) (*Identity, error)
+    
+    // Authorize checks if an identity has permission to perform an action on a resource.
+    // Returns AuthorizationError if permission is denied.
+    Authorize(ctx context.Context, identity *Identity, action Action, resource Resource) error
+    
+    // RecordAccess logs an access attempt for audit and compliance.
+    // Should not fail the request even if audit logging fails.
+    RecordAccess(ctx context.Context, entry *AuditEntry) error
+}
+```
+
+### `cerberus.ResourceMapper`
+```go
+type ResourceMapper interface {
+    MapRequest(r *http.Request, identity *Identity) (Action, Resource, error)
+}
+```
+
+### `cerberus.SecretProvider`
+```go
+type SecretProvider interface {
+    // Resolve returns the secret value for a given reference
+    Resolve(ctx context.Context, ref string) (string, error)
+}
+```
+
+### `charon.CircuitBreakerInterface`
+```go
+type CircuitBreakerInterface interface {
+    Allow() bool
+    RecordSuccess()
+    RecordFailure()
+    State() CircuitBreakerState
+    Failures() int
+    Reset()
+}
+```
+
+### `charon.Ferry`
+```go
+type Ferry interface {
+    // Cross ferries a request to the appropriate backend shore
+    Cross(ctx context.Context, req *http.Request) (*http.Response, error)
+    
+    // RegisterShore adds a backend destination
+    RegisterShore(shore *Shore) error
+    
+    // DeregisterShore removes a backend
+    DeregisterShore(shoreID string) error
+    
+    // Health returns ferry and shore health status
+    Health(ctx context.Context) (*FerryHealth, error)
+    
+    // Close gracefully shuts down the ferry
+    Close() error
+}
+```
+
+### `charon.RateLimiter`
+```go
+type RateLimiter interface {
+    // Allow checks if a request should be allowed for the given key
+    Allow(ctx context.Context, key string) error
+    
+    // Close releases resources
+    Close() error
+}
+```
+
+### `cocytus.Sink`
+```go
+type Sink interface {
+    Write(ctx context.Context, rec *Record) error
+}
+```
+
+### `erebus.Scanner`
+```go
+type Scanner interface {
+    Scan(ctx context.Context, path string) error
+}
+```
+
+### `erebus.Store`
+```go
+type Store interface {
+    Put(ctx context.Context, key string, r io.Reader) error
+    Get(ctx context.Context, key string) (io.ReadCloser, error)
+    Exists(ctx context.Context, key string) (bool, error)
+    Delete(ctx context.Context, key string) error
+}
+```
+
+### `erinyes.Fury`
+```go
+type Fury interface {
+    // Arm starts watchers for a given run ID.
+    Arm(ctx context.Context, run *domain.SandboxRun, policy *PolicySnapshot) error
+    
+    // Disarm stops watchers (run completed normally).
+    Disarm(ctx context.Context, runID domain.SandboxID) error
+}
+```
+
+### `erinyes.NetworkStatsProvider`
+```go
+type NetworkStatsProvider interface {
+    // GetInterfaceStats returns RX/TX bytes for a given interface.
+    // Note: Host RX = VM Egress (VM sends to host).
+    //       Host TX = VM Ingress (Host sends to VM).
+    GetInterfaceStats(ctx context.Context, ifaceName string) (rxBytes, txBytes int64, err error)
+    
+    // GetDropCount returns the number of packets dropped by iptables for the given TAP interface.
+    GetDropCount(ctx context.Context, tapName string) (int, error)
+}
+```
+
+### `hades.Registry`
+```go
+type Registry interface {
+    ListNodes(ctx context.Context) ([]domain.NodeStatus, error)
+    GetNode(ctx context.Context, id domain.NodeID) (*domain.NodeStatus, error)
+    UpdateHeartbeat(ctx context.Context, payload HeartbeatPayload) error
+    MarkDraining(ctx context.Context, id domain.NodeID) error
+    
+    // Run persistence
+    UpdateRun(ctx context.Context, run domain.SandboxRun) error
+    GetRun(ctx context.Context, id domain.SandboxID) (*domain.SandboxRun, error)
+    ListRuns(ctx context.Context) ([]domain.SandboxRun, error)
+}
+```
+
+### `hecatoncheir.ControlListener`
+```go
+type ControlListener interface {
+    // Listen returns a channel of control messages.
+    Listen(ctx context.Context) (<-chan ControlMessage, error)
+    // PublishLogs publishes log chunks to a topic.
+    PublishLogs(ctx context.Context, sandboxID domain.SandboxID, logs []byte) error
+    // PublishSandboxes publishes the list of sandboxes to a response topic.
+    PublishSandboxes(ctx context.Context, requestID string, sandboxes []domain.SandboxRun) error
+    // PublishExecOutput publishes exec output to a topic.
+    PublishExecOutput(ctx context.Context, sandboxID domain.SandboxID, requestID string, output []byte) error
+    // SubscribeStdin subscribes to the stdin topic for a request.
+    SubscribeStdin(ctx context.Context, requestID string) (<-chan []byte, error)
+}
+```
+
+### `hermes.Logger`
+```go
+type Logger interface {
+    Info(ctx context.Context, msg string, fields map[string]any)
+    Error(ctx context.Context, msg string, fields map[string]any)
+}
+```
+
+### `hermes.Metrics`
+```go
+type Metrics interface {
+    IncCounter(name string, value float64, labels ...Label)
+    ObserveHistogram(name string, value float64, labels ...Label)
+    SetGauge(name string, value float64, labels ...Label)
+}
+```
+
+### `judges.AuditSink`
+```go
+type AuditSink interface {
+    Emit(ctx context.Context, record *AuditRecord) error
+}
+```
+
+### `judges.PostJudge`
+```go
+type PostJudge interface {
+    PostHoc(ctx context.Context, run *domain.SandboxRun) (*Classification, error)
+}
+```
+
+### `judges.PreJudge`
+```go
+type PreJudge interface {
+    PreAdmit(ctx context.Context, req *domain.SandboxRequest) (Verdict, error)
+}
+```
+
+### `kampe.LegacyRuntime`
+```go
+type LegacyRuntime interface {
+    tartarus.SandboxRuntime
+    
+    // Migration helpers
+    CanMigrate(ctx context.Context, containerID string) (bool, error)
+    MigrateToMicroVM(ctx context.Context, containerID string) (*MigrationPlan, error)
+    ExportState(ctx context.Context, containerID string) (*ContainerState, error)
+}
+```
+
+### `lethe.Pool`
+```go
+type Pool interface {
+    Create(ctx context.Context, snapshot *nyx.Snapshot) (*Overlay, error)
+    Destroy(ctx context.Context, overlay *Overlay) error
+}
+```
+
+### `moirai.Scheduler`
+```go
+type Scheduler interface {
+    ChooseNode(ctx context.Context, req *domain.SandboxRequest, nodes []domain.NodeStatus) (domain.NodeID, error)
+}
+```
+
+### `nyx.Manager`
+```go
+type Manager interface {
+    // Prepare ensures there is at least one snapshot for the given template.
+    // It may boot a template VM, run warmup, and persist a snapshot in Erebus.
+    Prepare(ctx context.Context, tpl *domain.TemplateSpec) (*Snapshot, error)
+    
+    // GetSnapshot returns a ready snapshot for this template.
+    GetSnapshot(ctx context.Context, tplID domain.TemplateID) (*Snapshot, error)
+    
+    // ListSnapshots returns all snapshots for a template.
+    ListSnapshots(ctx context.Context, tplID domain.TemplateID) ([]*Snapshot, error)
+    
+    // Invalidate can be called when a template is updated or revoked.
+    Invalidate(ctx context.Context, tplID domain.TemplateID) error
+    
+    // SaveSnapshot persists a snapshot from local paths to the store.
+    SaveSnapshot(ctx context.Context, tplID domain.TemplateID, snapID domain.SnapshotID, memPath, diskPath string) (*Snapshot, error)
+    
+    // DeleteSnapshot removes a snapshot from the store and cache.
+    DeleteSnapshot(ctx context.Context, tplID domain.TemplateID, snapID domain.SnapshotID) error
+}
+```
+
+### `nyx.SnapshotMachine`
+```go
+type SnapshotMachine interface {
+    CreateSnapshot(ctx context.Context, memFilePath, snapshotPath string, opts ...firecracker.CreateSnapshotOpt) error
+    StopVMM() error
+}
+```
+
 ### `olympus.ControlPlane`
 ```go
 type ControlPlane interface {
@@ -56,27 +377,137 @@ type TemplateManager interface {
 }
 ```
 
-### `hecatoncheir.ControlListener`
+### `persephone.HistoryStore`
 ```go
-type ControlListener interface {
-    // Listen returns a channel of control messages.
-    Listen(ctx context.Context) (<-chan ControlMessage, error)
-    // PublishLogs publishes log chunks to a topic.
-    PublishLogs(ctx context.Context, sandboxID domain.SandboxID, logs []byte) error
-    // PublishSandboxes publishes the list of sandboxes to a response topic.
-    PublishSandboxes(ctx context.Context, requestID string, sandboxes []domain.SandboxRun) error
-    // PublishExecOutput publishes exec output to a topic.
-    PublishExecOutput(ctx context.Context, sandboxID domain.SandboxID, requestID string, output []byte) error
-    // SubscribeStdin subscribes to the stdin topic for a request.
-    SubscribeStdin(ctx context.Context, requestID string) (<-chan []byte, error)
+type HistoryStore interface {
+    // Save stores a batch of usage records
+    Save(ctx context.Context, records []*UsageRecord) error
+    
+    // Load retrieves all records within a time window
+    Load(ctx context.Context, start, end time.Time) ([]*UsageRecord, error)
+    
+    // QueryRecent retrieves the N most recent records
+    QueryRecent(ctx context.Context, count int) ([]*UsageRecord, error)
+    
+    // Prune removes records older than the retention period
+    Prune(ctx context.Context, retentionDays int) error
+    
+    // Close closes the storage backend
+    Close() error
 }
 ```
 
-### `lethe.Pool`
+### `persephone.HypnosManager`
 ```go
-type Pool interface {
-    Create(ctx context.Context, snapshot *nyx.Snapshot) (*Overlay, error)
-    Destroy(ctx context.Context, overlay *Overlay) error
+type HypnosManager interface {
+    // Sleep hibernates a sandbox
+    Sleep(ctx context.Context, id domain.SandboxID, opts interface{
+}
+```
+
+### `persephone.MetricsCollector`
+```go
+type MetricsCollector interface {
+    // QueryRange fetches metrics within a time range
+    QueryRange(ctx context.Context, query string, start, end time.Time, step time.Duration) ([]*UsageRecord, error)
+}
+```
+
+### `persephone.SandboxLister`
+```go
+type SandboxLister interface {
+    // ListActive returns active sandbox IDs with their last activity time
+    ListActive(ctx context.Context) ([]SandboxActivity, error)
+}
+```
+
+### `persephone.SeasonalScaler`
+```go
+type SeasonalScaler interface {
+    // Forecast predicts future demand
+    Forecast(ctx context.Context, window time.Duration) (*Forecast, error)
+    
+    // DefineSeason creates a seasonal scaling rule
+    DefineSeason(ctx context.Context, season *Season) error
+    
+    // ApplySeason activates a seasonal configuration
+    ApplySeason(ctx context.Context, seasonID string) error
+    
+    // Learn updates the model with historical data
+    Learn(ctx context.Context, history []*UsageRecord) error
+    
+    // CurrentSeason returns the active season
+    CurrentSeason(ctx context.Context) (*Season, error)
+    
+    // RecommendCapacity suggests optimal resource levels
+    RecommendCapacity(ctx context.Context, targetUtil float64) (*CapacityRecommendation, error)
+}
+```
+
+### `phlegethon.HeatRouter`
+```go
+type HeatRouter interface {
+    // ClassifyHeat determines workload intensity
+    ClassifyHeat(ctx context.Context, req *SandboxRequest) (HeatLevel, error)
+    
+    // RouteToPool selects appropriate resource pool
+    RouteToPool(ctx context.Context, heat HeatLevel) (*PoolAssignment, error)
+    
+    // GetResourceClass returns the resource class for a heat level
+    GetResourceClass(heat HeatLevel) *ResourceClass
+    
+    // DefinePool creates a new resource pool
+    DefinePool(ctx context.Context, pool *ResourcePool) error
+    
+    // GetHeatMetrics returns current heat distribution
+    GetHeatMetrics(ctx context.Context) (*HeatMetrics, error)
+}
+```
+
+### `plugins.FuryPlugin`
+```go
+type FuryPlugin interface {
+    Plugin
+    
+    // Arm starts enforcement watchers for a running sandbox.
+    Arm(ctx context.Context, run *domain.SandboxRun, policy *PolicySnapshot) error
+    
+    // Disarm stops enforcement watchers when sandbox completes normally.
+    Disarm(ctx context.Context, runID domain.SandboxID) error
+}
+```
+
+### `plugins.JudgePlugin`
+```go
+type JudgePlugin interface {
+    Plugin
+    
+    // PreAdmit is called before sandbox scheduling.
+    // Return VerdictAccept to allow, VerdictReject to deny.
+    PreAdmit(ctx context.Context, req *domain.SandboxRequest) (Verdict, error)
+    
+    // PostHoc is called after sandbox completion for classification.
+    PostHoc(ctx context.Context, run *domain.SandboxRun) (*Classification, error)
+}
+```
+
+### `plugins.Plugin`
+```go
+type Plugin interface {
+    // Name returns the unique identifier for this plugin.
+    Name() string
+    
+    // Version returns the semantic version string.
+    Version() string
+    
+    // Type returns the plugin category (judge or fury).
+    Type() PluginType
+    
+    // Init is called once when the plugin is loaded.
+    Init(config map[string]any) error
+    
+    // Close is called when the plugin is unloaded.
+    Close() error
 }
 ```
 
@@ -116,171 +547,11 @@ type SandboxRuntime interface {
 }
 ```
 
-### `moirai.Scheduler`
-```go
-type Scheduler interface {
-    ChooseNode(ctx context.Context, req *domain.SandboxRequest, nodes []domain.NodeStatus) (domain.NodeID, error)
-}
-```
-
-### `plugins.Plugin`
-```go
-type Plugin interface {
-    // Name returns the unique identifier for this plugin.
-    Name() string
-    
-    // Version returns the semantic version string.
-    Version() string
-    
-    // Type returns the plugin category (judge or fury).
-    Type() PluginType
-    
-    // Init is called once when the plugin is loaded.
-    Init(config map[string]any) error
-    
-    // Close is called when the plugin is unloaded.
-    Close() error
-}
-```
-
-### `plugins.JudgePlugin`
-```go
-type JudgePlugin interface {
-    Plugin
-    
-    // PreAdmit is called before sandbox scheduling.
-    // Return VerdictAccept to allow, VerdictReject to deny.
-    PreAdmit(ctx context.Context, req *domain.SandboxRequest) (Verdict, error)
-    
-    // PostHoc is called after sandbox completion for classification.
-    PostHoc(ctx context.Context, run *domain.SandboxRun) (*Classification, error)
-}
-```
-
-### `plugins.FuryPlugin`
-```go
-type FuryPlugin interface {
-    Plugin
-    
-    // Arm starts enforcement watchers for a running sandbox.
-    Arm(ctx context.Context, run *domain.SandboxRun, policy *PolicySnapshot) error
-    
-    // Disarm stops enforcement watchers when sandbox completes normally.
-    Disarm(ctx context.Context, runID domain.SandboxID) error
-}
-```
-
-### `hades.Registry`
-```go
-type Registry interface {
-    ListNodes(ctx context.Context) ([]domain.NodeStatus, error)
-    GetNode(ctx context.Context, id domain.NodeID) (*domain.NodeStatus, error)
-    UpdateHeartbeat(ctx context.Context, payload HeartbeatPayload) error
-    MarkDraining(ctx context.Context, id domain.NodeID) error
-    
-    // Run persistence
-    UpdateRun(ctx context.Context, run domain.SandboxRun) error
-    GetRun(ctx context.Context, id domain.SandboxID) (*domain.SandboxRun, error)
-    ListRuns(ctx context.Context) ([]domain.SandboxRun, error)
-}
-```
-
 ### `thanatos.PolicyResolver`
 ```go
 type PolicyResolver interface {
     // ResolvePolicy finds the best matching policy for termination.
     ResolvePolicy(ctx context.Context, sandboxID domain.SandboxID, templateID domain.TemplateID, reason TerminationReason) (*GracePolicy, error)
-}
-```
-
-### `charon.RateLimiter`
-```go
-type RateLimiter interface {
-    // Allow checks if a request should be allowed for the given key
-    Allow(ctx context.Context, key string) error
-    
-    // Close releases resources
-    Close() error
-}
-```
-
-### `charon.CircuitBreakerInterface`
-```go
-type CircuitBreakerInterface interface {
-    Allow() bool
-    RecordSuccess()
-    RecordFailure()
-    State() CircuitBreakerState
-    Failures() int
-    Reset()
-}
-```
-
-### `charon.Ferry`
-```go
-type Ferry interface {
-    // Cross ferries a request to the appropriate backend shore
-    Cross(ctx context.Context, req *http.Request) (*http.Response, error)
-    
-    // RegisterShore adds a backend destination
-    RegisterShore(shore *Shore) error
-    
-    // DeregisterShore removes a backend
-    DeregisterShore(shoreID string) error
-    
-    // Health returns ferry and shore health status
-    Health(ctx context.Context) (*FerryHealth, error)
-    
-    // Close gracefully shuts down the ferry
-    Close() error
-}
-```
-
-### `cocytus.Sink`
-```go
-type Sink interface {
-    Write(ctx context.Context, rec *Record) error
-}
-```
-
-### `judges.AuditSink`
-```go
-type AuditSink interface {
-    Emit(ctx context.Context, record *AuditRecord) error
-}
-```
-
-### `judges.PreJudge`
-```go
-type PreJudge interface {
-    PreAdmit(ctx context.Context, req *domain.SandboxRequest) (Verdict, error)
-}
-```
-
-### `judges.PostJudge`
-```go
-type PostJudge interface {
-    PostHoc(ctx context.Context, run *domain.SandboxRun) (*Classification, error)
-}
-```
-
-### `phlegethon.HeatRouter`
-```go
-type HeatRouter interface {
-    // ClassifyHeat determines workload intensity
-    ClassifyHeat(ctx context.Context, req *SandboxRequest) (HeatLevel, error)
-    
-    // RouteToPool selects appropriate resource pool
-    RouteToPool(ctx context.Context, heat HeatLevel) (*PoolAssignment, error)
-    
-    // GetResourceClass returns the resource class for a heat level
-    GetResourceClass(heat HeatLevel) *ResourceClass
-    
-    // DefinePool creates a new resource pool
-    DefinePool(ctx context.Context, pool *ResourcePool) error
-    
-    // GetHeatMetrics returns current heat distribution
-    GetHeatMetrics(ctx context.Context) (*HeatMetrics, error)
 }
 ```
 
@@ -297,90 +568,6 @@ type Repository interface {
 ```go
 type Validator interface {
     ValidateRequest(ctx context.Context, req *domain.SandboxRequest, p *domain.SandboxPolicy) error
-}
-```
-
-### `erebus.Scanner`
-```go
-type Scanner interface {
-    Scan(ctx context.Context, path string) error
-}
-```
-
-### `erebus.Store`
-```go
-type Store interface {
-    Put(ctx context.Context, key string, r io.Reader) error
-    Get(ctx context.Context, key string) (io.ReadCloser, error)
-    Exists(ctx context.Context, key string) (bool, error)
-    Delete(ctx context.Context, key string) error
-}
-```
-
-### `persephone.MetricsCollector`
-```go
-type MetricsCollector interface {
-    // QueryRange fetches metrics within a time range
-    QueryRange(ctx context.Context, query string, start, end time.Time, step time.Duration) ([]*UsageRecord, error)
-}
-```
-
-### `persephone.HypnosManager`
-```go
-type HypnosManager interface {
-    // Sleep hibernates a sandbox
-    Sleep(ctx context.Context, id domain.SandboxID, opts interface{
-}
-```
-
-### `persephone.SandboxLister`
-```go
-type SandboxLister interface {
-    // ListActive returns active sandbox IDs with their last activity time
-    ListActive(ctx context.Context) ([]SandboxActivity, error)
-}
-```
-
-### `persephone.SeasonalScaler`
-```go
-type SeasonalScaler interface {
-    // Forecast predicts future demand
-    Forecast(ctx context.Context, window time.Duration) (*Forecast, error)
-    
-    // DefineSeason creates a seasonal scaling rule
-    DefineSeason(ctx context.Context, season *Season) error
-    
-    // ApplySeason activates a seasonal configuration
-    ApplySeason(ctx context.Context, seasonID string) error
-    
-    // Learn updates the model with historical data
-    Learn(ctx context.Context, history []*UsageRecord) error
-    
-    // CurrentSeason returns the active season
-    CurrentSeason(ctx context.Context) (*Season, error)
-    
-    // RecommendCapacity suggests optimal resource levels
-    RecommendCapacity(ctx context.Context, targetUtil float64) (*CapacityRecommendation, error)
-}
-```
-
-### `persephone.HistoryStore`
-```go
-type HistoryStore interface {
-    // Save stores a batch of usage records
-    Save(ctx context.Context, records []*UsageRecord) error
-    
-    // Load retrieves all records within a time window
-    Load(ctx context.Context, start, end time.Time) ([]*UsageRecord, error)
-    
-    // QueryRecent retrieves the N most recent records
-    QueryRecent(ctx context.Context, count int) ([]*UsageRecord, error)
-    
-    // Prune removes records older than the retention period
-    Prune(ctx context.Context, retentionDays int) error
-    
-    // Close closes the storage backend
-    Close() error
 }
 ```
 
@@ -412,198 +599,86 @@ type QuarantineManager interface {
 }
 ```
 
-### `cerberus.Authenticator`
-```go
-type Authenticator interface {
-    Authenticate(ctx context.Context, creds Credentials) (*Identity, error)
-}
-```
-
-### `cerberus.Authorizer`
-```go
-type Authorizer interface {
-    Authorize(ctx context.Context, identity *Identity, action Action, resource Resource) error
-}
-```
-
-### `cerberus.Gateway`
-```go
-type Gateway interface {
-    // Authenticate verifies credentials and returns an identity.
-    // Returns AuthenticationError if credentials are invalid.
-    Authenticate(ctx context.Context, creds Credentials) (*Identity, error)
-    
-    // Authorize checks if an identity has permission to perform an action on a resource.
-    // Returns AuthorizationError if permission is denied.
-    Authorize(ctx context.Context, identity *Identity, action Action, resource Resource) error
-    
-    // RecordAccess logs an access attempt for audit and compliance.
-    // Should not fail the request even if audit logging fails.
-    RecordAccess(ctx context.Context, entry *AuditEntry) error
-}
-```
-
-### `cerberus.Credentials`
-```go
-type Credentials interface {
-    Type() CredentialType
-}
-```
-
-### `cerberus.Auditor`
-```go
-type Auditor interface {
-    RecordAccess(ctx context.Context, entry *AuditEntry) error
-}
-```
-
-### `cerberus.SecretProvider`
-```go
-type SecretProvider interface {
-    // Resolve returns the secret value for a given reference
-    Resolve(ctx context.Context, ref string) (string, error)
-}
-```
-
-### `cerberus.CredentialExtractor`
-```go
-type CredentialExtractor interface {
-    Extract(r *http.Request) (Credentials, error)
-}
-```
-
-### `cerberus.ResourceMapper`
-```go
-type ResourceMapper interface {
-    MapRequest(r *http.Request, identity *Identity) (Action, Resource, error)
-}
-```
-
-### `hermes.Metrics`
-```go
-type Metrics interface {
-    IncCounter(name string, value float64, labels ...Label)
-    ObserveHistogram(name string, value float64, labels ...Label)
-    SetGauge(name string, value float64, labels ...Label)
-}
-```
-
-### `hermes.Logger`
-```go
-type Logger interface {
-    Info(ctx context.Context, msg string, fields map[string]any)
-    Error(ctx context.Context, msg string, fields map[string]any)
-}
-```
-
-### `audit.Store`
-```go
-type Store interface {
-    Write(ctx context.Context, event *Event) error
-    // Read is a placeholder for future retrieval logic
-    // Read(ctx context.Context, filter Filter) ([]Event, error)
-}
-```
-
-### `audit.Auditor`
-```go
-type Auditor interface {
-    Record(ctx context.Context, event *Event) error
-}
-```
-
-### `audit.AnomalyDetector`
-```go
-type AnomalyDetector interface {
-    Analyze(ctx context.Context, event *Event) error
-}
-```
-
-### `kampe.LegacyRuntime`
-```go
-type LegacyRuntime interface {
-    tartarus.SandboxRuntime
-    
-    // Migration helpers
-    CanMigrate(ctx context.Context, containerID string) (bool, error)
-    MigrateToMicroVM(ctx context.Context, containerID string) (*MigrationPlan, error)
-    ExportState(ctx context.Context, containerID string) (*ContainerState, error)
-}
-```
-
-### `erinyes.Fury`
-```go
-type Fury interface {
-    // Arm starts watchers for a given run ID.
-    Arm(ctx context.Context, run *domain.SandboxRun, policy *PolicySnapshot) error
-    
-    // Disarm stops watchers (run completed normally).
-    Disarm(ctx context.Context, runID domain.SandboxID) error
-}
-```
-
-### `erinyes.NetworkStatsProvider`
-```go
-type NetworkStatsProvider interface {
-    // GetInterfaceStats returns RX/TX bytes for a given interface.
-    // Note: Host RX = VM Egress (VM sends to host).
-    //       Host TX = VM Ingress (Host sends to VM).
-    GetInterfaceStats(ctx context.Context, ifaceName string) (rxBytes, txBytes int64, err error)
-    
-    // GetDropCount returns the number of packets dropped by iptables for the given TAP interface.
-    GetDropCount(ctx context.Context, tapName string) (int, error)
-}
-```
-
-### `acheron.Queue`
-```go
-type Queue interface {
-    Enqueue(ctx context.Context, req *domain.SandboxRequest) error
-    Dequeue(ctx context.Context) (*domain.SandboxRequest, string, error)
-    Ack(ctx context.Context, receipt string) error
-    Nack(ctx context.Context, receipt string, reason string) error
-    // Len returns the current queue depth for metrics/scaling decisions.
-    Len(ctx context.Context) int
-}
-```
-
-### `nyx.Manager`
-```go
-type Manager interface {
-    // Prepare ensures there is at least one snapshot for the given template.
-    // It may boot a template VM, run warmup, and persist a snapshot in Erebus.
-    Prepare(ctx context.Context, tpl *domain.TemplateSpec) (*Snapshot, error)
-    
-    // GetSnapshot returns a ready snapshot for this template.
-    GetSnapshot(ctx context.Context, tplID domain.TemplateID) (*Snapshot, error)
-    
-    // ListSnapshots returns all snapshots for a template.
-    ListSnapshots(ctx context.Context, tplID domain.TemplateID) ([]*Snapshot, error)
-    
-    // Invalidate can be called when a template is updated or revoked.
-    Invalidate(ctx context.Context, tplID domain.TemplateID) error
-    
-    // SaveSnapshot persists a snapshot from local paths to the store.
-    SaveSnapshot(ctx context.Context, tplID domain.TemplateID, snapID domain.SnapshotID, memPath, diskPath string) (*Snapshot, error)
-    
-    // DeleteSnapshot removes a snapshot from the store and cache.
-    DeleteSnapshot(ctx context.Context, tplID domain.TemplateID, snapID domain.SnapshotID) error
-}
-```
-
-### `nyx.SnapshotMachine`
-```go
-type SnapshotMachine interface {
-    CreateSnapshot(ctx context.Context, memFilePath, snapshotPath string, opts ...firecracker.CreateSnapshotOpt) error
-    StopVMM() error
-}
-```
-
 ## Build Tags & Stub Pattern
 
 The repository uses a pervasive `*_stub.go` pattern (e.g., `firecracker_runtime_stub.go`). These files use Go build tags (like `//go:build !firecracker`) to provide fallback implementations when specific dependencies are missing. When modifying components with stubs, ensure both the main implementation and the stub are updated, and respect the build tags to avoid breaking compilation.
 
 ## CRD Type Schemas
+
+### `ContractSpec`
+```go
+type ContractSpec struct {
+    // AllowedCIDRs are the CIDRs that sandbox traffic is allowed to reach
+    AllowedCIDRs []string `json:"allowedCidrs,omitempty"`
+    
+    // DenyPrivate denies access to RFC1918 private networks (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
+    DenyPrivate bool `json:"denyPrivate,omitempty"`
+    
+    // DenyMetadata denies access to cloud metadata service (169.254.169.254)
+    DenyMetadata bool `json:"denyMetadata,omitempty"`
+}
+```
+
+### `NetworkPolicyRef`
+```go
+type NetworkPolicyRef struct {
+    ID   string `json:"id,omitempty"`
+    Name string `json:"name,omitempty"`
+}
+```
+
+### `PolicyReference`
+```go
+type PolicyReference struct {
+    // Name is the name of the NetworkPolicy
+    Name string `json:"name"`
+    
+    // Namespace is the namespace of the NetworkPolicy. Defaults to the same namespace.
+    Namespace string `json:"namespace,omitempty"`
+}
+```
+
+### `ResourceSpec`
+```go
+type ResourceSpec struct {
+    // CPU millicores (e.g. 1000 = 1 core)
+    CPU int `json:"cpu,omitempty"`
+    
+    // Memory in Megabytes
+    Memory int `json:"memory,omitempty"`
+}
+```
+
+### `RetentionPolicy`
+```go
+type RetentionPolicy struct {
+    // MaxAge is the maximum age of the sandbox
+    MaxAge string `json:"maxAge,omitempty"` // Duration string, e.g. "1h"
+    
+    // KeepOutputs indicates whether to keep the outputs after the sandbox is gone
+    KeepOutputs bool `json:"keepOutputs,omitempty"`
+}
+```
+
+### `SandboxJob`
+```go
+type SandboxJob struct {
+    metav1.TypeMeta   `json:",inline"`
+    metav1.ObjectMeta `json:"metadata,omitempty"`
+    
+    Spec   SandboxJobSpec   `json:"spec,omitempty"`
+    Status SandboxJobStatus `json:"status,omitempty"`
+}
+```
+
+### `SandboxJobList`
+```go
+type SandboxJobList struct {
+    metav1.TypeMeta `json:",inline"`
+    metav1.ListMeta `json:"metadata,omitempty"`
+    Items           []SandboxJob `json:"items"`
+}
+```
 
 ### `SandboxJobSpec`
 ```go
@@ -641,36 +716,6 @@ type SandboxJobSpec struct {
 }
 ```
 
-### `NetworkPolicyRef`
-```go
-type NetworkPolicyRef struct {
-    ID   string `json:"id,omitempty"`
-    Name string `json:"name,omitempty"`
-}
-```
-
-### `RetentionPolicy`
-```go
-type RetentionPolicy struct {
-    // MaxAge is the maximum age of the sandbox
-    MaxAge string `json:"maxAge,omitempty"` // Duration string, e.g. "1h"
-    
-    // KeepOutputs indicates whether to keep the outputs after the sandbox is gone
-    KeepOutputs bool `json:"keepOutputs,omitempty"`
-}
-```
-
-### `ResourceSpec`
-```go
-type ResourceSpec struct {
-    // CPU millicores (e.g. 1000 = 1 core)
-    CPU int `json:"cpu,omitempty"`
-    
-    // Memory in Megabytes
-    Memory int `json:"memory,omitempty"`
-}
-```
-
 ### `SandboxJobStatus`
 ```go
 type SandboxJobStatus struct {
@@ -691,23 +736,23 @@ type SandboxJobStatus struct {
 }
 ```
 
-### `SandboxJob`
+### `SandboxTemplate`
 ```go
-type SandboxJob struct {
+type SandboxTemplate struct {
     metav1.TypeMeta   `json:",inline"`
     metav1.ObjectMeta `json:"metadata,omitempty"`
     
-    Spec   SandboxJobSpec   `json:"spec,omitempty"`
-    Status SandboxJobStatus `json:"status,omitempty"`
+    Spec   SandboxTemplateSpec   `json:"spec,omitempty"`
+    Status SandboxTemplateStatus `json:"status,omitempty"`
 }
 ```
 
-### `SandboxJobList`
+### `SandboxTemplateList`
 ```go
-type SandboxJobList struct {
+type SandboxTemplateList struct {
     metav1.TypeMeta `json:",inline"`
     metav1.ListMeta `json:"metadata,omitempty"`
-    Items           []SandboxJob `json:"items"`
+    Items           []SandboxTemplate `json:"items"`
 }
 ```
 
@@ -751,82 +796,6 @@ type SandboxTemplateStatus struct {
 }
 ```
 
-### `SandboxTemplate`
-```go
-type SandboxTemplate struct {
-    metav1.TypeMeta   `json:",inline"`
-    metav1.ObjectMeta `json:"metadata,omitempty"`
-    
-    Spec   SandboxTemplateSpec   `json:"spec,omitempty"`
-    Status SandboxTemplateStatus `json:"status,omitempty"`
-}
-```
-
-### `SandboxTemplateList`
-```go
-type SandboxTemplateList struct {
-    metav1.TypeMeta `json:",inline"`
-    metav1.ListMeta `json:"metadata,omitempty"`
-    Items           []SandboxTemplate `json:"items"`
-}
-```
-
-### `TenantNetworkPolicySpec`
-```go
-type TenantNetworkPolicySpec struct {
-    // TenantID is the tenant identifier. If empty, defaults to the namespace name.
-    TenantID string `json:"tenantId,omitempty"`
-    
-    // DefaultContract is the default Styx network contract for this tenant
-    DefaultContract ContractSpec `json:"defaultContract,omitempty"`
-    
-    // NetworkPolicyRef references a K8s NetworkPolicy to inherit rules from
-    NetworkPolicyRef *PolicyReference `json:"networkPolicyRef,omitempty"`
-}
-```
-
-### `ContractSpec`
-```go
-type ContractSpec struct {
-    // AllowedCIDRs are the CIDRs that sandbox traffic is allowed to reach
-    AllowedCIDRs []string `json:"allowedCidrs,omitempty"`
-    
-    // DenyPrivate denies access to RFC1918 private networks (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
-    DenyPrivate bool `json:"denyPrivate,omitempty"`
-    
-    // DenyMetadata denies access to cloud metadata service (169.254.169.254)
-    DenyMetadata bool `json:"denyMetadata,omitempty"`
-}
-```
-
-### `PolicyReference`
-```go
-type PolicyReference struct {
-    // Name is the name of the NetworkPolicy
-    Name string `json:"name"`
-    
-    // Namespace is the namespace of the NetworkPolicy. Defaults to the same namespace.
-    Namespace string `json:"namespace,omitempty"`
-}
-```
-
-### `TenantNetworkPolicyStatus`
-```go
-type TenantNetworkPolicyStatus struct {
-    // Ready indicates if the policy is ready for use
-    Ready bool `json:"ready"`
-    
-    // Message provides additional details about the status
-    Message string `json:"message,omitempty"`
-    
-    // LastApplied is the last time the policy was applied
-    LastApplied *metav1.Time `json:"lastApplied,omitempty"`
-    
-    // Conditions represents the latest available observations of current state
-    Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,4,rep,name=conditions"`
-}
-```
-
 ### `TenantNetworkPolicy`
 ```go
 type TenantNetworkPolicy struct {
@@ -844,6 +813,37 @@ type TenantNetworkPolicyList struct {
     metav1.TypeMeta `json:",inline"`
     metav1.ListMeta `json:"metadata,omitempty"`
     Items           []TenantNetworkPolicy `json:"items"`
+}
+```
+
+### `TenantNetworkPolicySpec`
+```go
+type TenantNetworkPolicySpec struct {
+    // TenantID is the tenant identifier. If empty, defaults to the namespace name.
+    TenantID string `json:"tenantId,omitempty"`
+    
+    // DefaultContract is the default Styx network contract for this tenant
+    DefaultContract ContractSpec `json:"defaultContract,omitempty"`
+    
+    // NetworkPolicyRef references a K8s NetworkPolicy to inherit rules from
+    NetworkPolicyRef *PolicyReference `json:"networkPolicyRef,omitempty"`
+}
+```
+
+### `TenantNetworkPolicyStatus`
+```go
+type TenantNetworkPolicyStatus struct {
+    // Ready indicates if the policy is ready for use
+    Ready bool `json:"ready"`
+    
+    // Message provides additional details about the status
+    Message string `json:"message,omitempty"`
+    
+    // LastApplied is the last time the policy was applied
+    LastApplied *metav1.Time `json:"lastApplied,omitempty"`
+    
+    // Conditions represents the latest available observations of current state
+    Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,4,rep,name=conditions"`
 }
 ```
 
