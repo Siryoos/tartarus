@@ -1,0 +1,34 @@
+# Tartarus AI Agent Rules
+
+These rules dictate the behavior, architectural boundaries, and code generation patterns for AI agents working in this repository.
+
+## Architectural Boundaries
+
+1.  **Dependency Edges:** 
+    *   The control plane (`pkg/olympus`) MUST NOT import the node agent (`pkg/hecatoncheir`) directly. All communication happens via messages/API.
+    *   The node agent (`pkg/hecatoncheir`) MUST NOT import the control plane (`pkg/olympus`) directly.
+    *   The reverse proxy (`pkg/charon`) MAY import the auth gateway (`pkg/cerberus`) for middleware, but core routing logic should remain decoupled.
+2.  **Stub Pattern (`*_stub.go`):** 
+    *   This repository heavily relies on build tags for platform-specific dependencies (e.g., Firecracker).
+    *   When adding a new method to an interface that has a `_stub.go` implementation (e.g., `pkg/tartarus/firecracker_runtime_stub.go`), you MUST also implement the method in the stub file to prevent compilation errors on platforms lacking the dependency.
+    *   Always respect `//go:build` tags when creating new files.
+3.  **Authentication:** 
+    *   Never bypass the `cerberus` authentication/authorization gateway for any new HTTP APIs in `olympus` or `hades`.
+
+## Naming Conventions
+
+1.  **Mythology Theme:** 
+    *   New packages and core components MUST follow the Greek mythology theme established in `llms.txt`. 
+    *   Do not invent generic names for core components (e.g., prefer `pkg/mnemosyne` over `pkg/cache` if introducing a new global caching layer).
+    *   Ensure any new mythology name is added to the `doc.go` file of that package and explained.
+
+## Code Generation Rules
+
+1.  **Interface Compliance:** 
+    *   When tasked with writing a new feature or backend (e.g., a new Queue backend), find the corresponding interface in `llms.txt` (e.g., `acheron.Queue`) and ensure your struct strictly implements it.
+2.  **Plugin Development:**
+    *   New plugins must conform to the adapter interfaces in `pkg/plugins/` (e.g., `FuryPlugin`, `JudgePlugin`).
+    *   Always include a `manifest.yaml` when generating a new plugin.
+3.  **Documentation:** 
+    *   Add `//` comments to exported types and functions for godoc readability. 
+    *   Every new package must have a `doc.go` file summarizing its purpose and mythological mapping.

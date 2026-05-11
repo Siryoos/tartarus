@@ -1,0 +1,464 @@
+.
+├── Dockerfile.test
+├── LICENSE
+├── Makefile
+├── README.md
+├── ROADMAP.md
+├── bin
+│   ├── hecatoncheir-agent
+│   ├── hecatoncheir-agent-linux
+│   ├── olympus-api
+│   └── tartarus
+├── charon-proxy
+├── charts
+│   └── tartarus-operator
+│       ├── Chart.yaml
+│       ├── templates
+│       │   ├── _helpers.tpl
+│       │   ├── crds
+│       │   │   ├── sandboxjob-crd.yaml
+│       │   │   ├── sandboxtemplate-crd.yaml
+│       │   │   └── tenantnetworkpolicy-crd.yaml
+│       │   ├── deployment.yaml
+│       │   ├── rbac.yaml
+│       │   └── service.yaml
+│       └── values.yaml
+├── ci-setup.sh
+├── cmd
+│   ├── charon-proxy
+│   │   └── main.go
+│   ├── hecatoncheir-agent
+│   │   └── main.go
+│   ├── olympus-api
+│   │   └── main.go
+│   ├── tartarus
+│   │   ├── cmd
+│   │   │   ├── checkpoints.go
+│   │   │   ├── cli_test.go
+│   │   │   ├── client.go
+│   │   │   ├── completion.go
+│   │   │   ├── config.go
+│   │   │   ├── exec.go
+│   │   │   ├── init.go
+│   │   │   ├── inspect.go
+│   │   │   ├── kill.go
+│   │   │   ├── logs.go
+│   │   │   ├── plugin.go
+│   │   │   ├── ps.go
+│   │   │   ├── resume.go
+│   │   │   ├── root.go
+│   │   │   ├── run.go
+│   │   │   ├── seccomp.go
+│   │   │   ├── snapshot.go
+│   │   │   ├── template_marketplace.go
+│   │   │   └── terminate.go
+│   │   └── main.go
+│   ├── tartarus-operator
+│   │   └── main.go
+│   └── tartarusctl
+├── config
+│   ├── charon-ha.json
+│   ├── charon.json
+│   ├── grafana
+│   │   ├── dashboards
+│   │   │   ├── control_plane.json
+│   │   │   ├── phase4-slos.json
+│   │   │   ├── resources.json
+│   │   │   └── topology.json
+│   │   └── provisioning
+│   │       ├── dashboards
+│   │       │   └── dashboard.yml
+│   │       └── datasources
+│   │           └── datasource.yml
+│   ├── kernel_hardening.yaml
+│   ├── policies
+│   │   ├── admin.yaml
+│   │   └── readonly.yaml
+│   ├── prometheus
+│   │   ├── prometheus.yml
+│   │   └── rules.yml
+│   └── scanning_policy.yaml
+├── data
+│   └── firecracker
+│       ├── rootfs.img
+│       └── vmlinux
+├── dev-setup.sh
+├── docker-compose.observability.yml
+├── docker-compose.yml
+├── docs
+│   ├── architecture.md
+│   ├── cerberus-setup.md
+│   ├── mkdocs.yml
+│   ├── mythology.md
+│   ├── performance
+│   │   └── phase4-report.md
+│   └── site
+│       ├── api
+│       │   ├── index.md
+│       │   ├── sandbox.md
+│       │   └── template.md
+│       ├── concepts
+│       │   ├── configuration.md
+│       │   ├── dev-stack.md
+│       │   └── persistence.md
+│       ├── getting-started.md
+│       ├── index.md
+│       ├── plugins
+│       │   └── index.md
+│       └── tutorials
+│           ├── creating-templates.md
+│           ├── custom-furies.md
+│           ├── custom-judges.md
+│           └── kubernetes-deployment.md
+├── ecosystem
+│   ├── github-actions
+│   │   ├── deploy-sandbox
+│   │   │   └── action.yml
+│   │   └── setup-tartarus
+│   │       └── action.yml
+│   ├── marketplace
+│   │   ├── README.md
+│   │   ├── registry.yaml
+│   │   └── templates
+│   │       ├── go-microservice.yaml
+│   │       ├── node-api.yaml
+│   │       ├── python-ds.yaml
+│   │       ├── python-ml.yaml
+│   │       ├── rust-cli.yaml
+│   │       └── static-frontend.yaml
+│   ├── plugins
+│   │   ├── cost-aware-fury
+│   │   │   ├── main.go
+│   │   │   └── manifest.yaml
+│   │   └── rate-limit-judge
+│   │       ├── main.go
+│   │       └── manifest.yaml
+│   ├── terraform-provider-tartarus
+│   │   ├── go.mod
+│   │   ├── go.sum
+│   │   ├── main.go
+│   │   ├── tartarus
+│   │   │   ├── provider.go
+│   │   │   └── resource_sandbox.go
+│   │   └── terraform-provider-tartarus
+│   └── vscode-extension
+│       ├── out
+│       │   ├── commands.js
+│       │   ├── commands.js.map
+│       │   ├── extension.js
+│       │   ├── extension.js.map
+│       │   ├── treeProvider.js
+│       │   └── treeProvider.js.map
+│       ├── package-lock.json
+│       ├── package.json
+│       ├── src
+│       │   ├── commands.ts
+│       │   ├── extension.ts
+│       │   └── treeProvider.ts
+│       └── tsconfig.json
+├── extended-components.md
+├── go.mod
+├── go.sum
+├── hecatoncheir-agent
+├── nyx.test
+├── olympus-api
+├── olympus.log
+├── perf.test
+├── pkg
+│   ├── acheron
+│   │   ├── memory_queue.go
+│   │   ├── queue.go
+│   │   ├── redis_queue.go
+│   │   ├── redis_queue_dlq_test.go
+│   │   ├── redis_queue_poison_pill_test.go
+│   │   ├── redis_queue_scalability_test.go
+│   │   └── redis_queue_test.go
+│   ├── cerberus
+│   │   ├── auditor.go
+│   │   ├── auditor_test.go
+│   │   ├── authenticator.go
+│   │   ├── authenticator_test.go
+│   │   ├── authorizer.go
+│   │   ├── authorizer_test.go
+│   │   ├── cert_watcher.go
+│   │   ├── doc.go
+│   │   ├── errors.go
+│   │   ├── gateway.go
+│   │   ├── gateway_test.go
+│   │   ├── keygen.go
+│   │   ├── keygen_test.go
+│   │   ├── kms_secrets.go
+│   │   ├── middleware.go
+│   │   ├── middleware_test.go
+│   │   ├── mtls_authenticator.go
+│   │   ├── oidc_authenticator.go
+│   │   ├── rbac_loader.go
+│   │   ├── rbac_loader_test.go
+│   │   ├── secrets.go
+│   │   ├── secrets_config.go
+│   │   ├── secrets_test.go
+│   │   ├── vault_secrets.go
+│   │   ├── vault_secrets_test.go
+│   │   └── verification_test.go
+│   ├── charon
+│   │   ├── README.md
+│   │   ├── circuit_breaker.go
+│   │   ├── circuit_breaker_test.go
+│   │   ├── consistent_hash.go
+│   │   ├── consistent_hash_test.go
+│   │   ├── errors.go
+│   │   ├── ferry.go
+│   │   ├── health.go
+│   │   ├── load_balancer.go
+│   │   ├── load_balancer_telemetry_test.go
+│   │   ├── metrics_adapter.go
+│   │   ├── middleware.go
+│   │   ├── rate_limiter.go
+│   │   ├── rate_limiter_test.go
+│   │   └── telemetry.go
+│   ├── cocytus
+│   │   ├── log_sink.go
+│   │   └── sink.go
+│   ├── config
+│   │   └── config.go
+│   ├── domain
+│   │   └── types.go
+│   ├── erebus
+│   │   ├── benchmark_test.go
+│   │   ├── cpu_python.prof
+│   │   ├── erebus.test
+│   │   ├── local_store.go
+│   │   ├── oci.go
+│   │   ├── oci_integration_test.go
+│   │   ├── oci_test.go
+│   │   ├── performance_test.go
+│   │   ├── s3_store.go
+│   │   ├── scanner.go
+│   │   └── store.go
+│   ├── erinyes
+│   │   ├── fury.go
+│   │   ├── network_stats.go
+│   │   ├── poll_fury.go
+│   │   └── poll_fury_test.go
+│   ├── hades
+│   │   ├── memory_registry.go
+│   │   ├── memory_registry_test.go
+│   │   ├── redis_registry.go
+│   │   └── registry.go
+│   ├── hecatoncheir
+│   │   ├── agent.go
+│   │   ├── agent_advanced_features_test.go
+│   │   ├── agent_control_test.go
+│   │   ├── agent_guardrails_test.go
+│   │   ├── agent_test.go
+│   │   ├── control.go
+│   │   ├── control_exec.go
+│   │   └── control_test.go
+│   ├── hermes
+│   │   ├── adapters.go
+│   │   ├── audit
+│   │   │   ├── auditor.go
+│   │   │   ├── chain.go
+│   │   │   ├── chain_test.go
+│   │   │   ├── store.go
+│   │   │   └── types.go
+│   │   ├── observability.go
+│   │   ├── prometheus.go
+│   │   └── prometheus_test.go
+│   ├── hypnos
+│   │   ├── manager.go
+│   │   ├── manager_test.go
+│   │   └── tracing.go
+│   ├── integration
+│   │   ├── cli_v2_test.go
+│   │   ├── hypnos_hibernation_test.go
+│   │   ├── phase3_dlq_regression_test.go
+│   │   ├── phase3_heat_regression_test.go
+│   │   ├── phase3_quarantine_regression_test.go
+│   │   ├── phase3_regression_test.go
+│   │   └── typhon_e2e_test.go
+│   ├── judges
+│   │   ├── aeacus.go
+│   │   ├── aeacus_integration_test.go
+│   │   ├── aeacus_test.go
+│   │   ├── basic_judges.go
+│   │   ├── basic_judges_test.go
+│   │   ├── judge.go
+│   │   ├── sink.go
+│   │   └── sink_test.go
+│   ├── kampe
+│   │   ├── containerd_runtime.go
+│   │   ├── docker_runtime.go
+│   │   ├── gvisor_runtime.go
+│   │   ├── legacy.go
+│   │   ├── legacy_test.go
+│   │   ├── migration.go
+│   │   ├── migration_test.go
+│   │   ├── parity_harness.go
+│   │   └── parity_test.go
+│   ├── kubernetes
+│   │   ├── apis
+│   │   │   └── tartarus
+│   │   │       └── v1alpha1
+│   │   │           ├── groupversion_info.go
+│   │   │           ├── sandboxjob_types.go
+│   │   │           ├── sandboxtemplate_types.go
+│   │   │           ├── tenantnetworkpolicy_types.go
+│   │   │           └── zz_generated.deepcopy.go
+│   │   └── controllers
+│   │       ├── sandboxjob_controller.go
+│   │       ├── sandboxjob_controller_test.go
+│   │       ├── sandboxtemplate_controller.go
+│   │       ├── sandboxtemplate_controller_test.go
+│   │       ├── tenantnetworkpolicy_controller.go
+│   │       └── tenantnetworkpolicy_controller_test.go
+│   ├── lethe
+│   │   ├── file_overlay.go
+│   │   ├── file_overlay_test.go
+│   │   └── pool.go
+│   ├── moirai
+│   │   ├── affinity.go
+│   │   ├── bin_packing.go
+│   │   ├── least_loaded.go
+│   │   ├── least_loaded_test.go
+│   │   ├── phlegethon.go
+│   │   ├── quarantine_test.go
+│   │   ├── scheduler.go
+│   │   └── scheduler_test.go
+│   ├── nyx
+│   │   ├── local_manager.go
+│   │   ├── local_manager_stub.go
+│   │   ├── local_manager_test.go
+│   │   ├── manager.go
+│   │   ├── smoke_test.go
+│   │   └── warmup_test.go
+│   ├── olympus
+│   │   ├── control.go
+│   │   ├── manager.go
+│   │   ├── manager_heat_test.go
+│   │   ├── memory_scheduler.go
+│   │   ├── memory_scheduler_test.go
+│   │   ├── middleware.go
+│   │   ├── middleware_test.go
+│   │   ├── persephone_handlers.go
+│   │   ├── persistence_test.go
+│   │   ├── reconcile_test.go
+│   │   ├── redis_control.go
+│   │   ├── redis_control_test.go
+│   │   ├── scaler.go
+│   │   ├── scaler_test.go
+│   │   ├── templates.go
+│   │   └── thanatos_handlers.go
+│   ├── persephone
+│   │   ├── budget.go
+│   │   ├── budget_test.go
+│   │   ├── capacity.go
+│   │   ├── collector.go
+│   │   ├── evaluator
+│   │   │   ├── backtest.go
+│   │   │   ├── evaluator_test.go
+│   │   │   ├── metrics.go
+│   │   │   └── report.go
+│   │   ├── forecast.go
+│   │   ├── forecast_test.go
+│   │   ├── hibernation.go
+│   │   ├── hibernation_test.go
+│   │   ├── ingestor.go
+│   │   ├── ingestor_test.go
+│   │   ├── scheduler.go
+│   │   ├── scheduler_test.go
+│   │   ├── seasons.go
+│   │   ├── seasons_test.go
+│   │   ├── storage.go
+│   │   └── storage_test.go
+│   ├── phlegethon
+│   │   ├── router.go
+│   │   └── router_test.go
+│   ├── plugins
+│   │   ├── adapters_test.go
+│   │   ├── fury_adapter.go
+│   │   ├── judge_adapter.go
+│   │   ├── loader.go
+│   │   ├── loader_stub.go
+│   │   ├── manifest.go
+│   │   ├── manifest_test.go
+│   │   ├── plugin.go
+│   │   └── registry.go
+│   ├── styx
+│   │   ├── gateway.go
+│   │   ├── host_gateway.go
+│   │   └── host_gateway_stub.go
+│   ├── tartarus
+│   │   ├── firecracker_runtime.go
+│   │   ├── firecracker_runtime_exec.go
+│   │   ├── firecracker_runtime_stub.go
+│   │   ├── firecracker_security_test.go
+│   │   ├── gvisor_runtime.go
+│   │   ├── kernel_args_test.go
+│   │   ├── mock_runtime.go
+│   │   ├── networking_test.go
+│   │   ├── runtime.go
+│   │   ├── unified_runtime.go
+│   │   ├── unified_runtime_bench_test.go
+│   │   ├── unified_runtime_test.go
+│   │   └── wasm_runtime.go
+│   ├── thanatos
+│   │   ├── api.go
+│   │   ├── controller.go
+│   │   ├── controller_test.go
+│   │   ├── exporter.go
+│   │   ├── handler.go
+│   │   ├── handler_test.go
+│   │   ├── policy.go
+│   │   ├── policy_test.go
+│   │   ├── scheduler.go
+│   │   └── scheduler_test.go
+│   ├── themis
+│   │   ├── memory_repo.go
+│   │   ├── policy.go
+│   │   ├── redis_repo.go
+│   │   └── redis_repo_test.go
+│   └── typhon
+│       ├── classifier.go
+│       ├── classifier_test.go
+│       ├── hardened_manager.go
+│       ├── hardened_manager_test.go
+│       ├── profiles
+│       │   ├── default.json
+│       │   ├── ember.json
+│       │   └── flame.json
+│       ├── quarantine.go
+│       ├── quarantine_test.go
+│       ├── seccomp.go
+│       ├── seccomp_gen.go
+│       ├── seccomp_gen_test.go
+│       ├── seccomp_test.go
+│       ├── strace.go
+│       └── strace_test.go
+├── repo_tree.txt
+├── scripts
+│   └── gen-test-certs.sh
+├── tartarus
+├── tartarus-operator
+├── tasks.md
+├── test-app.yaml
+└── tests
+    ├── integration
+    │   ├── auth_test.go
+    │   ├── charon
+    │   │   └── failover_test.go
+    │   ├── charon_failover_test.go
+    │   ├── charon_test.go
+    │   ├── kubernetes_e2e_test.go
+    │   ├── kubernetes_test.go
+    │   ├── persistence_test.go
+    │   ├── security_integration_test.go
+    │   └── typhon_seccomp_test.go
+    └── perf
+        ├── erebus_oci_bench_test.go
+        ├── harness.go
+        ├── hypnos_wake_bench_test.go
+        ├── python_ds_bench_test.go
+        └── typhon_routing_test.go
+
+86 directories, 376 files

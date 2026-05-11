@@ -1,0 +1,23 @@
+name: LLMs Context Validation
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  verify:
+    name: Verify LLMs Context
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          
+      - name: Verify llms.txt is up-to-date
+        run: make verify-llms-context
