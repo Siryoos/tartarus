@@ -195,15 +195,11 @@ func TestRedisQueue_Nack(t *testing.T) {
 	// So I should replace that one.
 }
 
-type noopMetrics struct{}
-
-func (m *noopMetrics) IncCounter(name string, value float64, labels ...hermes.Label)       {}
-func (m *noopMetrics) ObserveHistogram(name string, value float64, labels ...hermes.Label) {}
-func (m *noopMetrics) SetGauge(name string, value float64, labels ...hermes.Label)         {}
 
 func BenchmarkRedisQueue_Ack(b *testing.B) {
 	s := miniredis.RunT(b)
-	metrics := &noopMetrics{}
+	metrics := hermes.NewNoopMetrics()
+
 
 	q, err := NewRedisQueue(s.Addr(), 0, "bench-queue", "group1", "consumer1", false, metrics, nil)
 	if err != nil {

@@ -15,7 +15,7 @@ import (
 // This test prevents regression to O(N) scanning behavior.
 func TestRedisQueue_Ack_ScalabilityRegression(t *testing.T) {
 	s := miniredis.RunT(t)
-	metrics := &noopMetrics{}
+	metrics := hermes.NewNoopMetrics()
 
 	q, err := NewRedisQueue(s.Addr(), 0, "test-queue", "group1", "consumer1", false, metrics, nil)
 	if err != nil {
@@ -183,7 +183,7 @@ func BenchmarkRedisQueue_Ack_VariablePEL(b *testing.B) {
 	for _, pelSize := range pelSizes {
 		b.Run(formatPELSize(pelSize), func(b *testing.B) {
 			s := miniredis.RunT(b)
-			metrics := &noopMetrics{}
+			metrics := hermes.NewNoopMetrics()
 
 			q, err := NewRedisQueue(s.Addr(), 0, "bench-queue", "group1", "consumer1", false, metrics, nil)
 			if err != nil {

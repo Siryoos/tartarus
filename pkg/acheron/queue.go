@@ -16,3 +16,9 @@ type Queue interface {
 	// Len returns the current queue depth for metrics/scaling decisions.
 	Len(ctx context.Context) int
 }
+
+// NumPriorityLevels is the number of distinct scheduling tiers supported by
+// PriorityQueue.  It must equal int(domain.PriorityHigh) + 1.
+// Update this constant whenever new domain.Priority constants are added.
+const NumPriorityLevels = int(domain.PriorityHigh) + 1 // == 3
+

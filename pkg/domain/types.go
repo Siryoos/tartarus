@@ -35,6 +35,17 @@ const (
 	IsolationAuto    IsolationType = "auto"
 )
 
+// Priority controls the scheduling order of sandbox requests in the job queue.
+// Higher values are dequeued first. Producers should use the named constants
+// rather than raw integers to remain forward-compatible.
+type Priority int
+
+const (
+	PriorityLow    Priority = 0 // background / batch workloads
+	PriorityNormal Priority = 1 // default for interactive requests
+	PriorityHigh   Priority = 2 // latency-sensitive / SLA-bound requests
+)
+
 // Resources & instance profiles
 
 type ResourceSpec struct {
@@ -67,6 +78,7 @@ type SandboxRequest struct {
 	Template   TemplateID        `json:"template"`
 	NodeID     NodeID            `json:"node_id,omitempty"`    // Scheduled node
 	HeatLevel  string            `json:"heat_level,omitempty"` // Phlegethon heat classification
+	Priority   Priority          `json:"priority,omitempty"`   // Scheduling priority; zero value is PriorityNormal
 	Command    []string          `json:"command"`
 	Args       []string          `json:"args"`
 	Env        map[string]string `json:"env"`

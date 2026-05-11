@@ -27,10 +27,10 @@ Catalogued from Go doc review and source-code audit (May 2026).
 
 ### `pkg/acheron` — Job Queue
 
-- [ ] **MemoryQueue context cancellation**: `Dequeue` uses `sync.Cond.Wait` which cannot be interrupted by context cancellation mid-wait. Needs channel-based or polling approach for correct graceful shutdown.
-- [ ] **MemoryQueue has no telemetry**: Prometheus metrics are only emitted by `RedisQueue`. Extract a shared metrics wrapper.
-- [ ] **No priority queuing**: All messages are FIFO. A multi-stream fan-in approach (one stream per priority class) is needed for priority scheduling.
-- [ ] **No Redis Cluster support**: `RedisQueue` does not support cross-shard distribution for very large deployments.
+- [x] **MemoryQueue context cancellation**: Replaced `sync.Cond.Wait` with a `chan struct{}` notify pattern. `Dequeue` now selects on `notify` and `ctx.Done()` simultaneously, returning `ctx.Err()` immediately on cancellation.
+- [x] **MemoryQueue has no telemetry**: Extracted `metricsQueue` decorator (`NewInstrumentedQueue`) that wraps any `Queue` and emits the same counter/gauge set as `RedisQueue`. `NewMemoryQueue` now accepts `hermes.Metrics` and is instrumented by default.
+- [x] **No priority queuing**: Added `domain.Priority` type (Low/Normal/High) and `PriorityQueue` — a multi-tier fan-in with one `MemoryQueue` per level. `Dequeue` always drains the highest non-empty tier first while respecting context cancellation.
+- [x] **No Redis Cluster support**: Added `RedisClusterQueue` backed by `redis.ClusterClient`. Keys are hash-tagged (`{streamKey}` / `{streamKey}:dlq`) so both land on the same shard, satisfying the Lua script cross-key constraint.
 
 ### `pkg/cerberus` — Auth Gateway
 

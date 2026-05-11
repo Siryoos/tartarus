@@ -7,27 +7,30 @@
 //
 // # Implementations
 //
-// Two Queue implementations are provided:
+// Three Queue implementations are provided:
 //
 //   - [RedisQueue]: Production implementation backed by a Redis Stream.
 //     Supports consumer groups, automatic re-delivery on timeout (PEL),
 //     configurable retry limits, and DLQ promotion via atomic Lua scripts.
 //
+//   - [RedisClusterQueue]: Redis Cluster-aware variant of RedisQueue.
+//     Keys are automatically hash-tagged so the stream and its DLQ always
+//     reside on the same shard, satisfying the cross-key Lua script constraint.
+//
 //   - [MemoryQueue]: In-process implementation for unit tests and
 //     single-node development deployments. Does not persist across restarts.
+//     Dequeue fully respects context cancellation via a channel-based notify.
+//
+//   - [PriorityQueue]: Multi-tier fan-in queue backed by one [MemoryQueue]
+//     per [domain.Priority] level. Higher-priority items are always dequeued
+//     first. Dequeue respects context cancellation.
 //
 // # Basic Usage
 //
-//	q := acheron.NewRedisQueue(redisClient, acheron.RedisQueueConfig{
-//	    StreamKey:    "tartarus:jobs",
-//	    Group:        "workers",
-//	    Consumer:     "node-1",
-//	    MaxRetries:   5,
-//	    VisibilityTimeout: 30 * time.Second,
-//	})
+//	q := acheron.NewRedisQueue(redisAddr, 0, "tartarus:jobs", "workers", "node-1", false, metrics, nil)
 //
 //	// Producer side
-//	q.Enqueue(ctx, &domain.SandboxRequest{...})
+//	q.Enqueue(ctx, &domain.SandboxRequest{Priority: domain.PriorityHigh, ...})
 //
 //	// Consumer side
 //	req, receipt, err := q.Dequeue(ctx)
@@ -44,19 +47,23 @@
 // a separate DLQ stream ("<stream>:dlq") with the original payload and an error
 // annotation. Operators can inspect and replay DLQ entries out-of-band.
 //
-// # Known Technical Debt
+// # Telemetry
 //
-//   - [MemoryQueue.Dequeue] uses sync.Cond.Wait which cannot be interrupted by
-//     context cancellation mid-wait. A channel-based or polling approach is
-//     needed for correct graceful shutdown in long-idle scenarios.
+// All implementations emit the same Prometheus-compatible metric names via a
+// [hermes.Metrics] sink:
 //
-//   - Prometheus metrics are emitted only by [RedisQueue]. MemoryQueue has no
-//     telemetry; consider extracting a shared metrics wrapper.
+//   - queue_enqueue_total / queue_enqueue_errors_total
+//   - queue_dequeue_total
+//   - queue_nack_total / queue_nack_errors_total
+//   - queue_depth (gauge)
+//   - queue_dlq_depth (gauge, RedisQueue / RedisClusterQueue only)
 //
-//   - Priority queuing is not implemented. All messages are FIFO within a
-//     single stream. A multi-stream fan-in approach (e.g., separate streams
-//     per priority class) would be needed to support priority scheduling.
+// Use [NewInstrumentedQueue] to wrap any [Queue] with the shared metrics layer.
 //
-//   - RedisQueue does not support cross-shard distribution. For very large
-//     deployments a Redis Cluster-aware sharding layer would be required.
+// # Priority Scheduling
+//
+// Use [domain.Priority] constants (PriorityLow, PriorityNormal, PriorityHigh)
+// to annotate [domain.SandboxRequest] before enqueueing. [PriorityQueue]
+// routes each request to the appropriate tier and always dequeues the highest
+// non-empty tier first.
 package acheron
